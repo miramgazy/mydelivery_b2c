@@ -1,6 +1,7 @@
 import axios from 'axios'
 
-const API_URL = import.meta.env.VITE_API_URL || '/api'
+// Принудительно используем относительный путь для продакшена в TMA
+const API_URL = '/api'
 
 // Создаем экземпляр axios
 const api = axios.create({

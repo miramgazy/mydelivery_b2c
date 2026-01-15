@@ -8,11 +8,13 @@ class AuthService {
      */
     async checkAccess(telegramId) {
         try {
+            alert(`СЕРВИС: Отправляю POST на /api/users/check_access/ для ID ${telegramId}`)
             const response = await api.post('/users/check_access/', {
                 telegram_id: telegramId
             }, {
                 skipAuth: true
             })
+            alert('СЕРВИС: Ответ получен!')
             return response.data
         } catch (error) {
             console.error('Check access error:', error)
