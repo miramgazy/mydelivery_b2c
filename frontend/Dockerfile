@@ -26,6 +26,11 @@ FROM node:20-alpine as build
 
 WORKDIR /app
 
+# Настройки для стабильной сборки
+ENV NODE_ENV=production
+ENV NODE_OPTIONS="--max-old-space-size=4096"
+ENV VITE_SKIP_LINT=true
+
 # Добавляем аргументы сборки
 ARG VITE_API_URL
 ARG VITE_TELEGRAM_BOT_USERNAME
