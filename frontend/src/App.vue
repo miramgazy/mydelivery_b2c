@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import telegramService from '@/services/telegram'
@@ -8,54 +8,51 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const isCheckingAccess = ref(true)
-
-// Глобальный перехватчик ошибок
-window.onerror = function(message, source, lineno) {
-  alert(`JS ERROR: ${message} at ${lineno}`);
-};
-
-const isAdminPath = computed(() => router.currentRoute.value.path.startsWith('/admin'))
+const statusMessage = ref('Инициализация v1.1.0...')
 
 onMounted(async () => {
-  alert('ВЕРСИЯ 1.0.8: Старт [Без компонентов]')
-  
   try {
+    statusMessage.value = 'Шаг 1: Telegram init...'
     telegramService.init()
     
     if (!telegramService.isInTelegram()) {
+      statusMessage.value = 'Запущено вне Telegram'
       isCheckingAccess.value = false
       return
     }
 
     const tgUser = telegramService.getUser()
-    const telegramId = tgUser?.id
-    alert(`Шаг 2: ID получен - ${telegramId}`)
+    statusMessage.value = `Шаг 2: ID ${tgUser?.id}. Запрос доступа...`
 
     // Проверяем доступ
-    alert('Шаг 3: Запрос к API...')
-    await authStore.checkAccess()
-    alert(`Шаг 3: Ответ получен. hasAccess=${authStore.hasAccess}`)
+    const result = await authStore.checkAccess()
+    statusMessage.value = `Шаг 3: Ответ сервера: hasAccess=${result.has_access}`
 
-    if (!authStore.hasAccess) {
-      alert('ДОСТУП ЗАПРЕЩЕН');
+    if (!result.has_access) {
+      statusMessage.value = 'Доступ запрещен'
       isCheckingAccess.value = false
       return
     }
 
     // Входим
-    alert('Шаг 4: Логин...')
+    statusMessage.value = 'Шаг 4: Авторизация...'
     const loginResult = await authStore.login()
-    alert(`Шаг 4: Результат: ${loginResult.success ? 'УСПЕХ' : 'ОШИБКА'}`)
     
     if (loginResult.success) {
+      statusMessage.value = 'Успех! Переход в приложение...'
       await authStore.fetchCurrentUser()
       router.push('/')
+    } else {
+      statusMessage.value = `Ошибка входа: ${loginResult.message}`
     }
 
   } catch (err) {
-    alert(`КРИТИЧЕСКАЯ ОШИБКА: ${err.message}`)
+    statusMessage.value = `ОШИБКА: ${err.message}`
   } finally {
-    isCheckingAccess.value = false
+    // Не снимаем экран загрузки, если была ошибка, чтобы прочитать её
+    if (statusMessage.value.includes('Успех') || !telegramService.isInTelegram()) {
+       isCheckingAccess.value = false
+    }
   }
 })
 </script>
@@ -65,7 +62,8 @@ onMounted(async () => {
     <router-view v-if="!isCheckingAccess"></router-view>
     <div v-else class="checking-screen">
       <div class="loader"></div>
-      <p>Загрузка v1.0.8...</p>
+      <p>{{ statusMessage }}</p>
+      <button @click="isCheckingAccess = false" style="margin-top: 20px; font-size: 10px; opacity: 0.5;">[Пропустить]</button>
     </div>
   </div>
 </template>
@@ -79,6 +77,9 @@ onMounted(async () => {
   height: 100vh;
   background: #000;
   color: #3498db;
+  font-family: sans-serif;
+  text-align: center;
+  padding: 20px;
 }
 .loader {
   border: 4px solid #111;
