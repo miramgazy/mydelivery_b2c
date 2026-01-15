@@ -1,70 +1,35 @@
-# Multi-stage build для фронтенда
-
-# Stage 1: Development
-FROM node:20-alpine as development
+# Этап 1: Сборка
+FROM node:20-slim as build
 
 WORKDIR /app
 
-# Копируем package файлы
-COPY package*.json ./
-
-# Устанавливаем зависимости
-RUN npm install
-
-# Копируем исходники
-COPY . .
-
-# Открываем порт для Vite dev server
-EXPOSE 5173
-
-# Запускаем dev server
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
-
-
-# Stage 2: Build для production
-FROM node:20-alpine as build
-
-WORKDIR /app
-
-# Настройки для стабильной сборки
+# Устанавливаем переменные для стабильности
 ENV NODE_ENV=production
-ENV NODE_OPTIONS="--max-old-space-size=4096"
-ENV VITE_SKIP_LINT=true
 
-# Добавляем аргументы сборки
+# Принимаем аргументы для Vite (Coolify передаст их автоматически)
 ARG VITE_API_URL
 ARG VITE_TELEGRAM_BOT_USERNAME
 ARG VITE_DEV_MODE=false
 
-# Устанавливаем их как переменные окружения для сборки Vite
-ENV VITE_API_URL=$VITE_API_URL
-ENV VITE_TELEGRAM_BOT_USERNAME=$VITE_TELEGRAM_BOT_USERNAME
-ENV VITE_DEV_MODE=$VITE_DEV_MODE
-
-# Копируем package файлы
+# Копируем только файлы зависимостей для кеширования слоев
 COPY package*.json ./
 
-# Устанавливаем зависимости
+# Устанавливаем зависимости (используем npm ci для стабильности, если есть lock-file)
 RUN npm install
 
-# Копируем исходники
+# Копируем остальные файлы и собираем
 COPY . .
-
-# Сборка приложения
 RUN npm run build
 
-
-# Stage 3: Production с Nginx
+# Этап 2: Финальный образ с Nginx
 FROM nginx:alpine as production
 
-# Копируем собранное приложение
+# Копируем собранные файлы из этапа build
 COPY --from=build /app/dist /usr/share/nginx/html
 
 # Копируем конфиг nginx
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Открываем порт
 EXPOSE 80
 
-# Запускаем nginx
 CMD ["nginx", "-g", "daemon off;"]

@@ -61,7 +61,7 @@
 import { computed, onMounted } from 'vue'
 import { useOrdersStore } from '@/stores/orders'
 import { format } from 'date-fns'
-import { ru } from 'date-fns/locale/ru'
+import { ru } from 'date-fns/locale'
 
 const ordersStore = useOrdersStore()
 

@@ -116,7 +116,7 @@ import { computed, onMounted, ref, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useOrdersStore } from '@/stores/orders'
 import { format } from 'date-fns'
-import { ru } from 'date-fns/locale/ru'
+import { ru } from 'date-fns/locale'
 import telegramService from '@/services/telegram'
 import { useNotificationStore } from '@/stores/notifications'
 
