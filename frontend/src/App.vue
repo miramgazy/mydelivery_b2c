@@ -1,166 +1,114 @@
-<template>
-  <div id="app" class="min-h-screen bg-gray-50 dark:bg-gray-900">
-    <ToastNotification />
-    <!-- Browser mode - always show router -->
-    <router-view v-if="!isInTelegram" />
-    
-    <!-- Telegram mode below -->
-    <template v-else>
-      <!-- Проверка доступа -->
-      <CheckingAccess v-if="isCheckingAccess" />
-      
-      <!-- Доступ запрещен -->
-      <AccessDenied
-        v-else-if="!hasAccess && accessCheckResult"
-        :message="accessCheckResult.message"
-        :reason="accessCheckResult.reason"
-        :telegram-id="telegramId"
-      />
-      
-      <!-- Приложение (если доступ есть и авторизован) -->
-      <template v-else-if="isAuthenticated">
-        <div class="pb-20">
-          <router-view />
-          <BottomNav v-if="!isAdminPath" />
-        </div>
-      </template>
-      
-      <!-- Экран входа (если доступ есть, но не авторизован) -->
-      <div v-else class="min-h-screen flex items-center justify-center">
-        <div class="text-center">
-          <h2 class="text-xl font-semibold mb-4">Выполняется вход...</h2>
-          <div class="animate-spin w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full mx-auto"></div>
-        </div>
-      </div>
-    </template>
-  </div>
-</template>
-
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, onMounted, computed, watch, provide } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import telegramService from '@/services/telegram'
-import CheckingAccess from '@/components/auth/CheckingAccess.vue'
-import AccessDenied from '@/components/auth/AccessDenied.vue'
-import ToastNotification from '@/components/common/ToastNotification.vue'
-import BottomNav from '@/components/common/BottomNav.vue'
-import { useNotificationStore } from '@/stores/notifications'
+import Navigation from '@/components/Navigation.vue'
+import LoadingOverlay from '@/components/LoadingOverlay.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const notificationStore = useNotificationStore()
 
 const isCheckingAccess = ref(true)
 const telegramId = ref(null)
 
-const hasAccess = computed(() => authStore.hasAccess)
-const isAuthenticated = computed(() => authStore.isAuthenticated)
-const accessCheckResult = computed(() => authStore.accessCheckResult)
-const isInTelegram = computed(() => telegramService.isInTelegram())
+// Глобальный перехватчик ошибок для Telegram
+window.onerror = function(message, source, lineno, colno, error) {
+  alert(`JS ERROR: ${message}\nSource: ${source}\nLine: ${lineno}`);
+};
+
 const isAdminPath = computed(() => router.currentRoute.value.path.startsWith('/admin'))
 
 onMounted(async () => {
-  alert('Инициализация приложения [ВЕРСИЯ: 1.0.5]...')
+  alert('ВЕРСИЯ 1.0.6: Старт...')
+  
   try {
     // 1. Инициализируем Telegram
+    alert('Шаг 1: TG Init...')
     telegramService.init()
     
     if (!telegramService.isInTelegram()) {
+      alert('Внимание: Запущено не в Telegram');
       isCheckingAccess.value = false
       return
     }
 
     const tgUser = telegramService.getUser()
     telegramId.value = tgUser?.id
+    alert(`Шаг 2: ID получен: ${telegramId.value}`)
 
-    // 2. Проверяем доступ
-    await authStore.checkAccess()
-    alert(`ДОСТУП ПРОВЕРЕН: hasAccess=${authStore.hasAccess}, result=${JSON.stringify(authStore.accessCheckResult)}`)
+    // 2. Проверяем доступ через Store
+    alert('Шаг 3: Вызываю checkAccess...')
     
+    // Делаем таймаут на случай зависания запроса
+    const timeout = setTimeout(() => {
+      alert('ВНИМАНИЕ: Запрос checkAccess длится более 10 секунд!')
+    }, 10000);
+
+    const result = await authStore.checkAccess()
+    clearTimeout(timeout);
+    
+    alert(`Шаг 4: Ответ API: ${JSON.stringify(result)}`)
+
     if (!authStore.hasAccess) {
+      alert('Доступ запрещен бэкендом');
       isCheckingAccess.value = false
       return
     }
 
     // 3. Доступ есть - входим
+    alert('Шаг 5: Вызываю Login...')
     const loginResult = await authStore.login()
+    alert(`Шаг 6: Результат Login: ${JSON.stringify(loginResult)}`)
     
     if (loginResult.success) {
       await authStore.fetchCurrentUser()
       router.push('/')
     }
 
-    if (loginResult.success) {
-      // Успешный вход - загружаем данные пользователя
-      console.log('Login successful')
-      await authStore.fetchCurrentUser()
-      
-      // Показываем приветствие
-      if (loginResult.message) {
-        notificationStore.show(loginResult.message)
-      }
-      
-      // Навигация на главную
-      router.push('/')
-    } else {
-      // Ошибка входа - это не должно случиться если checkAccess прошел
-      console.error('Login failed despite access check:', loginResult)
-      
-      // Если это ошибка USER_NOT_FOUND - обновляем результат проверки
-      if (loginResult.code === 'USER_NOT_FOUND') {
-        authStore.accessCheckResult = {
-          has_access: false,
-          message: loginResult.message,
-          reason: 'not_found',
-          telegram_id: loginResult.telegram_id
-        }
-      }
-    }
-    console.log('App initialized successfully')
-  } catch (error) {
-    console.error('Initialization error:', error)
-    const errorMsg = error.message || 'Неизвестная ошибка'
-    const errorStack = error.stack || ''
-    alert(`КРИТИЧЕСКАЯ ОШИБКА TMA: ${errorMsg}\n${errorStack.substring(0, 50)}`)
+  } catch (err) {
+    alert(`КРИТИЧЕСКАЯ ОШИБКА: ${err.message}\nStack: ${err.stack}`)
+    console.error('Initial error:', err)
   } finally {
     isCheckingAccess.value = false
   }
 })
 </script>
 
+<template>
+  <div class="app-container">
+    <router-view v-if="!isCheckingAccess"></router-view>
+    <div v-else class="checking-screen">
+      <div class="loader"></div>
+      <p>Проверка доступа [v1.0.6]...</p>
+    </div>
+    
+    <!-- Навигация только для основых путей (не админка и не проверка) -->
+    <Navigation v-if="!isCheckingAccess && !isAdminPath" />
+  </div>
+</template>
+
 <style>
-/* Используем CSS переменные от Telegram */
-:root {
-  --tg-theme-bg-color: #ffffff;
-  --tg-theme-text-color: #000000;
-  --tg-theme-hint-color: #999999;
-  --tg-theme-link-color: #2481cc;
-  --tg-theme-button-color: #5288c1;
-  --tg-theme-button-text-color: #ffffff;
+.checking-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background: #111;
+  color: white;
 }
-
-body {
-  margin: 0;
-  padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+.loader {
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #3498db;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  animation: spin 2s linear infinite;
+  margin-bottom: 20px;
 }
-
-* {
-  box-sizing: border-box;
-}
-
-/* Отключаем выделение для лучшего UX в Telegram */
-* {
-  -webkit-tap-highlight-color: transparent;
-  -webkit-touch-callout: none;
-}
-
-/* Safe area для iPhone */
-#app {
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 </style>
