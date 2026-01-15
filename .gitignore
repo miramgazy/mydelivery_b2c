@@ -1,0 +1,85 @@
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Packages / Modules
+node_modules/
+bower_components/
+jspm_packages/
+venv/
+env/
+ENV/
+.env
+.env.local
+.env.*.local
+.env.backup
+*.bak
+*.backup
+
+# Python / Django Patterns
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Django specific
+*.log
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+/backend/staticfiles/
+/backend/media/
+/backend/static/
+/frontend/dist/
+
+# Project specific temporary and backup files
+downloaded_menu.json
+external-menu.pdf
+backup.sql
+db_schema.sql
+init.sql
+order_create_example.json
+celerybeat-schedule
+celerybeat.pid
+
+# Docker
+docker-compose.override.yml
+certbot/
+
+# Build artifacts
+.vite/
+.output/
+.nuxt/
+dist/

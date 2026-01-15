@@ -1,0 +1,156 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  db:
+    image: postgres:15-alpine
+    container_name: iiko_delivery_db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-iiko_delivery}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - iiko_network
+    restart: always
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: iiko_delivery_redis
+    networks:
+      - iiko_network
+    restart: always
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # Django Backend
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: iiko_delivery_backend
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --timeout 120 --access-logfile - --error-logfile -
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - iiko_network
+    restart: always
+
+  # Celery Worker
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: iiko_delivery_celery
+    command: celery -A config worker -l info --max-tasks-per-child=1000
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+      - backend
+    networks:
+      - iiko_network
+    restart: always
+
+  # Celery Beat
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: iiko_delivery_celery_beat
+    command: celery -A config beat -l info
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+      - backend
+    networks:
+      - iiko_network
+    restart: always
+
+  # Vue Frontend (Production build)
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      target: production
+    container_name: iiko_delivery_frontend
+    networks:
+      - iiko_network
+    restart: always
+
+  # Nginx
+  nginx:
+    image: nginx:alpine
+    container_name: iiko_delivery_nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ../nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - static_volume:/app/staticfiles:ro
+      - media_volume:/app/media:ro
+      - ../certbot/conf:/etc/letsencrypt:ro
+      - ../certbot/www:/var/www/certbot:ro
+    depends_on:
+      - backend
+      - frontend
+    networks:
+      - iiko_network
+    restart: always
+
+  # Certbot для SSL (опционально)
+  certbot:
+    image: certbot/certbot
+    container_name: iiko_delivery_certbot
+    volumes:
+      - ../certbot/conf:/etc/letsencrypt
+      - ../certbot/www:/var/www/certbot
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+    networks:
+      - iiko_network
+
+volumes:
+  postgres_data:
+  static_volume:
+  media_volume:
+
+
+networks:
+  iiko_network:
+    driver: bridge

@@ -1,0 +1,128 @@
+from rest_framework import serializers
+from .models import User, Role, DeliveryAddress
+from apps.organizations.serializers import TerminalSerializer
+
+
+class RoleSerializer(serializers.ModelSerializer):
+    """Сериализатор для ролей"""
+    
+    class Meta:
+        model = Role
+        fields = ['id', 'role_name', 'description']
+        read_only_fields = ['id']
+
+
+class DeliveryAddressSerializer(serializers.ModelSerializer):
+    """Сериализатор для адресов доставки"""
+    full_address = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = DeliveryAddress
+        fields = [
+            'id', 'user', 'city_name', 'iiko_city_id',
+            'street', 'street_name', 'iiko_street_id',
+            'house', 'flat', 'entrance', 'floor',
+            'latitude', 'longitude', 'comment',
+            'is_default', 'full_address',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
+    
+    def get_full_address(self, obj):
+        """Полный адрес в строковом виде"""
+        return str(obj)
+    
+    def validate(self, attrs):
+        """Валидация адреса и координат"""
+        latitude = attrs.get('latitude')
+        longitude = attrs.get('longitude')
+        
+        if latitude is not None and (latitude < -90 or latitude > 90):
+            raise serializers.ValidationError({
+                'latitude': 'Широта должна быть в диапазоне от -90 до 90'
+            })
+        
+        if longitude is not None and (longitude < -180 or longitude > 180):
+            raise serializers.ValidationError({
+                'longitude': 'Долгота должна быть в диапазоне от -180 до 180'
+            })
+        
+        return attrs
+
+
+class UserSerializer(serializers.ModelSerializer):
+    """Сериализатор для пользователей"""
+    role_name = serializers.CharField(source='role.role_name', read_only=True, default=None)
+    role_display = serializers.CharField(source='role.get_role_name_display', read_only=True, default=None)
+    organization_name = serializers.CharField(source='organization.org_name', read_only=True, default=None)
+    full_name = serializers.CharField(read_only=True)
+    terminals = TerminalSerializer(many=True, read_only=True)
+    addresses = DeliveryAddressSerializer(many=True, read_only=True)
+    
+    class Meta:
+        model = User
+        fields = [
+            'id', 'telegram_id', 'first_name', 'last_name', 'username',
+            'email', 'phone', 'telegram_username', 'full_name',
+            'role', 'role_name', 'role_display',
+            'organization', 'organization_name',
+            'terminals', 'addresses',
+            'iiko_user_id', 'is_active', 'last_login',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'telegram_id', 'created_at', 'updated_at', 'last_login']
+        extra_kwargs = {
+            'password': {'write_only': True}
+        }
+
+
+class UserCreateSerializer(serializers.ModelSerializer):
+    """Сериализатор для создания пользователя"""
+    
+    class Meta:
+        model = User
+        fields = [
+            'telegram_id', 'first_name', 'last_name', 'username',
+            'email', 'phone', 'telegram_username',
+            'role', 'organization', 'iiko_user_id'
+        ]
+    
+    def validate_telegram_id(self, value):
+        """Проверка уникальности Telegram ID"""
+        if User.objects.filter(telegram_id=value).exists():
+            raise serializers.ValidationError('Пользователь с таким Telegram ID уже существует')
+        return value
+    
+    def validate(self, attrs):
+        """Валидация данных пользователя"""
+        role = attrs.get('role')
+        organization = attrs.get('organization')
+        
+        # Клиент может не иметь организацию при создании
+        if role.role_name in [Role.ORG_ADMIN] and not organization:
+            raise serializers.ValidationError({
+                'organization': 'Администратор организации должен иметь привязку к организации'
+            })
+        
+        return attrs
+
+
+class UserUpdateSerializer(serializers.ModelSerializer):
+    """Сериализатор для обновления данных пользователя"""
+    
+    class Meta:
+        model = User
+        fields = [
+            'first_name', 'last_name', 'username',
+            'email', 'phone', 'iiko_user_id'
+        ]
+
+
+class TelegramAuthSerializer(serializers.Serializer):
+    """Сериализатор для аутентификации через Telegram"""
+    initData = serializers.CharField(required=True, write_only=True)
+    
+    # Возвращаемые данные
+    access = serializers.CharField(read_only=True)
+    refresh = serializers.CharField(read_only=True)
+    user = UserSerializer(read_only=True)

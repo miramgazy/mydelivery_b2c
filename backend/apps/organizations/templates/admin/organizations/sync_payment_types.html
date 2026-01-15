@@ -1,0 +1,46 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label='organizations' %}">Организации</a>
+    &rsaquo; <a href="{% url 'admin:organizations_paymenttype_changelist' %}">Типы оплаты</a>
+    &rsaquo; Загрузка типов оплаты из iiko
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <h1>Загрузка типов оплаты из iiko Cloud</h1>
+    <p>Выберите организацию, для которой необходимо загрузить список типов оплаты.</p>
+
+    <form method="post"
+        style="max-width: 600px; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        {% csrf_token %}
+        <fieldset class="module aligned" style="border: none; padding: 0;">
+            <div class="form-row" style="border: none; padding: 10px 0;">
+                <label for="id_organization" style="font-weight: bold; width: 120px;">Организация:</label>
+                <div style="margin-left: 130px;">
+                    <select name="organization_id" id="id_organization" required
+                        style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                        <option value="">---------</option>
+                        {% for org in organizations %}
+                        <option value="{{ org.org_id }}">{{ org.org_name }}</option>
+                        {% endfor %}
+                    </select>
+                    <p class="help" style="margin-top: 5px; color: #666; font-size: 0.9em;">Будут загружены все
+                        типы оплаты, привязанные к данной организации в iiko Cloud.</p>
+                </div>
+            </div>
+        </fieldset>
+
+        <div class="submit-row" style="background: none; border: none; padding: 20px 0 0 0; text-align: left;">
+            <input type="submit" value="Загрузить типы оплаты" class="default"
+                style="padding: 10px 20px; cursor: pointer;">
+            <a href="{% url 'admin:organizations_paymenttype_changelist' %}" class="button closelink"
+                style="padding: 10px 20px; margin-left: 10px;">Отмена</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

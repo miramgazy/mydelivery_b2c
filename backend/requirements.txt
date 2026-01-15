@@ -1,0 +1,43 @@
+# Django
+Django==5.0
+djangorestframework==3.14.0
+django-cors-headers==4.3.1
+django-filter==23.5
+
+# Database
+psycopg2-binary==2.9.9
+
+# Environment
+python-decouple==3.8
+
+# Authentication & Security
+djangorestframework-simplejwt==5.3.1
+cryptography==42.0.0
+
+# Celery для асинхронных задач
+celery==5.3.4
+redis==5.0.1
+
+# HTTP клиент
+httpx==0.26.0
+requests==2.31.0
+
+# Валидация
+pydantic==2.5.3
+
+# Utilities
+python-dateutil==2.8.2
+pytz==2024.1
+
+# Development
+pytest==7.4.3
+pytest-django==4.7.0
+faker==22.0.0
+black==23.12.1
+flake8==7.0.0
+
+# Documentation
+drf-spectacular==0.27.0
+
+# Production Server
+gunicorn==21.2.0

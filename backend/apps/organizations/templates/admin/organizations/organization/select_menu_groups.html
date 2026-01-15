@@ -1,0 +1,46 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; <a href="{% url opts|admin_urlname:'change' object.pk %}">{{ object|truncatewords:"18" }}</a>
+    &rsaquo; {% translate 'Import Menu' %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <h1>Выберите группы для импорта меню</h1>
+    <p>Каждая выбранная группа станет отдельным Меню в системе (новое или обновление существующего).</p>
+
+    <form method="post">
+        {% csrf_token %}
+        <fieldset class="module aligned">
+            <div class="form-row">
+                <label>Доступные корневые группы:</label>
+                <div style="margin-left: 170px;">
+                    {% if groups %}
+                    {% for group in groups %}
+                    <div style="margin-bottom: 10px;">
+                        <input type="checkbox" id="group_{{ group.id }}" name="selected_groups" value="{{ group.id }}">
+                        <label for="group_{{ group.id }}" style="display: inline; float: none;">{{ group.name }} (ID: {{
+                            group.id }})</label>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <p>Корневые группы не найдены. Проверьте структуру меню в iiko.</p>
+                    {% endif %}
+                </div>
+            </div>
+        </fieldset>
+
+        <div class="submit-row">
+            <input type="submit" value="Импортировать выбранные" class="default" name="_save">
+            <a href="{% url opts|admin_urlname:'change' object.pk %}" class="button closelink">Отмена</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

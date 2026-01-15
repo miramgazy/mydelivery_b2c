@@ -1,0 +1,13 @@
+{% extends 'admin/change_form.html' %}
+
+{% block object-tools-items %}
+{{ block.super }}
+<li>
+    <a href="{% url 'admin:organization_import_menu' original.pk %}" class="historylink"
+        style="background-color: #447e9b; color: white;">Загрузить меню</a>
+</li>
+<li>
+    <a href="{% url 'admin:organization_import_external_menu' original.pk %}" class="historylink"
+        style="background-color: #3e8e41; color: white;">Загрузить внешнее меню</a>
+</li>
+{% endblock %}

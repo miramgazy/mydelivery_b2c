@@ -1,0 +1,33 @@
+@import './tailwind.css';
+
+/* Custom styles */
+:root {
+  --safe-area-top: env(safe-area-inset-top, 0px);
+  --safe-area-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+body {
+  background-color: var(--tg-theme-bg-color, #f9fafb);
+  color: var(--tg-theme-text-color, #111827);
+  overflow-x: hidden;
+}
+
+/* Hide scrollbar for category list */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Animations */
+.slide-enter-active,
+.slide-leave-active {
+  transition: transform 0.3s ease;
+}
+
+.slide-enter-from,
+.slide-leave-to {
+  transform: translateY(100%);
+}

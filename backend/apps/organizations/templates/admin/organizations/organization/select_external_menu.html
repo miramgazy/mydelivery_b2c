@@ -1,0 +1,48 @@
+{% extends "admin/base_site.html" %}
+{% load i18n admin_urls static %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+    <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+    &rsaquo; <a href="{% url 'admin:app_list' app_label=opts.app_label %}">{{ opts.app_config.verbose_name }}</a>
+    &rsaquo; <a href="{% url opts|admin_urlname:'changelist' %}">{{ opts.verbose_name_plural|capfirst }}</a>
+    &rsaquo; <a href="{% url opts|admin_urlname:'change' object.pk %}">{{ object|truncatewords:"18" }}</a>
+    &rsaquo; Загрузить внешнее меню
+</div>
+{% endblock %}
+
+{% block content %}
+<div id="content-main">
+    <h1>Выберите внешнее меню для загрузки</h1>
+    <p>Выберите одно из настроенных внешних меню в iikoOffice.</p>
+
+    <form method="post">
+        {% csrf_token %}
+        <fieldset class="module aligned">
+            <div class="form-row">
+                <label>Доступные внешние меню:</label>
+                <div style="margin-left: 170px;">
+                    {% if external_menus %}
+                    {% for menu in external_menus %}
+                    <div style="margin-bottom: 10px;">
+                        <input type="radio" id="menu_{{ menu.id }}" name="selected_menu" value="{{ menu.id }}" required>
+                        <label for="menu_{{ menu.id }}" style="display: inline; float: none;">
+                            <strong>{{ menu.name }}</strong> (ID: {{ menu.id }})
+                            {% if menu.description %}<br><small>{{ menu.description }}</small>{% endif %}
+                        </label>
+                    </div>
+                    {% endfor %}
+                    {% else %}
+                    <p>Внешние меню не найдены. Создайте их в iikoOffice (Розничные продажи -> Внешние меню).</p>
+                    {% endif %}
+                </div>
+            </div>
+        </fieldset>
+
+        <div class="submit-row">
+            <input type="submit" value="Загрузить выбранное меню" class="default" name="_save">
+            <a href="{% url opts|admin_urlname:'change' object.pk %}" class="button closelink">Отмена</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
