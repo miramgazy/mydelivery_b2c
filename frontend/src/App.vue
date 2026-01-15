@@ -64,60 +64,48 @@ onMounted(async () => {
   alert('Инициализация приложения...')
   try {
     // 1. Инициализируем Telegram
+    alert('Шаг 1: Инфо Telegram...')
     telegramService.init()
     
     // Проверяем что запущены в Telegram
     if (!telegramService.isInTelegram()) {
-      console.warn('Not running in Telegram - Browser Mode')
-      
-      // В браузере просто проверяем есть ли токен и загружаем профиль
-      if (authStore.isAuthenticated) {
-        try {
-          await authStore.fetchCurrentUser()
-        } catch (err) {
-          console.error('Browser session restoration failed:', err)
-        }
-      }
-      
+      alert('Ошибка: Режим браузера, а не Telegram')
       isCheckingAccess.value = false
       return
     }
 
     // Получаем Telegram ID
-    const user = telegramService.getUser()
-    telegramId.value = user?.id
+    const tgUser = telegramService.getUser()
+    telegramId.value = tgUser?.id
+    alert(`Шаг 2: Ваш ID: ${tgUser?.id}`)
 
-    // ОПТИМИЗАЦИЯ: Если пользователь уже авторизован (есть токен), 
-    // пробуем загрузить профиль сразу, минуя проверку доступа и логин.
     if (authStore.isAuthenticated) {
-      console.log('Existing session found, trying to restore...')
+      alert('Шаг 2.5: Восстанавливаем сессию...')
       const currentUser = await authStore.fetchCurrentUser()
       if (currentUser) {
-        console.log('Session restored successfully')
+        alert('Успех: Сессия восстановлена!')
         isCheckingAccess.value = false
-        // Если мы не на какой-то конкретной странице, идем на главную
         if (router.currentRoute.value.path === '/login' || router.currentRoute.value.path === '/checking-access') {
            router.push('/')
         }
         return
       }
-      console.log('Session expired or invalid, proceeding with full login')
     }
 
-    // 2. Проверяем доступ (ПЕРВЫЙ ШАГ - обязательная проверка только если нет сессии)
-    console.log('Checking access for user:', telegramId.value)
+    // 2. Проверяем доступ
+    alert('Шаг 3: Запрос к API (checkAccess)...')
     await authStore.checkAccess()
+    alert(`Результат доступа: ${authStore.hasAccess ? 'РАЗРЕШЕНО' : 'ЗАПРЕЩЕНО'}`)
 
     if (!authStore.hasAccess) {
-      // Доступ запрещен - показываем экран отказа
-      console.log('Access denied:', authStore.accessCheckResult)
       isCheckingAccess.value = false
       return
     }
 
-    // 3. Доступ есть - пытаемся войти (ВТОРОЙ ШАГ)
-    console.log('Access granted, attempting login')
+    // 3. Доступ есть - пытаемся войти
+    alert('Шаг 4: Попытка входа (login)...')
     const loginResult = await authStore.login()
+    alert(`Результат входа: ${loginResult.success ? 'УСПЕХ' : 'ОШИБКА'}`)
 
     if (loginResult.success) {
       // Успешный вход - загружаем данные пользователя
