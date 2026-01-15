@@ -8,7 +8,7 @@ services:
       - redis_data:/data
     restart: always
     networks:
-      - coolify
+      - default
     healthcheck:
       test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
@@ -18,7 +18,8 @@ services:
   backend:
     build:
       context: ./backend
-    command: /app/docker-entrypoint.sh gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4
+    # Включаем логи доступа gunicorn
+    command: /app/docker-entrypoint.sh gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --access-logfile - --error-logfile -
     volumes:
       - django_static:/app/staticfiles
       - django_media:/app/media
@@ -27,6 +28,7 @@ services:
       - tg-redis
     restart: always
     networks:
+      - default
       - coolify
 
   celery:
@@ -38,6 +40,7 @@ services:
       - tg-redis
     restart: always
     networks:
+      - default
       - coolify
 
   celery-beat:
@@ -49,6 +52,7 @@ services:
       - tg-redis
     restart: always
     networks:
+      - default
       - coolify
 
   frontend:
@@ -56,7 +60,7 @@ services:
       context: ./frontend
     restart: always
     networks:
-      - coolify
+      - default
 
   nginx:
     build:
@@ -72,7 +76,7 @@ services:
       - frontend
     restart: always
     networks:
-      - coolify
+      - default
 
 volumes:
   redis_data:
@@ -81,5 +85,9 @@ volumes:
 
 
 networks:
+  # Используется только для связи с базой данных
   coolify:
     external: true
+  # Внутренняя сеть для Nginx, Бэкенда и Редиса
+  default:
+    driver: bridge
