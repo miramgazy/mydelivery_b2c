@@ -201,5 +201,11 @@ IIKO_API_BASE_URL = config('IIKO_API_BASE_URL', default='https://api-ru.iiko.ser
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 USE_X_FORWARDED_HOST = True
 SECURE_SSL_REDIRECT = False
+
+# Доверенные домены для CSRF (обязательно для работы за прокси)
+CSRF_TRUSTED_ORIGINS = [
+    'https://b2b-delivery.mevent.kz',
+    'http://localhost:3005',
+]
 SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=False, cast=bool)
 CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=False, cast=bool)
