@@ -26,6 +26,16 @@ FROM node:20-alpine as build
 
 WORKDIR /app
 
+# Добавляем аргументы сборки
+ARG VITE_API_URL
+ARG VITE_TELEGRAM_BOT_USERNAME
+ARG VITE_DEV_MODE=false
+
+# Устанавливаем их как переменные окружения для сборки Vite
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_TELEGRAM_BOT_USERNAME=$VITE_TELEGRAM_BOT_USERNAME
+ENV VITE_DEV_MODE=$VITE_DEV_MODE
+
 # Копируем package файлы
 COPY package*.json ./
 
