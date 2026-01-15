@@ -76,6 +76,7 @@ onMounted(async () => {
 
     // 2. Проверяем доступ
     await authStore.checkAccess()
+    alert(`ДОСТУП ПРОВЕРЕН: hasAccess=${authStore.hasAccess}, result=${JSON.stringify(authStore.accessCheckResult)}`)
     
     if (!authStore.hasAccess) {
       isCheckingAccess.value = false
