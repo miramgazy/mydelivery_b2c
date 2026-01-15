@@ -41,6 +41,7 @@ export const useAuthStore = defineStore('auth', () => {
         } catch (err) {
             console.error('Check access error:', err)
             error.value = err.message
+            alert(`ОШИБКА API: ${err.message}\nСтатус: ${err.response?.status}\nURL: ${err.config?.url}`)
 
             // Если ошибка - считаем что доступа нет
             accessCheckResult.value = {
