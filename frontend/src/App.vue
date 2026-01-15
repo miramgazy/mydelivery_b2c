@@ -144,10 +144,12 @@ onMounted(async () => {
         }
       }
     }
+    console.log('App initialized successfully')
   } catch (error) {
     console.error('Initialization error:', error)
     const errorMsg = error.message || 'Неизвестная ошибка'
-    telegramService.showAlert(`Ошибка при запуске приложения: ${errorMsg}. Проверьте соединение с интернетом или настройки API.`)
+    const errorStack = error.stack || ''
+    alert(`КРИТИЧЕСКАЯ ОШИБКА TMA: ${errorMsg}\n${errorStack.substring(0, 50)}`)
   } finally {
     isCheckingAccess.value = false
   }
