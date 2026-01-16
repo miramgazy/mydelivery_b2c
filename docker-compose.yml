@@ -19,7 +19,10 @@ services:
     build:
       context: ./backend
     # Включаем логи доступа gunicorn
-    command: /app/docker-entrypoint.sh gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 4 --access-logfile - --error-logfile -
+    command: >
+      sh -c "python manage.py migrate &&
+             python manage.py collectstatic --noinput &&
+             gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --worker-class gthread --threads 4 --timeout 60"
     volumes:
       - django_static:/app/staticfiles
       - django_media:/app/media
