@@ -32,7 +32,6 @@ class AuthService {
             const initData = telegramService.getInitData()
             if (!initData) throw new Error('Telegram initData not available')
 
-            alert('Начинаю финальный вход (Login)...')
             const response = await api.post('/auth/telegram/', {
                 initData: initData
             }, {
@@ -50,7 +49,7 @@ class AuthService {
             }
         } catch (error) {
             const msg = error.response?.data?.message || error.message
-            alert(`Ошибка Login: ${msg}`)
+            console.error('Login error:', msg)
             return {
                 success: false,
                 message: msg
