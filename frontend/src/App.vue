@@ -14,43 +14,50 @@ onMounted(async () => {
   try {
     telegramService.init()
     if (!telegramService.isInTelegram()) {
+      console.log('Not in Telegram environment');
       isCheckingAccess.value = false
       return
     }
 
     const tgUser = telegramService.getUser()
-    statusMessage.value = `ID: ${tgUser?.id}. Выполняю запрос...`
+    if (!tgUser) {
+        statusMessage.value = 'ОШИБКА: Данные пользователя Telegram не получены';
+        return;
+    }
+    
+    statusMessage.value = `ID: ${tgUser.id}. Проверка доступа...`;
 
-    // Прямой fetch с защитой от "зависания"
     const response = await fetch('/api/users/check_access/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ telegram_id: tgUser.id })
     });
     
-    statusMessage.value = `Статус: ${response.status}. Читаю данные...`;
-    
     if (response.ok) {
         const result = await response.json();
         if (result.has_access) {
-            statusMessage.value = 'ДОСТУП ЕСТЬ. Начинаю логин...';
+            statusMessage.value = 'ДОСТУП ЕСТЬ. Авторизация...';
             const logRes = await authStore.login();
             if (logRes.success) {
-                statusMessage.value = 'УСПЕХ. Вход...';
+                statusMessage.value = 'УСПЕХ. Загрузка приложения...';
                 router.push('/');
                 isCheckingAccess.value = false;
             } else {
-                statusMessage.value = `ОШИБКА ЛОГИНА: ${logRes.message}`;
+                statusMessage.value = `ОШИБКА ЛОГИНА: ${logRes.message || 'Неизвестная ошибка'}`;
+                alert('Ошибка логина: ' + JSON.stringify(logRes));
             }
         } else {
-            statusMessage.value = 'ОТКАЗАНО: Пользователь не найден в базе.';
+            statusMessage.value = `ОТКАЗАНО: ${result.message || 'Доступ запрещен'}`;
         }
     } else {
+        const errText = await response.text();
         statusMessage.value = `ОШИБКА API: ${response.status}`;
+        alert(`API Error (${response.status}): ${errText}`);
     }
 
   } catch (err) {
-    statusMessage.value = `FATAL ERROR: ${err.message}`;
+    statusMessage.value = `КРИТИЧЕСКАЯ ОШИБКА: ${err.message}`;
+    alert('Fatal Error: ' + err.stack);
   }
 })
 </script>
