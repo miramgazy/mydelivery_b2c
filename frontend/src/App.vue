@@ -11,21 +11,30 @@ const isCheckingAccess = ref(true)
 const statusMessage = ref('СИСТЕМА v1.3.0 ЗАГРУЖЕНА...')
 
 onMounted(async () => {
+  console.log('--- START ON_MOUNTED ---');
   try {
+    console.log('Initializing telegram service...');
     telegramService.init()
+    
+    console.log('Checking if in Telegram...');
     if (!telegramService.isInTelegram()) {
-      console.log('Not in Telegram environment');
+      console.warn('NOT IN TELEGRAM (initData missing)');
+      console.log('WebApp object:', telegramService.webApp);
       isCheckingAccess.value = false
       return
     }
 
     const tgUser = telegramService.getUser()
+    console.log('Telegram user data:', tgUser);
+    
     if (!tgUser) {
+        console.error('User object is empty/null');
         statusMessage.value = 'ОШИБКА: Данные пользователя Telegram не получены';
         return;
     }
     
     statusMessage.value = `ID: ${tgUser.id}. Проверка доступа...`;
+    console.log(`Sending check_access for user ${tgUser.id}...`);
 
     const response = await fetch('/api/users/check_access/', {
         method: 'POST',
@@ -33,11 +42,18 @@ onMounted(async () => {
         body: JSON.stringify({ telegram_id: tgUser.id })
     });
     
+    console.log('Response status:', response.status);
+
     if (response.ok) {
         const result = await response.json();
+        console.log('Access result:', result);
+        
         if (result.has_access) {
             statusMessage.value = 'ДОСТУП ЕСТЬ. Авторизация...';
+            console.log('Calling authStore.login()...');
             const logRes = await authStore.login();
+            console.log('Login result:', logRes);
+            
             if (logRes.success) {
                 statusMessage.value = 'УСПЕХ. Загрузка приложения...';
                 router.push('/');
@@ -47,15 +63,18 @@ onMounted(async () => {
                 alert('Ошибка логина: ' + JSON.stringify(logRes));
             }
         } else {
+            console.warn('Access denied by backend');
             statusMessage.value = `ОТКАЗАНО: ${result.message || 'Доступ запрещен'}`;
         }
     } else {
         const errText = await response.text();
+        console.error('API Error text:', errText);
         statusMessage.value = `ОШИБКА API: ${response.status}`;
         alert(`API Error (${response.status}): ${errText}`);
     }
 
   } catch (err) {
+    console.error('FATAL ERROR:', err);
     statusMessage.value = `КРИТИЧЕСКАЯ ОШИБКА: ${err.message}`;
     alert('Fatal Error: ' + err.stack);
   }
