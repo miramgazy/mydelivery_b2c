@@ -36,27 +36,40 @@ onMounted(async () => {
     statusMessage.value = `ID: ${tgUser.id}. Проверка доступа...`;
     console.log(`Calling authStore.checkAccess for user ${tgUser.id}...`);
 
-    // Используем уже настроенный Axios через Store
-    const result = await authStore.checkAccess();
-    console.log('Access result from store:', result);
+    // Принудительный таймаут для проверки (15 секунд)
+    const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Время ожидания сервера истекло (15с)')), 15000)
+    );
 
-    if (result && result.has_access) {
-        statusMessage.value = 'ДОСТУП ЕСТЬ. Авторизация...';
-        console.log('Calling authStore.login()...');
-        const logRes = await authStore.login();
-        console.log('Login result:', logRes);
+    try {
+        const result = await Promise.race([
+            authStore.checkAccess(),
+            timeoutPromise
+        ]);
         
-        if (logRes.success) {
-            statusMessage.value = 'УСПЕХ. Загрузка приложения...';
-            router.push('/');
-            isCheckingAccess.value = false;
+        console.log('Access result from store:', result);
+
+        if (result && result.has_access) {
+            statusMessage.value = 'ДОСТУП ЕСТЬ. Авторизация...';
+            console.log('Calling authStore.login()...');
+            const logRes = await authStore.login();
+            console.log('Login result:', logRes);
+            
+            if (logRes.success) {
+                statusMessage.value = 'УСПЕХ. Загрузка приложения...';
+                router.push('/');
+                isCheckingAccess.value = false;
+            } else {
+                statusMessage.value = `ОШИБКА ЛОГИНА: ${logRes.message || 'Неизвестная ошибка'}`;
+                console.error('Login error detail:', logRes);
+            }
         } else {
-            statusMessage.value = `ОШИБКА ЛОГИНА: ${logRes.message || 'Неизвестная ошибка'}`;
-            console.error('Login error detail:', logRes);
+            console.warn('Access denied or error during check');
+            statusMessage.value = `ОТКАЗАНО: ${result?.message || 'Доступ запрещен'}`;
         }
-    } else {
-        console.warn('Access denied or error during check');
-        statusMessage.value = `ОТКАЗАНО: ${result?.message || 'Доступ запрещен'}`;
+    } catch (checkErr) {
+        console.error('Check access failed:', checkErr);
+        statusMessage.value = `ОШИБКА: ${checkErr.message}`;
     }
 
   } catch (err) {
