@@ -17,22 +17,35 @@ const showBottomNav = computed(() => {
 
 onMounted(async () => {
   try {
-    // Инициализация Telegram без блокировки интерфейса
+    // Инициализация Telegram
     telegramService.init()
     
-    // Проверка доступа в фоновом режиме
+    // Если запущено в Telegram
     if (telegramService.isInTelegram()) {
       const tgUser = telegramService.getUser()
       if (tgUser) {
         console.log('TG User:', tgUser.id)
-        if (!authStore.isAuthenticated) {
-            await authStore.checkAccess()
-            await authStore.login()
+        
+        // Всегда проверяем доступ при старте, чтобы обновить токены
+        const accessCheck = await authStore.checkAccess()
+        
+        if (accessCheck.has_access) {
+            const loginResult = await authStore.login()
+            if (!loginResult.success) {
+                console.error('Login failed:', loginResult.message)
+            }
+        } else {
+            console.warn('Access denied for user:', tgUser.id)
         }
       }
+    } else {
+        // Если запущено в браузере и нет токена - редирект на логин
+        if (!authStore.isAuthenticated && route.name !== 'login') {
+            router.push('/login')
+        }
     }
   } catch (err) {
-    console.warn('Init warning:', err)
+    console.error('App Init Error:', err)
   }
 })
 </script>
