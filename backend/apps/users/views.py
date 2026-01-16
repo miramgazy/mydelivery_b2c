@@ -64,17 +64,15 @@ class TelegramAuthView(viewsets.ViewSet):
                 user.save(update_fields=['first_name', 'last_name', 'telegram_username'])
                 
             except User.DoesNotExist:
-                logger.info(f"User not found for telegram_id {telegram_id}, creating new customer")
-                # Создаем нового клиента
-                customer_role = Role.objects.get(role_name=Role.CUSTOMER)
-                user = User.objects.create(
-                    telegram_id=telegram_id,
-                    first_name=user_data.get('first_name', 'User'),
-                    last_name=user_data.get('last_name'),
-                    telegram_username=user_data.get('username'),
-                    role=customer_role
+                logger.warning(f"User not found for telegram_id {telegram_id}. Access denied.")
+                return Response(
+                    {
+                        'error': 'Доступ запрещен',
+                        'message': 'Вы не зарегистрированы в системе. Обратитесь к администратору.',
+                        'telegram_id': telegram_id
+                    },
+                    status=status.HTTP_403_FORBIDDEN
                 )
-                logger.info(f"Created new user: {user.id}")
             
             if not user.is_active:
                 logger.warning(f"User {user.id} is blocked")
