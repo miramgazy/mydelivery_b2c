@@ -8,51 +8,46 @@ const router = useRouter()
 const authStore = useAuthStore()
 
 const isCheckingAccess = ref(true)
-const statusMessage = ref('Инициализация v1.1.0...')
+const statusMessage = ref('ЗАПУСК КОДА v1.2.0...')
 
 onMounted(async () => {
   try {
-    statusMessage.value = 'Шаг 1: Telegram init...'
     telegramService.init()
-    
     if (!telegramService.isInTelegram()) {
-      statusMessage.value = 'Запущено вне Telegram'
       isCheckingAccess.value = false
       return
     }
 
     const tgUser = telegramService.getUser()
-    statusMessage.value = `Шаг 2: ID ${tgUser?.id}. Запрос доступа...`
+    statusMessage.value = `ID: ${tgUser?.id}. Проверка...`
 
-    // Проверяем доступ
-    const result = await authStore.checkAccess()
-    statusMessage.value = `Шаг 3: Ответ сервера: hasAccess=${result.has_access}`
-
-    if (!result.has_access) {
-      statusMessage.value = 'Доступ запрещен'
-      isCheckingAccess.value = false
-      return
-    }
-
-    // Входим
-    statusMessage.value = 'Шаг 4: Авторизация...'
-    const loginResult = await authStore.login()
+    // Прямой вызов fetch без посредников
+    const response = await fetch('/api/users/check_access/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telegram_id: tgUser.id })
+    });
     
-    if (loginResult.success) {
-      statusMessage.value = 'Успех! Переход в приложение...'
-      await authStore.fetchCurrentUser()
-      router.push('/')
+    statusMessage.value = `Response: ${response.status}`;
+    
+    if (response.ok) {
+        const result = await response.json();
+        if (result.has_access) {
+            statusMessage.value = 'Доступ есть! Вхожу...';
+            const logRes = await authStore.login();
+            if (logRes.success) {
+                router.push('/');
+                isCheckingAccess.value = false;
+            }
+        } else {
+            statusMessage.value = 'Доступ запрещен в БД';
+        }
     } else {
-      statusMessage.value = `Ошибка входа: ${loginResult.message}`
+        statusMessage.value = `Ошибка API: ${response.status}`;
     }
 
   } catch (err) {
-    statusMessage.value = `ОШИБКА: ${err.message}`
-  } finally {
-    // Не снимаем экран загрузки, если была ошибка, чтобы прочитать её
-    if (statusMessage.value.includes('Успех') || !telegramService.isInTelegram()) {
-       isCheckingAccess.value = false
-    }
+    statusMessage.value = `ERROR: ${err.message}`;
   }
 })
 </script>
@@ -62,8 +57,8 @@ onMounted(async () => {
     <router-view v-if="!isCheckingAccess"></router-view>
     <div v-else class="checking-screen">
       <div class="loader"></div>
-      <p>{{ statusMessage }}</p>
-      <button @click="isCheckingAccess = false" style="margin-top: 20px; font-size: 10px; opacity: 0.5;">[Пропустить]</button>
+      <p style="font-weight: bold;">{{ statusMessage }}</p>
+      <div style="font-size: 10px; margin-top: 20px;">Если вы видите этот текст, значит кэш сброшен (v1.2.0)</div>
     </div>
   </div>
 </template>
@@ -75,23 +70,19 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   height: 100vh;
-  background: #000;
-  color: #3498db;
-  font-family: sans-serif;
+  background: #900; /* Темно-красный фон для отличия версии */
+  color: white;
   text-align: center;
   padding: 20px;
 }
 .loader {
-  border: 4px solid #111;
-  border-top: 4px solid #3498db;
+  border: 4px solid rgba(255,255,255,0.1);
+  border-top: 4px solid #fff;
   border-radius: 50%;
   width: 40px;
   height: 40px;
   animation: spin 1s linear infinite;
   margin-bottom: 20px;
 }
-@keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
+@keyframes spin { 100% { transform: rotate(360deg); } }
 </style>
