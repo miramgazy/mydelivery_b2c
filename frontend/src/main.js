@@ -14,6 +14,16 @@ window.onunhandledrejection = function (event) {
     console.error('UNHANDLED PROMISE REJECTION:', event.reason);
 };
 
+// Удаляем Service Worker'ы, если они есть
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function (registrations) {
+        for (let registration of registrations) {
+            console.log('Unregistering SW:', registration);
+            registration.unregister();
+        }
+    });
+}
+
 const app = createApp(App)
 
 // Pinia store

@@ -6,7 +6,7 @@ const API_URL = '/api'
 // Создаем экземпляр axios
 const api = axios.create({
     baseURL: API_URL,
-    timeout: 30000,
+    timeout: 10000, // 10 секунд жесткий таймаут
     headers: {
         'Content-Type': 'application/json',
     },
@@ -21,6 +21,11 @@ api.interceptors.request.use(
         if (token && !config.skipAuth) {
             config.headers.Authorization = `Bearer ${token}`
         }
+
+        // Анти-кэш и уникализация запроса
+        config.params = config.params || {};
+        config.params._t = Date.now();
+
         return config
     },
     (error) => {
