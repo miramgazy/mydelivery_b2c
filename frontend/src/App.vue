@@ -36,6 +36,10 @@ onMounted(async () => {
             }
         } else {
             console.warn('Access denied for user:', tgUser.id)
+            router.push({ 
+                name: 'access-denied', 
+                query: { id: tgUser.id } 
+            })
         }
       }
     } else {

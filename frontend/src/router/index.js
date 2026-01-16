@@ -45,6 +45,12 @@ const routes = [
         component: () => import('@/views/LoginView.vue'),
         meta: { requiresAuth: false }
     },
+    {
+        path: '/access-denied',
+        name: 'access-denied',
+        component: () => import('@/views/AccessDeniedView.vue'),
+        meta: { requiresAuth: false }
+    },
     // Admin routes with DesktopLayout
     {
         path: '/admin',
