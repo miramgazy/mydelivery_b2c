@@ -4,6 +4,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import telegramService from '@/services/telegram'
 import BottomNav from '@/components/common/BottomNav.vue'
+import ToastNotification from '@/components/common/ToastNotification.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -40,6 +41,7 @@ onMounted(async () => {
   <div class="app-container">
     <router-view></router-view>
     <BottomNav v-if="showBottomNav" />
+    <ToastNotification />
   </div>
 </template>
 
