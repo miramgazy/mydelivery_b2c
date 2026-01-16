@@ -1,27 +1,18 @@
 
 class TelegramService {
     constructor() {
-        if (typeof window !== 'undefined') {
-            this.webApp = window.Telegram?.WebApp || null;
-            // Попробуем проинициализировать, если он есть
-            if (this.webApp) {
-                this.webApp.ready();
-            }
-        } else {
-            this.webApp = null;
-        }
+        this.webApp = (typeof window !== 'undefined') ? (window.Telegram?.WebApp || null) : null;
     }
 
     /**
      * Инициализация SDK
      */
     init() {
-        if (this.isInTelegram()) {
+        if (this.webApp) {
             this.webApp.ready();
             this.webApp.expand();
-
-            // Настройка цветов
             this.updateHeaderColor();
+            console.log('Telegram WebApp initialized');
         }
     }
 
