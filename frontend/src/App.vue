@@ -21,23 +21,27 @@ const showBottomNav = computed(() => {
 
 onMounted(async () => {
   try {
+    // КРИТИЧЕСКОЕ: Проверяем user agent ПЕРЕД любой инициализацией Telegram
+    const userAgent = navigator.userAgent || '';
+    const isTelegramUA = userAgent.includes('Telegram') || userAgent.includes('WebApp');
+    
+    console.log('[App] === MODE DETECTION START ===');
+    console.log('[App] User Agent:', userAgent);
+    console.log('[App] Is Telegram UA:', isTelegramUA);
+    console.log('[App] Telegram WebApp exists:', !!window.Telegram?.WebApp);
+    
     // Инициализация Telegram (только если действительно в Telegram)
-    // Сначала проверяем, прежде чем инициализировать
     const isInTelegram = telegramService.isInTelegram()
+    
+    console.log('[App] isInTelegram() result:', isInTelegram);
+    console.log('[App] === MODE DETECTION END ===');
     
     if (isInTelegram) {
       telegramService.init()
+      console.log('[App] Telegram mode: INITIALIZED');
+    } else {
+      console.log('[App] Desktop mode: Telegram NOT initialized');
     }
-    
-    // Логирование для отладки
-    console.log('[App] Mode detection:', {
-      isInTelegram,
-      userAgent: navigator.userAgent,
-      webApp: !!window.Telegram?.WebApp,
-      initData: window.Telegram?.WebApp?.initData?.substring(0, 50) || 'none',
-      platform: window.Telegram?.WebApp?.platform,
-      version: window.Telegram?.WebApp?.version
-    })
     
     // Если запущено в Telegram
     if (isInTelegram) {
