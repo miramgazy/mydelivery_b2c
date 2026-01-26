@@ -205,7 +205,7 @@ services:
       context: ./nginx
       dockerfile: Dockerfile.nginx
     ports:
-      - "3005:80"
+      - "3090:80"
     volumes:
       - django_static:/app/staticfiles:ro
       - django_media:/app/media:ro
