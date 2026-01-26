@@ -23,12 +23,10 @@ WORKDIR /app
 
 # Принимаем аргументы для Vite (Coolify передаст их автоматически)
 ARG VITE_API_URL=/api
-ARG VITE_TELEGRAM_BOT_USERNAME
 ARG VITE_DEV_MODE=false
 
 # Устанавливаем как ENV для Vite (Vite требует ENV переменные, начинающиеся с VITE_)
 ENV VITE_API_URL=${VITE_API_URL}
-ENV VITE_TELEGRAM_BOT_USERNAME=${VITE_TELEGRAM_BOT_USERNAME}
 ENV VITE_DEV_MODE=${VITE_DEV_MODE}
 
 # Копируем только файлы зависимостей

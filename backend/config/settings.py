@@ -208,8 +208,9 @@ CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='http://localhost:
 CORS_ALLOW_CREDENTIALS = True
 
 # Telegram
-TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='')
-TELEGRAM_BOT_USERNAME = config('TELEGRAM_BOT_USERNAME', default='')
+# TELEGRAM_BOT_TOKEN и TELEGRAM_BOT_USERNAME больше не используются на уровне settings
+# Токены ботов теперь хранятся в модели Organization (bot_token, bot_username)
+# Это позволяет каждой организации иметь свой собственный бот
 TELEGRAM_CONTACT_SECRET = config('TELEGRAM_CONTACT_SECRET', default='')
 
 # iiko API
