@@ -28,7 +28,14 @@ services:
       - django_media:/app/media
     env_file: .env
     depends_on:
-      - tg-redis
+      tg-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/ || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
     restart: always
     networks:
       - default
@@ -40,7 +47,10 @@ services:
     command: celery -A config worker --loglevel=info
     env_file: .env
     depends_on:
-      - tg-redis
+      tg-redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
     restart: always
     networks:
       - default
@@ -52,7 +62,10 @@ services:
     command: celery -A config beat --loglevel=info
     env_file: .env
     depends_on:
-      - tg-redis
+      tg-redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
     restart: always
     networks:
       - default
@@ -61,6 +74,9 @@ services:
   frontend:
     build:
       context: ./frontend
+    depends_on:
+      backend:
+        condition: service_healthy
     restart: always
     networks:
       - default
@@ -75,8 +91,10 @@ services:
       - django_static:/app/staticfiles:ro
       - django_media:/app/media:ro
     depends_on:
-      - backend
-      - frontend
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
     restart: always
     networks:
       - default

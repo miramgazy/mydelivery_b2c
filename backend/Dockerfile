@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y \
     musl-dev \
     libpq-dev \
     netcat-openbsd \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Копируем requirements и устанавливаем Python зависимости
@@ -31,9 +32,10 @@ COPY . .
 # Создаем директории для статических и медиа файлов
 RUN mkdir -p /app/staticfiles /app/media
 
-# Копируем и делаем исполняемым entrypoint скрипт
+# Копируем и делаем исполняемым entrypoint скрипты
 COPY docker-entrypoint.sh /app/
-RUN chmod +x /app/docker-entrypoint.sh
+COPY docker-entrypoint-coolify.sh /app/
+RUN chmod +x /app/docker-entrypoint.sh /app/docker-entrypoint-coolify.sh
 
 # Открываем порт
 EXPOSE 8000
