@@ -20,28 +20,61 @@ class TelegramService {
      * Проверка запуска в Telegram
      */
     isInTelegram() {
-        // Если VITE_DEV_MODE=true, принудительно используем desktop режим (кроме реального Telegram)
-        const devMode = import.meta.env.VITE_DEV_MODE === 'true' || import.meta.env.VITE_DEV_MODE === true;
+        // Строгая проверка: должны быть выполнены ВСЕ условия
         
-        if (!this.webApp) return false;
-        
-        // initData должен быть непустой строкой
-        const hasInitData = this.webApp.initData && typeof this.webApp.initData === 'string' && this.webApp.initData.length > 0;
-        
-        // initDataUnsafe.user должен существовать (это реальный признак Telegram MiniApp)
-        const hasUser = !!this.webApp.initDataUnsafe?.user;
-        
-        // Дополнительная проверка: версия платформы (в браузере обычно 'web' или 'unknown')
-        const platform = this.webApp.platform;
-        const isRealTelegram = platform && platform !== 'web' && platform !== 'unknown';
-        
-        // В dev режиме, если не реальный Telegram - возвращаем false
-        if (devMode && !isRealTelegram) {
+        // 1. WebApp должен существовать
+        if (!this.webApp) {
+            console.log('[TelegramService] isInTelegram: false - no webApp');
             return false;
         }
         
-        // Возвращаем true только если есть initData и пользователь (или реальная платформа Telegram)
-        return hasInitData && hasUser;
+        // 2. Проверка user agent - если это не Telegram, сразу false
+        const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+        const isTelegramUserAgent = userAgent.includes('Telegram') || userAgent.includes('WebApp');
+        
+        // 3. initData должен быть непустой строкой с реальными данными
+        const initData = this.webApp.initData;
+        const hasInitData = initData && typeof initData === 'string' && initData.length > 0;
+        
+        // 4. initDataUnsafe.user должен существовать (это реальный признак Telegram MiniApp)
+        const user = this.webApp.initDataUnsafe?.user;
+        const hasUser = !!user && !!user.id;
+        
+        // 5. Проверка платформы (в браузере обычно 'web', 'unknown' или undefined)
+        const platform = this.webApp.platform;
+        const isRealTelegramPlatform = platform && platform !== 'web' && platform !== 'unknown' && platform !== undefined;
+        
+        // 6. Проверка версии (в реальном Telegram всегда есть версия)
+        const version = this.webApp.version;
+        const hasVersion = version && typeof version === 'string';
+        
+        // Логирование для отладки (только в development)
+        if (import.meta.env.DEV) {
+            console.log('[TelegramService] isInTelegram check:', {
+                hasWebApp: !!this.webApp,
+                isTelegramUserAgent,
+                hasInitData,
+                hasUser,
+                isRealTelegramPlatform,
+                hasVersion,
+                platform,
+                version,
+                initDataLength: initData?.length || 0,
+                userId: user?.id
+            });
+        }
+        
+        // Возвращаем true ТОЛЬКО если:
+        // - Есть initData с данными
+        // - Есть пользователь с ID
+        // - И (есть Telegram user agent ИЛИ реальная платформа Telegram)
+        const result = hasInitData && hasUser && (isTelegramUserAgent || isRealTelegramPlatform);
+        
+        if (import.meta.env.DEV) {
+            console.log('[TelegramService] isInTelegram result:', result);
+        }
+        
+        return result;
     }
 
     /**

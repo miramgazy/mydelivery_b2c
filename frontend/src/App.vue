@@ -21,11 +21,26 @@ const showBottomNav = computed(() => {
 
 onMounted(async () => {
   try {
-    // Инициализация Telegram
-    telegramService.init()
+    // Инициализация Telegram (только если действительно в Telegram)
+    // Сначала проверяем, прежде чем инициализировать
+    const isInTelegram = telegramService.isInTelegram()
+    
+    if (isInTelegram) {
+      telegramService.init()
+    }
+    
+    // Логирование для отладки
+    console.log('[App] Mode detection:', {
+      isInTelegram,
+      userAgent: navigator.userAgent,
+      webApp: !!window.Telegram?.WebApp,
+      initData: window.Telegram?.WebApp?.initData?.substring(0, 50) || 'none',
+      platform: window.Telegram?.WebApp?.platform,
+      version: window.Telegram?.WebApp?.version
+    })
     
     // Если запущено в Telegram
-    if (telegramService.isInTelegram()) {
+    if (isInTelegram) {
       const tgUser = telegramService.getUser()
       if (tgUser) {
         console.log('TG User:', tgUser.id)
