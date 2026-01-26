@@ -20,8 +20,64 @@ class TelegramService {
      * Проверка запуска в Telegram
      */
     isInTelegram() {
-        // Проверяем наличие WebApp И initData (чтобы отличить от расширений браузера)
-        return !!this.webApp && !!this.webApp.initData;
+        // Проверяем наличие WebApp
+        if (!this.webApp) {
+            console.log('[TelegramService] isInTelegram: false - no webApp');
+            return false;
+        }
+        
+        // Проверяем наличие initData (не пустая строка и содержит данные)
+        const initData = this.webApp.initData;
+        if (!initData || typeof initData !== 'string' || initData.trim().length === 0) {
+            console.log('[TelegramService] isInTelegram: false - no or empty initData', { 
+                hasInitData: !!initData, 
+                type: typeof initData,
+                length: initData?.length 
+            });
+            return false;
+        }
+        
+        // В реальном Telegram WebApp initData содержит параметры запроса (минимум несколько символов)
+        // Пустая строка или очень короткая строка - это не Telegram
+        if (initData.length < 10) {
+            console.log('[TelegramService] isInTelegram: false - initData too short', { length: initData.length });
+            return false;
+        }
+        
+        // Дополнительная проверка: в реальном Telegram WebApp всегда есть initDataUnsafe
+        // и обычно есть пользователь или platform определена
+        const hasUser = !!this.webApp.initDataUnsafe?.user;
+        const hasPlatform = !!this.webApp.platform;
+        
+        // Если нет ни пользователя, ни platform, но initData есть - это может быть мок
+        // В реальном Telegram WebApp platform всегда определена ('web', 'ios', 'android', 'tdesktop', 'macos', 'unix')
+        if (!hasPlatform && !hasUser) {
+            console.log('[TelegramService] isInTelegram: false - no platform and no user', {
+                platform: this.webApp.platform,
+                hasUser,
+                hasPlatform
+            });
+            return false;
+        }
+        
+        // Финальная проверка: если есть platform, она должна быть одной из известных платформ Telegram
+        if (hasPlatform) {
+            const validPlatforms = ['web', 'ios', 'android', 'tdesktop', 'macos', 'unix', 'weba', 'webk'];
+            if (!validPlatforms.includes(this.webApp.platform)) {
+                console.log('[TelegramService] isInTelegram: false - invalid platform', { 
+                    platform: this.webApp.platform,
+                    validPlatforms 
+                });
+                return false;
+            }
+        }
+        
+        console.log('[TelegramService] isInTelegram: true', {
+            platform: this.webApp.platform,
+            hasUser,
+            initDataLength: initData.length
+        });
+        return true;
     }
 
     /**

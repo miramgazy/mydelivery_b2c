@@ -24,8 +24,19 @@ onMounted(async () => {
     // Инициализация Telegram
     telegramService.init()
     
+    // Дополнительная проверка окружения для отладки
+    const isInTelegram = telegramService.isInTelegram()
+    console.log('[App] Environment check:', {
+      isInTelegram,
+      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'N/A',
+      hasWebApp: !!telegramService.webApp,
+      initData: telegramService.webApp?.initData ? 'present' : 'missing',
+      platform: telegramService.webApp?.platform,
+      hasUser: !!telegramService.webApp?.initDataUnsafe?.user
+    })
+    
     // Если запущено в Telegram
-    if (telegramService.isInTelegram()) {
+    if (isInTelegram) {
       const tgUser = telegramService.getUser()
       if (tgUser) {
         console.log('TG User:', tgUser.id)
