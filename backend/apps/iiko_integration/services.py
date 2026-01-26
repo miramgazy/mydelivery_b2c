@@ -25,21 +25,55 @@ class MenuSyncService:
                 defaults={'menu_name': f"Меню {organization.org_name}"}
             )
 
-            # 2. Process Groups (Categories)
+            # 2. Process Groups (Categories) - но только те, которые не являются группами модификаторов
             groups = menu_data.get('groups', [])
-            self._sync_categories(menu, groups)
-
-            # 3. Process Products & Modifiers
             products = menu_data.get('products', [])
             # Map for quick lookup of modifier names
             products_map = {p['id']: p for p in products}
             
+            # Передаем products для проверки, чтобы не создавать категории из групп модификаторов
+            self._sync_categories(menu, groups, products)
+            
+            # 3. Process Products & Modifiers
             self._sync_products_and_modifiers(menu, organization, products, products_map)
 
-    def _sync_categories(self, menu: Menu, groups: List[Dict]):
-        # 1. Create/Update all (preserving structure logic from before)
+    def _sync_categories(self, menu: Menu, groups: List[Dict], products: List[Dict] = None):
+        """
+        Синхронизация категорий из групп iiko.
+        Исключает группы модификаторов - создает категории только для групп, в которых есть продукты.
+        
+        Args:
+            menu: Меню для привязки категорий
+            groups: Список групп из iiko API
+            products: Список продуктов из iiko API (для проверки, используется ли группа)
+        """
+        if products is None:
+            products = []
+        
+        # Создаем множество ID групп, которые используются продуктами
+        # Группа используется, если у продукта groupId или parentGroup равен ID группы
+        used_group_ids = set()
+        for product in products:
+            if product.get('isDeleted'):
+                continue
+            group_id = product.get('groupId')
+            parent_group_id = product.get('parentGroup')
+            if group_id:
+                used_group_ids.add(str(group_id))
+            if parent_group_id:
+                used_group_ids.add(str(parent_group_id))
+        
+        # 1. Create/Update only groups that are used by products (not modifier groups)
         for group in groups:
             if group.get('isDeleted'):
+                continue
+            
+            group_id = str(group['id'])
+            
+            # Пропускаем группы модификаторов - они не используются как категории продуктов
+            # Группа модификаторов определяется как группа, в которой нет продуктов
+            if group_id not in used_group_ids:
+                logger.debug(f"Skipping modifier group (no products): {group.get('name')} (ID: {group_id})")
                 continue
 
             Category_id = group['id']
@@ -53,9 +87,14 @@ class MenuSyncService:
                 }
             )
 
-        # 2. Link parents
+        # 2. Link parents (только для созданных категорий)
         for group in groups:
             if group.get('isDeleted'):
+                continue
+            
+            group_id = str(group['id'])
+            # Пропускаем, если группа не была создана как категория
+            if group_id not in used_group_ids:
                 continue
             
             parent_id = group.get('parentGroup')
@@ -63,8 +102,11 @@ class MenuSyncService:
                 try:
                     category = ProductCategory.objects.get(subgroup_id=group['id'])
                     parent = ProductCategory.objects.get(subgroup_id=parent_id)
-                    category.parent = parent
-                    category.save()
+                    # Проверяем, что родитель тоже является категорией (не группой модификаторов)
+                    parent_id_str = str(parent_id)
+                    if parent_id_str in used_group_ids:
+                        category.parent = parent
+                        category.save()
                 except ProductCategory.DoesNotExist:
                     pass
 
@@ -241,8 +283,8 @@ class MenuSyncService:
                 # Filter groups to sync - EXCLUDE root group, only sync dependent groups as categories
                 groups_to_sync = [g for g in all_groups if g['id'] in relevant_category_ids]
                 
-                # Sync these categories to THIS Menu
-                self._sync_categories(menu, groups_to_sync)
+                # Sync these categories to THIS Menu (передаем products для фильтрации групп модификаторов)
+                self._sync_categories(menu, groups_to_sync, all_products)
                 
                 # Sync Products: their 'groupId' (or parent) must be in relevant_category_ids OR root_id
                 # Products in root group should still be synced, but without category assignment
