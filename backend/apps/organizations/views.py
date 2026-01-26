@@ -511,6 +511,7 @@ class TerminalViewSet(viewsets.ModelViewSet):
             zone.setdefault('color', '#FF0000')
             zone.setdefault('delivery_type', 'free')
             zone.setdefault('delivery_cost', 0)
+            zone.setdefault('min_order_amount', 0)
         
         try:
             terminal.delivery_zones_conditions = delivery_zones
