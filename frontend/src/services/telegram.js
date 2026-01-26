@@ -20,8 +20,28 @@ class TelegramService {
      * Проверка запуска в Telegram
      */
     isInTelegram() {
-        // Проверяем наличие WebApp И initData (чтобы отличить от расширений браузера)
-        return !!this.webApp && !!this.webApp.initData;
+        // Если VITE_DEV_MODE=true, принудительно используем desktop режим (кроме реального Telegram)
+        const devMode = import.meta.env.VITE_DEV_MODE === 'true' || import.meta.env.VITE_DEV_MODE === true;
+        
+        if (!this.webApp) return false;
+        
+        // initData должен быть непустой строкой
+        const hasInitData = this.webApp.initData && typeof this.webApp.initData === 'string' && this.webApp.initData.length > 0;
+        
+        // initDataUnsafe.user должен существовать (это реальный признак Telegram MiniApp)
+        const hasUser = !!this.webApp.initDataUnsafe?.user;
+        
+        // Дополнительная проверка: версия платформы (в браузере обычно 'web' или 'unknown')
+        const platform = this.webApp.platform;
+        const isRealTelegram = platform && platform !== 'web' && platform !== 'unknown';
+        
+        // В dev режиме, если не реальный Telegram - возвращаем false
+        if (devMode && !isRealTelegram) {
+            return false;
+        }
+        
+        // Возвращаем true только если есть initData и пользователь (или реальная платформа Telegram)
+        return hasInitData && hasUser;
     }
 
     /**
