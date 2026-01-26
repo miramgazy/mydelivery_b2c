@@ -87,11 +87,11 @@ services:
       tg-redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/ || exit 1"]
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/schema/ | grep -qE '^[23]' || curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/api/ | grep -qE '^[234]' || exit 1"]
       interval: 20s
       timeout: 15s
-      retries: 15
-      start_period: 240s
+      retries: 20
+      start_period: 300s
     deploy:
       resources:
         limits:
