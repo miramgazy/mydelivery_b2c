@@ -322,6 +322,14 @@ class CityAdmin(BaseAdmin):
     list_display = ('name', 'organization', 'city_id', 'iiko_city_id', 'is_active')
     list_filter = ('organization', 'is_active')
     search_fields = ('name', 'city_id')
+    readonly_fields = ('city_id', 'created_at', 'updated_at')
+    
+    def get_fields(self, request, obj=None):
+        fields = ['name', 'organization', 'iiko_city_id', 'is_active']
+        if obj:  # При редактировании показываем city_id как read-only
+            fields.insert(0, 'city_id')
+        fields.extend(['created_at', 'updated_at'])
+        return fields
 
 @admin.register(PaymentType)
 class PaymentTypeAdmin(BaseAdmin):

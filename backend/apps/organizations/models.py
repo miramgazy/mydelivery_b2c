@@ -33,6 +33,15 @@ class Terminal(models.Model):
         help_text='Частота обновления стоп-листа в минутах'
     )
     
+    # Зоны доставки (JSONB поле для хранения массива объектов зон)
+    delivery_zones_conditions = models.JSONField(
+        'Условия зон доставки',
+        default=list,
+        blank=True,
+        null=True,
+        help_text='Массив объектов зон доставки с координатами, названием, приоритетом, цветом и типом доставки'
+    )
+    
     is_active = models.BooleanField('Активен', default=True)
     
     created_at = models.DateTimeField('Создан', auto_now_add=True)
@@ -77,7 +86,7 @@ class Organization(models.Model):
 
 class City(models.Model):
     """Города справочника для доставки"""
-    city_id = models.UUIDField(primary_key=True)
+    city_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField('Название', max_length=255)
     iiko_city_id = models.UUIDField('ID в iiko', blank=True, null=True)
     
