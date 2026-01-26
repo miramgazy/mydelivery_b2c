@@ -26,6 +26,7 @@ ENV/
 .env.local
 .env.*.local
 .env.backup
+.env.b2c
 *.bak
 *.backup
 
@@ -85,3 +86,10 @@ certbot/
 .nuxt/
 dist/
 examples/
+
+# Documentation / Troubleshooting files (temporary)
+FIX_*.md
+TROUBLESHOOTING_*.md
+*_AUTH_*.md
+B2C_DOCKER_SETUP.md
+QUICKSTART_B2C.md

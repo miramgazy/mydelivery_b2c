@@ -10,8 +10,12 @@ router.register(r'menus', MenuViewSet)
 router.register(r'categories', ProductCategoryViewSet)
 router.register(r'products', ProductViewSet)
 router.register(r'modifiers', ModifierViewSet)
-router.register(r'stop-list', StopListViewSet)
+
+# Stop-list регистрируем отдельным роутером, чтобы избежать конфликта с /api/products/{pk}/
+stop_list_router = DefaultRouter()
+stop_list_router.register(r'stop-list', StopListViewSet, basename='stoplist')
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('', include(stop_list_router.urls)),
 ]

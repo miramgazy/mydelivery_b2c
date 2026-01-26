@@ -1,0 +1,153 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database (наружный порт 5436)
+  db:
+    image: postgres:15-alpine
+    container_name: mydelivery_b2c_db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-mydelivery_b2c}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - postgres_b2c_data:/var/lib/postgresql/data
+    ports:
+      - "5436:5432"
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}" ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - mydelivery_b2c_network
+    restart: unless-stopped
+
+  # Redis для Celery (внутри контейнера, без наружного порта)
+  redis:
+    image: redis:7-alpine
+    container_name: mydelivery_b2c_redis
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - mydelivery_b2c_network
+    restart: unless-stopped
+
+  # Django Backend (наружный порт 8090)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mydelivery_b2c_backend
+    entrypoint: ["/app/docker-entrypoint.sh"]
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./backend:/app
+      - static_b2c_volume:/app/staticfiles
+      - media_b2c_volume:/app/media
+    ports:
+      - "8090:8000"
+    env_file:
+      - .env.b2c
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-mydelivery_b2c}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - mydelivery_b2c_network
+    restart: unless-stopped
+
+  # Celery Worker (внутри контейнера, без наружного порта)
+  celery:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mydelivery_b2c_celery
+    command: celery -A config.celery worker -l info
+    volumes:
+      - ./backend:/app
+    env_file:
+      - .env.b2c
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-mydelivery_b2c}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+      - backend
+    networks:
+      - mydelivery_b2c_network
+    restart: unless-stopped
+
+  # Celery Beat (периодические задачи, внутри контейнера, без наружного порта)
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mydelivery_b2c_celery_beat
+    command: celery -A config.celery beat -l info
+    volumes:
+      - ./backend:/app
+    env_file:
+      - .env.b2c
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=${DB_NAME:-mydelivery_b2c}
+      - DB_USER=${DB_USER:-postgres}
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+      - backend
+    networks:
+      - mydelivery_b2c_network
+    restart: unless-stopped
+
+  # Vue Frontend (наружный порт 3030)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: mydelivery_b2c_frontend
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    ports:
+      - "3030:5173"
+    environment:
+      - VITE_API_URL=/api
+      - VITE_API_TARGET=http://backend:8000
+    depends_on:
+      - backend
+    networks:
+      - mydelivery_b2c_network
+    restart: unless-stopped
+
+volumes:
+  postgres_b2c_data:
+  static_b2c_volume:
+  media_b2c_volume:
+
+networks:
+  mydelivery_b2c_network:
+    driver: bridge

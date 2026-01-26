@@ -26,13 +26,13 @@
         <div v-else class="space-y-4">
             <div 
                 v-for="order in orders" 
-                :key="order.order_id"
-                @click="$router.push(`/orders/${order.order_id}`)"
+                :key="getOrderId(order)"
+                @click="$router.push(`/orders/${getOrderId(order)}`)"
                 class="bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-shadow p-4 cursor-pointer"
             >
                 <div class="flex justify-between items-start mb-3">
                     <div>
-                         <p class="font-bold text-lg text-gray-900 dark:text-white">Заказ #{{ order.order_number || order.order_id.substring(0, 8).toUpperCase() }}</p>
+                         <p class="font-bold text-lg text-gray-900 dark:text-white">Заказ #{{ order.order_number || String(getOrderId(order)).substring(0, 8).toUpperCase() }}</p>
                          <p class="text-xs text-gray-500">{{ formatDate(order.created_at) }}</p>
                     </div>
                     <span 
@@ -60,7 +60,7 @@
 <script setup>
 import { computed, onMounted } from 'vue'
 import { useOrdersStore } from '@/stores/orders'
-import { format } from 'date-fns'
+import { format, parseISO, isValid } from 'date-fns'
 import { ru } from 'date-fns/locale'
 
 const ordersStore = useOrdersStore()
@@ -69,8 +69,20 @@ const orders = computed(() => ordersStore.orders)
 const loading = computed(() => ordersStore.loading)
 const error = computed(() => ordersStore.error)
 
+const getOrderId = (order) => order?.order_id || order?.id
+
+const normalizeIsoDate = (dateString) => {
+    // Safari/iOS can choke on microseconds; keep only milliseconds
+    return String(dateString).replace(/\.(\d{3})\d+/, '.$1')
+}
+
 const formatDate = (dateString) => {
-    return format(new Date(dateString), 'd MMMM yyyy, HH:mm', { locale: ru })
+    if (!dateString) return ''
+    const normalized = normalizeIsoDate(dateString)
+    const parsed = parseISO(normalized)
+    const d = isValid(parsed) ? parsed : new Date(normalized)
+    if (!isValid(d)) return ''
+    return format(d, 'd MMMM yyyy, HH:mm', { locale: ru })
 }
 
 const formatPrice = (price) => {

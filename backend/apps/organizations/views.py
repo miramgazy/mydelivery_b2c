@@ -1,8 +1,11 @@
+import logging
 from rest_framework import viewsets, permissions, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
+
+logger = logging.getLogger(__name__)
 
 from .models import Organization, Terminal, Street, PaymentType
 from .serializers import (
@@ -11,7 +14,7 @@ from .serializers import (
     ExternalMenuSerializer
 )
 from apps.iiko_integration.client import IikoClient, IikoAPIException
-from apps.iiko_integration.services import MenuSyncService
+from apps.iiko_integration.services import MenuSyncService, StopListSyncService
 
 
 class OrganizationViewSet(viewsets.ModelViewSet):
@@ -22,6 +25,37 @@ class OrganizationViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = ['is_active', 'city']
     search_fields = ['org_name']
+
+    @action(detail=False, methods=['get'], url_path='by-bot')
+    def get_organization_by_bot(self, request):
+        """Получить организацию по bot_token или bot_username"""
+        bot_token = request.query_params.get('bot_token')
+        bot_username = request.query_params.get('bot_username')
+        
+        if not bot_token and not bot_username:
+            return Response(
+                {'error': 'Необходимо указать bot_token или bot_username'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            if bot_token:
+                organization = Organization.objects.get(bot_token=bot_token, is_active=True)
+            else:
+                organization = Organization.objects.get(bot_username=bot_username, is_active=True)
+            
+            serializer = self.get_serializer(organization)
+            return Response(serializer.data)
+        except Organization.DoesNotExist:
+            return Response(
+                {'error': 'Организация не найдена'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        except Organization.MultipleObjectsReturned:
+            return Response(
+                {'error': 'Найдено несколько организаций с указанными параметрами'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
     @action(detail=False, methods=['get'], url_path='me')
     def get_current_organization(self, request):
@@ -384,6 +418,51 @@ class TerminalViewSet(viewsets.ModelViewSet):
     queryset = Terminal.objects.all()
     serializer_class = TerminalSerializer
     permission_classes = [permissions.IsAuthenticated]
+    
+    @action(detail=True, methods=['post'], url_path='sync-stop-list')
+    def sync_stop_list(self, request, pk=None):
+        """Принудительно синхронизировать стоп-лист для терминала"""
+        terminal = self.get_object()
+        
+        if not terminal.organization:
+            return Response(
+                {'error': 'Терминал должен быть привязан к организации'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        organization = terminal.organization
+        
+        if not organization.api_key:
+            return Response(
+                {'error': 'У организации должен быть настроен API ключ iiko'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            service = StopListSyncService(organization.api_key)
+            result = service.sync_terminal_stop_list(terminal)
+            
+            return Response({
+                'message': 'Стоп-лист успешно синхронизирован',
+                'success': True,
+                'data': result
+            })
+        except ValueError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except IikoAPIException as e:
+            return Response(
+                {'error': f'Ошибка при синхронизации стоп-листа из iiko: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error(f"Неожиданная ошибка при синхронизации стоп-листа: {e}", exc_info=True)
+            return Response(
+                {'error': f'Неожиданная ошибка: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class StreetViewSet(viewsets.ModelViewSet):

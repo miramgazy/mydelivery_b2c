@@ -44,9 +44,28 @@ export const useProductsStore = defineStore('products', () => {
         }
     }
 
-    async function fetchProducts() {
+    async function fetchProducts(terminalId = null) {
         try {
-            const response = await api.get('/products/')
+            const params = {}
+            
+            // Если terminal_id не передан, пытаемся определить из auth store
+            if (!terminalId) {
+                const { useAuthStore } = await import('@/stores/auth')
+                const authStore = useAuthStore()
+                const user = authStore.user
+                
+                if (user?.terminals && user.terminals.length > 0) {
+                    // Используем первый терминал, если их несколько
+                    // При оформлении заказа будет выбран конкретный терминал
+                    terminalId = user.terminals[0].terminal_id || user.terminals[0].id
+                }
+            }
+            
+            if (terminalId) {
+                params.terminal_id = terminalId
+            }
+            
+            const response = await api.get('/products/', { params })
             products.value = response.data.results || response.data
 
             // Обогащаем данными о количестве в категории
@@ -66,11 +85,11 @@ export const useProductsStore = defineStore('products', () => {
         })
     }
 
-    async function refresh() {
+    async function refresh(terminalId = null) {
         loading.value = true
         error.value = null
         try {
-            await Promise.all([fetchCategories(), fetchProducts()])
+            await Promise.all([fetchCategories(), fetchProducts(terminalId)])
         } catch (err) {
             error.value = 'Не удалось загрузить меню'
         } finally {

@@ -93,12 +93,20 @@
                         <span class="text-sm">{{ addr.full_address }}</span>
                     </div>
                 </div>
-                <!-- Option to enter manually if needed, but for now lets keep it simple -->
+                
+                <button
+                  @click="$router.push({ path: '/profile/addresses', query: { return: '/checkout' } })"
+                  class="w-full py-3 rounded-xl font-semibold border-2 transition-all"
+                  :class="(authStore.user?.addresses?.length || 0) >= 3 ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-white dark:bg-gray-800 text-primary-600 border-primary-200 hover:bg-primary-50'"
+                  :disabled="(authStore.user?.addresses?.length || 0) >= 3"
+                >
+                  Добавить другой адрес
+                </button>
              </div>
 
              <div v-else class="p-4 bg-orange-50 text-orange-700 rounded-xl text-sm">
                  У вас нет сохраненных адресов. Пожалуйста, добавьте адрес в профиле.
-                 <button @click="$router.push('/profile')" class="block mt-2 font-bold underline">Перейти в профиль</button>
+                 <button @click="$router.push('/profile/addresses')" class="block mt-2 font-bold underline">Добавить адрес</button>
              </div>
 
              <textarea 
@@ -219,6 +227,11 @@ onMounted(async () => {
         if (authStore.user.terminals?.length === 1) {
             form.terminal_id = authStore.user.terminals[0].terminal_id
         }
+        
+        // Если терминал не выбран, но есть терминалы - используем первый для загрузки продуктов
+        if (!form.terminal_id && authStore.user.terminals?.length > 0) {
+            form.terminal_id = authStore.user.terminals[0].terminal_id
+        }
 
         // Set default address if available
         const defaultAddr = authStore.user.addresses?.find(a => a.is_default) || authStore.user.addresses?.[0]
@@ -255,9 +268,12 @@ const submitOrder = async () => {
 
     loading.value = true
     try {
+        // Normalize phone (remove spaces, parentheses, dashes etc.)
+        const normalizedPhone = String(form.phone).replace(/[^\d+]/g, '')
+
         const orderData = {
             items: cartStore.getOrderData(),
-            phone: form.phone,
+            phone: normalizedPhone,
             comment: form.comment,
             payment_type_id: form.payment_type_id,
             terminal_id: form.terminal_id,

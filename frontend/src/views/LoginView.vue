@@ -117,15 +117,29 @@ async function handleLogin() {
   try {
     const result = await authStore.loginWithPassword(form.username, form.password)
     if (result.success) {
-      if (authStore.isSuperAdmin || authStore.isOrgAdmin) {
+      // Ждем обновления данных пользователя
+      await new Promise(resolve => setTimeout(resolve, 200))
+      
+      // Проверяем роль пользователя
+      const user = authStore.user
+      console.log('User after login:', user)
+      console.log('User role_name:', user?.role_name)
+      
+      const isAdmin = user?.role_name === 'superadmin' || user?.role_name === 'org_admin'
+      console.log('Is admin:', isAdmin)
+      
+      if (isAdmin) {
+        console.log('Redirecting to /admin')
         router.push('/admin')
       } else {
+        console.log('Redirecting to /')
         router.push('/')
       }
     } else {
       error.value = result.error || 'Неверный логин или пароль'
     }
   } catch (err) {
+    console.error('Login error:', err)
     error.value = 'Ошибка подключения к серверу'
   } finally {
     loading.value = false

@@ -55,6 +55,14 @@
             <span v-if="sidebarOpen">Терминалы</span>
           </router-link>
           <router-link
+            to="/admin/organization/stop-list"
+            class="nav-item"
+            active-class="nav-item-active"
+          >
+            <Icon icon="mdi:food-off" class="w-5 h-5" />
+            <span v-if="sidebarOpen">Стоп-лист</span>
+          </router-link>
+          <router-link
             to="/admin/organization/payment-types"
             class="nav-item"
             active-class="nav-item-active"
@@ -200,6 +208,7 @@ const pageTitle = computed(() => {
   const titles = {
     '/admin/organization/settings': 'Настройки организации',
     '/admin/organization/terminals': 'Терминалы',
+    '/admin/organization/stop-list': 'Стоп-лист',
     '/admin/organization/payment-types': 'Типы оплат',
     '/admin/organization/menu': 'Управление меню',
     '/admin/orders': 'Заказы',

@@ -34,6 +34,12 @@ const routes = [
         meta: { requiresAuth: true }
     },
     {
+        path: '/profile/addresses',
+        name: 'profile-addresses',
+        component: () => import('@/views/DeliveryAddressesView.vue'),
+        meta: { requiresAuth: true }
+    },
+    {
         path: '/checkout',
         name: 'checkout',
         component: () => import('@/views/CheckoutView.vue'),
@@ -50,6 +56,31 @@ const routes = [
         name: 'access-denied',
         component: () => import('@/views/AccessDeniedView.vue'),
         meta: { requiresAuth: false }
+    },
+    // Onboarding routes
+    {
+        path: '/onboarding/welcome',
+        name: 'onboarding-welcome',
+        component: () => import('@/views/onboarding/WelcomeView.vue'),
+        meta: { requiresAuth: true, isOnboarding: true }
+    },
+    {
+        path: '/onboarding/phone',
+        name: 'onboarding-phone',
+        component: () => import('@/views/onboarding/PhoneInputView.vue'),
+        meta: { requiresAuth: true, isOnboarding: true }
+    },
+    {
+        path: '/onboarding/address',
+        name: 'onboarding-address',
+        component: () => import('@/views/onboarding/AddressInputView.vue'),
+        meta: { requiresAuth: true, isOnboarding: true }
+    },
+    {
+        path: '/onboarding/terminal',
+        name: 'onboarding-terminal',
+        component: () => import('@/views/onboarding/TerminalSelectionView.vue'),
+        meta: { requiresAuth: true, isOnboarding: true }
     },
     // Admin routes with DesktopLayout
     {
@@ -81,6 +112,11 @@ const routes = [
                 path: 'organization/menu',
                 name: 'admin-organization-menu',
                 component: () => import('@/views/admin/MenuManagement.vue')
+            },
+            {
+                path: 'organization/stop-list',
+                name: 'admin-organization-stop-list',
+                component: () => import('@/views/admin/StopListView.vue')
             },
             // Orders routes
             {
@@ -136,7 +172,9 @@ router.beforeEach((to, from, next) => {
 
     // Если авторизован и идет на логин - редирект на главную или админку
     if (to.name === 'login' && authStore.isAuthenticated) {
-        if (authStore.isSuperAdmin || authStore.isOrgAdmin) {
+        const user = authStore.user
+        const isAdmin = user?.role_name === 'superadmin' || user?.role_name === 'org_admin'
+        if (isAdmin) {
             next('/admin')
         } else {
             next('/')
@@ -145,10 +183,44 @@ router.beforeEach((to, from, next) => {
     }
 
     // Если требуются права админа
-    if (to.meta.requiresAdmin && !authStore.isSuperAdmin && !authStore.isOrgAdmin) {
-        // Перенаправляем на главную
-        next('/')
-        return
+    if (to.meta.requiresAdmin) {
+        const user = authStore.user
+        const isAdmin = user?.role_name === 'superadmin' || user?.role_name === 'org_admin'
+        if (!isAdmin) {
+            // Перенаправляем на главную
+            next('/')
+            return
+        }
+    }
+    
+    // Если админ пытается попасть на главную (не в Telegram) - редирект в админку
+    if (to.name === 'home' && !telegramService.isInTelegram() && authStore.isAuthenticated) {
+        const user = authStore.user
+        const isAdmin = user?.role_name === 'superadmin' || user?.role_name === 'org_admin'
+        if (isAdmin) {
+            next('/admin')
+            return
+        }
+    }
+
+    // Onboarding: только для Telegram MiniApp - если пользователь авторизован, но нет телефона/адреса/терминала - редирект на onboarding
+    if (telegramService.isInTelegram() && authStore.isAuthenticated && !to.meta.isOnboarding) {
+        const user = authStore.user
+        // Если нет телефона - редирект на welcome (первый экран onboarding)
+        if (!user?.phone && to.name !== 'onboarding-welcome' && to.name !== 'onboarding-phone' && to.name !== 'onboarding-address' && to.name !== 'onboarding-terminal') {
+            next('/onboarding/welcome')
+            return
+        }
+        // Если нет адреса - редирект на ввод адреса (но только если есть телефон)
+        if (user?.phone && (!user?.addresses || user.addresses.length === 0) && to.name !== 'onboarding-address' && to.name !== 'onboarding-phone' && to.name !== 'onboarding-welcome' && to.name !== 'onboarding-terminal') {
+            next('/onboarding/address')
+            return
+        }
+        // Если нет терминалов - редирект на выбор терминала (но только если есть телефон и адрес)
+        if (user?.phone && user?.addresses && user.addresses.length > 0 && (!user?.terminals || user.terminals.length === 0) && to.name !== 'onboarding-terminal' && to.name !== 'onboarding-phone' && to.name !== 'onboarding-address' && to.name !== 'onboarding-welcome') {
+            next('/onboarding/terminal')
+            return
+        }
     }
 
     next()
@@ -157,8 +229,13 @@ router.beforeEach((to, from, next) => {
 
 router.onError((error, to) => {
     if (error.message.includes('Failed to fetch dynamically imported module') || error.message.includes('Importing a module script failed')) {
-        if (!to?.query?.reload) {
-            window.location = to.fullPath
+        // Важно: при обновлениях/кэше Telegram WebView может пытаться загрузить несуществующий chunk.
+        // Делаем только ОДНУ попытку hard-reload (чтобы не уйти в бесконечный цикл).
+        const fullPath = to?.fullPath || window.location.pathname + window.location.search
+        const hasReloadFlag = (to?.query && to.query.reload) || new URLSearchParams(window.location.search).has('reload')
+        if (!hasReloadFlag) {
+            const sep = fullPath.includes('?') ? '&' : '?'
+            window.location.replace(`${fullPath}${sep}reload=1`)
         }
     }
 })

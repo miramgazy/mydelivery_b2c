@@ -70,7 +70,13 @@
                 ID в iiko
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Интервал обновления (мин)
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Статус
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Действия
               </th>
             </tr>
           </thead>
@@ -94,6 +100,17 @@
                 </span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
+                <input
+                  v-model.number="terminal.stop_list_interval_min"
+                  @blur="updateTerminalInterval(terminal)"
+                  type="number"
+                  min="1"
+                  class="w-20 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded 
+                         bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+                         focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
                 <span
                   :class="[
                     'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
@@ -104,6 +121,21 @@
                 >
                   {{ terminal.is_active ? 'Активен' : 'Неактивен' }}
                 </span>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <button
+                  @click="syncStopList(terminal)"
+                  :disabled="syncingStopList === terminal.id"
+                  class="flex items-center gap-2 px-3 py-1.5 text-sm bg-green-600 hover:bg-green-700
+                         text-white font-medium rounded-lg transition-colors disabled:opacity-50"
+                >
+                  <Icon
+                    :icon="syncingStopList === terminal.id ? 'mdi:loading' : 'mdi:refresh'"
+                    :class="{ 'animate-spin': syncingStopList === terminal.id }"
+                    class="w-4 h-4"
+                  />
+                  Обновить стоп-лист
+                </button>
               </td>
             </tr>
           </tbody>
@@ -117,11 +149,13 @@
 import { ref, onMounted, computed } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useOrganizationStore } from '@/stores/organization'
+import organizationService from '@/services/organization.service'
 
 const organizationStore = useOrganizationStore()
 
 const successMessage = ref('')
 const error = ref(null)
+const syncingStopList = ref(null)
 
 const loading = computed(() => organizationStore.loading)
 const terminals = computed(() => organizationStore.terminals || [])
@@ -152,6 +186,43 @@ const handleLoadFromIiko = async () => {
     }, 3000)
   } catch (err) {
     error.value = organizationStore.error || 'Не удалось загрузить терминалы из IIKO'
+  }
+}
+
+const updateTerminalInterval = async (terminal) => {
+  if (!terminal.stop_list_interval_min || terminal.stop_list_interval_min < 1) {
+    error.value = 'Интервал должен быть не менее 1 минуты'
+    return
+  }
+
+  try {
+    await organizationService.updateTerminal(terminal.id, {
+      stop_list_interval_min: terminal.stop_list_interval_min
+    })
+    successMessage.value = 'Интервал обновления сохранен'
+    setTimeout(() => {
+      successMessage.value = ''
+    }, 2000)
+  } catch (err) {
+    error.value = err.response?.data?.error || 'Не удалось обновить интервал'
+  }
+}
+
+const syncStopList = async (terminal) => {
+  syncingStopList.value = terminal.id
+  error.value = null
+  successMessage.value = ''
+
+  try {
+    const result = await organizationService.syncTerminalStopList(terminal.id)
+    successMessage.value = result.message || `Стоп-лист обновлен: ${result.data?.updated_count || 0} позиций`
+    setTimeout(() => {
+      successMessage.value = ''
+    }, 3000)
+  } catch (err) {
+    error.value = err.response?.data?.error || 'Не удалось синхронизировать стоп-лист'
+  } finally {
+    syncingStopList.value = null
   }
 }
 </script>

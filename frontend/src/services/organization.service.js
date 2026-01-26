@@ -65,6 +65,26 @@ export const loadMenuFromIiko = async (menuId) => {
     return response.data
 }
 
+// Get all active organizations
+export const getAllOrganizations = async () => {
+    const response = await api.get('/organizations/', {
+        params: { is_active: true }
+    })
+    return response.data.results || response.data
+}
+
+// Update terminal
+export const updateTerminal = async (terminalId, data) => {
+    const response = await api.patch(`/terminals/${terminalId}/`, data)
+    return response.data
+}
+
+// Sync stop list for terminal
+export const syncTerminalStopList = async (terminalId) => {
+    const response = await api.post(`/terminals/${terminalId}/sync-stop-list/`)
+    return response.data
+}
+
 export default {
     getOrganization,
     updateOrganization,
@@ -75,5 +95,8 @@ export default {
     getExternalMenus,
     loadMenuFromIiko,
     getMenuGroups,
-    loadMenuGroups
+    loadMenuGroups,
+    getAllOrganizations,
+    updateTerminal,
+    syncTerminalStopList
 }

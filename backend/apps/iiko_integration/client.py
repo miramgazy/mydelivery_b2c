@@ -37,10 +37,6 @@ class IikoClient:
 
     def _post(self, url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Generic POST helper with re-auth logic."""
-        print(f"=== IIKO API REQUEST ===")
-        print(f"URL: {url}")
-        print(f"PAYLOAD: {payload}")
-        logger.info(f"IIKO API REQUEST: {url} | Body: {payload}")
         try:
             response = requests.post(url, json=payload, headers=self.get_headers())
             
@@ -49,9 +45,6 @@ class IikoClient:
             
             response.raise_for_status()
             data = response.json()
-            print(f"=== IIKO API RESPONSE ===")
-            print(f"DATA: {data}")
-            logger.info(f"IIKO API RESPONSE: {data}")
             return data
         except requests.RequestException as e:
             if e.response and e.response.status_code == 401:
@@ -126,6 +119,14 @@ class IikoClient:
     def get_payment_types(self, organization_ids: List[str]) -> Dict[str, Any]:
         """Fetch payment types for the specified organizations."""
         url = f"{self.BASE_URL}/payment_types"
+        payload = {
+            "organizationIds": organization_ids
+        }
+        return self._post(url, payload)
+
+    def get_stop_lists(self, organization_ids: List[str]) -> Dict[str, Any]:
+        """Fetch stop lists for the specified organizations."""
+        url = f"{self.BASE_URL}/stop_lists"
         payload = {
             "organizationIds": organization_ids
         }

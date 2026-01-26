@@ -24,7 +24,7 @@
     <div v-else-if="order" class="p-4 space-y-4">
         <!-- Status Card -->
         <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm text-center">
-            <h2 class="text-gray-500 text-sm mb-1">Заказ #{{ order.order_number || order.order_id.substring(0, 8).toUpperCase() }}</h2>
+            <h2 class="text-gray-500 text-sm mb-1">Заказ #{{ order.order_number || String(getOrderId(order)).substring(0, 8).toUpperCase() }}</h2>
             <div class="text-3xl font-bold text-primary-600 mb-2">{{ order.status_display }}</div>
             <p class="text-xs text-gray-400">{{ formatDate(order.created_at) }}</p>
         </div>
@@ -115,7 +115,7 @@
 import { computed, onMounted, ref, onBeforeUnmount } from 'vue'
 import { useRoute } from 'vue-router'
 import { useOrdersStore } from '@/stores/orders'
-import { format } from 'date-fns'
+import { format, parseISO, isValid } from 'date-fns'
 import { ru } from 'date-fns/locale'
 import telegramService from '@/services/telegram'
 import { useNotificationStore } from '@/stores/notifications'
@@ -130,18 +130,20 @@ const order = computed(() => ordersStore.currentOrder)
 const loading = computed(() => ordersStore.loading)
 const error = computed(() => ordersStore.error)
 
+const getOrderId = (o) => o?.order_id || o?.id
+
 // Rate limiting logic (15 minutes = 900,000 ms)
 const CHECK_INTERVAL = 15 * 60 * 1000 
 const statusCheckDisabled = computed(() => {
     if (!order.value) return false
-    const lastCheck = ordersStore.lastStatusCheck[order.value.order_id]
+    const lastCheck = ordersStore.lastStatusCheck[getOrderId(order.value)]
     if (!lastCheck) return false
     return (now.value - lastCheck) < CHECK_INTERVAL
 })
 
 const remainingTime = computed(() => {
     if (!order.value) return ''
-    const lastCheck = ordersStore.lastStatusCheck[order.value.order_id]
+    const lastCheck = ordersStore.lastStatusCheck[getOrderId(order.value)]
     if (!lastCheck) return ''
     const diff = CHECK_INTERVAL - (now.value - lastCheck)
     if (diff <= 0) return ''
@@ -153,7 +155,11 @@ const remainingTime = computed(() => {
 
 const formatDate = (dateString) => {
     if (!dateString) return ''
-    return format(new Date(dateString), 'd MMMM yyyy, HH:mm', { locale: ru })
+    const normalized = String(dateString).replace(/\.(\d{3})\d+/, '.$1')
+    const parsed = parseISO(normalized)
+    const d = isValid(parsed) ? parsed : new Date(normalized)
+    if (!isValid(d)) return ''
+    return format(d, 'd MMMM yyyy, HH:mm', { locale: ru })
 }
 
 const formatPrice = (price) => {
@@ -165,7 +171,7 @@ const handleCheckStatus = async () => {
     
     try {
         telegramService.vibrate('light')
-        await ordersStore.fetchOrderStatus(order.value.order_id)
+        await ordersStore.fetchOrderStatus(getOrderId(order.value))
         notificationStore.show('Статус обновлен')
     } catch (e) {
         telegramService.showAlert('Ошибка при обновлении статуса')
@@ -175,7 +181,7 @@ const handleCheckStatus = async () => {
 const handleCancel = () => {
     telegramService.showConfirm('Вы действительно хотите отменить заказ?', async () => {
         try {
-            await ordersStore.cancelOrder(order.value.order_id)
+            await ordersStore.cancelOrder(getOrderId(order.value))
             notificationStore.show('Заказ отменен')
         } catch (e) {
             telegramService.showAlert('Не удалось отменить заказ')

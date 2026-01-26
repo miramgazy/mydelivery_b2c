@@ -95,7 +95,8 @@ export const useAuthStore = defineStore('auth', () => {
         try {
             const result = await authService.loginWithPassword(username, password)
             if (result.success) {
-                user.value = result.user
+                // Всегда загружаем свежие данные пользователя с сервера
+                await fetchCurrentUser()
                 return { success: true }
             }
             return { success: false, error: 'Ошибка входа' }

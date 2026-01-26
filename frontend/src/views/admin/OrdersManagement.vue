@@ -69,10 +69,10 @@
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="text-sm text-gray-900 dark:text-white">
-                  {{ order.user?.first_name || order.user?.username || 'Гость' }}
+                  {{ order.user_name || 'Гость' }}
                 </div>
                 <div class="text-xs text-gray-500 dark:text-gray-400">
-                  {{ order.user?.phone || '-' }}
+                  {{ order.phone || '-' }}
                 </div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
@@ -155,13 +155,13 @@
                 <div>
                   <p class="text-sm text-gray-500 dark:text-gray-400">Клиент</p>
                   <p class="text-base font-medium text-gray-900 dark:text-white">
-                    {{ selectedOrder.user?.first_name || selectedOrder.user?.username || 'Гость' }}
+                    {{ selectedOrder.user_name || 'Гость' }}
                   </p>
                 </div>
                 <div>
                   <p class="text-sm text-gray-500 dark:text-gray-400">Телефон</p>
                   <p class="text-base font-medium text-gray-900 dark:text-white">
-                    {{ selectedOrder.user?.phone || '-' }}
+                    {{ selectedOrder.phone || '-' }}
                   </p>
                 </div>
                 <div>

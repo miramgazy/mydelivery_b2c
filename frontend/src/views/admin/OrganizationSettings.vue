@@ -126,6 +126,59 @@
           />
         </div>
 
+        <!-- Bot Token -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Токен Telegram бота
+          </label>
+          <div class="relative">
+            <input
+              v-model="form.bot_token"
+              :type="showBotToken ? 'text' : 'password'"
+              autocomplete="off"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
+              class="w-full px-4 py-2.5 pr-12 border border-gray-300 dark:border-gray-600 rounded-lg
+                     bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+                     focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Введите токен бота"
+            />
+            <button
+              type="button"
+              @click="showBotToken = !showBotToken"
+              class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <Icon :icon="showBotToken ? 'mdi:eye-off' : 'mdi:eye'" class="w-5 h-5" />
+            </button>
+          </div>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Уникальный токен Telegram бота для этой организации
+          </p>
+        </div>
+
+        <!-- Bot Username -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Юзернейм Telegram бота
+          </label>
+          <input
+            v-model="form.bot_username"
+            type="text"
+            autocomplete="off"
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
+            class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg
+                   bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+                   focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="username"
+          />
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Юзернейм бота (без @) для формирования ссылок
+          </p>
+        </div>
+
         <!-- Submit Button -->
         <div class="flex gap-4 pt-4">
           <button
@@ -159,10 +212,13 @@ const form = ref({
   api_key: '',
   name: '',
   phone: '',
-  address: ''
+  address: '',
+  bot_token: '',
+  bot_username: ''
 })
 
 const showApiKey = ref(false)
+const showBotToken = ref(false)
 const saving = ref(false)
 const successMessage = ref('')
 const loading = ref(false)
@@ -184,7 +240,9 @@ const loadOrganization = async () => {
         api_key: org.api_key || '',
         name: org.name || '',
         phone: org.phone || '',
-        address: org.address || ''
+        address: org.address || '',
+        bot_token: org.bot_token || '',
+        bot_username: org.bot_username || ''
       }
     }
   } catch (err) {
@@ -200,7 +258,15 @@ const handleSubmit = async () => {
   successMessage.value = ''
 
   try {
-    await organizationStore.updateOrganization(form.value)
+    const payload = {
+      ...form.value,
+      bot_token: (form.value.bot_token || '').trim(),
+      bot_username: (form.value.bot_username || '').trim().replace(/^@+/, '')
+    }
+
+    await organizationStore.updateOrganization(payload)
+    // После сохранения перечитываем данные с сервера (чтобы точно увидеть, что сохранилось)
+    await loadOrganization()
     successMessage.value = 'Настройки успешно сохранены'
 
     // Hide success message after 3 seconds

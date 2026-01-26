@@ -28,6 +28,15 @@ export const useCartStore = defineStore('cart', () => {
      * Добавить товар в корзину
      */
     function addItem(product, modifiers = []) {
+        // Проверяем, не находится ли продукт в стоп-листе
+        if (product.is_in_stop_list) {
+            throw new Error(`Продукт "${product.product_name}" временно недоступен`)
+        }
+        
+        if (!product.is_available) {
+            throw new Error(`Продукт "${product.product_name}" недоступен`)
+        }
+        
         const existingItemIndex = items.value.findIndex(item => {
             return item.product_id === product.product_id &&
                 JSON.stringify(item.modifiers) === JSON.stringify(modifiers)

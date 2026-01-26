@@ -156,11 +156,15 @@ const closeProductModal = () => {
 }
 
 const addToCart = (product, modifiers) => {
-  cartStore.addItem(product, modifiers)
-  closeProductModal()
-  
-  telegramService.vibrate('success')
-  notificationStore.show(`${product.product_name} добавлен в корзину`)
+  try {
+    cartStore.addItem(product, modifiers)
+    closeProductModal()
+    
+    telegramService.vibrate('success')
+    notificationStore.show(`${product.product_name} добавлен в корзину`)
+  } catch (error) {
+    telegramService.showAlert(error.message || 'Не удалось добавить товар в корзину')
+  }
 }
 
 const refresh = async () => {

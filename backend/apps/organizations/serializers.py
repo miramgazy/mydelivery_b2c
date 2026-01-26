@@ -13,6 +13,7 @@ class TerminalSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'terminal_id', 'iiko_terminal_id', 'iiko_organization_id', 
             'terminal_group_name', 'name', 'is_active', 'organization',
+            'stop_list_interval_min',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'terminal_id', 'created_at', 'updated_at']
@@ -34,11 +35,13 @@ class OrganizationSerializer(serializers.ModelSerializer):
             'id', 'org_id', 'name', 'org_name', 'city',
             'iiko_organization_id', 'api_key',
             'phone', 'address',
+            'bot_token', 'bot_username',
             'terminals', 'is_active', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'org_id', 'created_at', 'updated_at']
         extra_kwargs = {
             'api_key': {'write_only': False},  # Позволяем читать для отображения
+            'bot_token': {'write_only': False},  # Позволяем читать для отображения
         }
 
 

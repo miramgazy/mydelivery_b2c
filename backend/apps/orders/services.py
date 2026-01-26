@@ -5,10 +5,11 @@ import logging
 from decimal import Decimal
 from typing import Dict, List
 import random
+import re
 from django.db import transaction
 from django.utils import timezone
 from .models import Order, OrderItem, OrderItemModifier
-from apps.products.models import Product, Modifier
+from apps.products.models import Product, Modifier, StopList
 from apps.users.models import User, DeliveryAddress
 from apps.organizations.models import Organization, PaymentType, Terminal
 from apps.iiko_integration.client import IikoClient, IikoAPIException
@@ -19,6 +20,51 @@ logger = logging.getLogger(__name__)
 
 class OrderService:
     """Сервис для управления заказами"""
+
+    @staticmethod
+    def _normalize_phone(phone: str | None) -> str:
+        """
+        Normalize phone to digits with leading '+' when possible.
+        Accepts inputs like: '+7 (777) 123-45-67' -> '+77771234567'
+        """
+        if not phone:
+            return ''
+        raw = str(phone).strip()
+        # keep digits only
+        digits = re.sub(r'\D+', '', raw)
+        if not digits:
+            return ''
+
+        # Common local formats:
+        # - 8XXXXXXXXXX -> +7XXXXXXXXXX
+        # - 7XXXXXXXXXX -> +7XXXXXXXXXX
+        if len(digits) == 11 and digits.startswith('8'):
+            digits = '7' + digits[1:]
+
+        if raw.startswith('+'):
+            return f"+{digits}"
+
+        # If looks like country-coded number, prefix '+'
+        if len(digits) >= 10:
+            return f"+{digits}"
+
+        return digits
+
+    @staticmethod
+    def _customer_name(user: User) -> str:
+        """
+        Best-effort customer name for iiko payload.
+        """
+        name = (user.full_name or '').strip()
+        if name:
+            return name
+        if user.first_name:
+            return user.first_name
+        if user.telegram_username:
+            return user.telegram_username
+        if user.username:
+            return user.username
+        return "Клиент"
     
     @transaction.atomic
     def create_order(
@@ -32,7 +78,7 @@ class OrderService:
         """
         # Получаем данные
         delivery_address_id = validated_data.get('delivery_address_id')
-        phone = validated_data.get('phone')
+        phone = self._normalize_phone(validated_data.get('phone'))
         comment = validated_data.get('comment', '')
         payment_type_id = validated_data.get('payment_type_id')
         terminal_id = validated_data.get('terminal_id')
@@ -101,6 +147,11 @@ class OrderService:
             latitude=validated_data.get('latitude'),
             longitude=validated_data.get('longitude')
         )
+
+        # Если у пользователя в профиле нет телефона — сохраним из заказа (B2C UX).
+        if phone and not user.phone:
+            user.phone = phone
+            user.save(update_fields=['phone'])
         
         # Создаем позиции заказа
         total_amount = Decimal('0')
@@ -116,6 +167,22 @@ class OrderService:
             except Product.DoesNotExist:
                 order.delete()
                 raise ValueError(f'Продукт {product_id} не найден')
+            
+            # Проверяем стоп-лист для выбранного терминала
+            stop_list_query = StopList.objects.filter(
+                product=product,
+                organization=organization
+            )
+            
+            if selected_terminal:
+                stop_list_query = stop_list_query.filter(terminal=selected_terminal)
+            
+            if stop_list_query.exists():
+                order.delete()
+                raise ValueError(
+                    f'Продукт "{product.product_name}" временно недоступен'
+                    + (f' в филиале "{selected_terminal.terminal_group_name}"' if selected_terminal else '')
+                )
             
             # Создаем позицию заказа
             item_price = product.price
@@ -329,10 +396,10 @@ class OrderService:
                 'orderServiceType': 'DeliveryByCourier',
                 'status': 'Unconfirmed',
                 'customer': {
-                    'name': order.user.full_name or order.user.first_name or "Клиент",
-                    'phone': order.phone
+                    'name': self._customer_name(order.user),
+                    'phone': self._normalize_phone(order.phone)
                 },
-                'phone': order.phone,
+                'phone': self._normalize_phone(order.phone),
                 'deliveryPoint': delivery_point,
                 'items': items
             }

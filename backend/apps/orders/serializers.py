@@ -62,16 +62,40 @@ class OrderItemCreateSerializer(serializers.Serializer):
         except Product.DoesNotExist:
             raise serializers.ValidationError({'product_id': 'Продукт не найден'})
         
-        # Проверяем стоп-лист
+        # Проверяем стоп-лист с учетом terminal_id
         request = self.context.get('request')
         if request and hasattr(request, 'user') and request.user.organization:
-            if StopList.objects.filter(
+            # Получаем terminal_id из данных заказа (если есть)
+            terminal_id = None
+            if hasattr(request, 'data') and isinstance(request.data, dict):
+                terminal_id = request.data.get('terminal_id')
+            
+            stop_list_query = StopList.objects.filter(
                 product=product,
                 organization=request.user.organization
-            ).exists():
-                raise serializers.ValidationError({
-                    'product_id': f'Продукт "{product.product_name}" временно недоступен'
-                })
+            )
+            
+            # Если указан terminal_id, проверяем по нему
+            if terminal_id:
+                try:
+                    from apps.organizations.models import Terminal
+                    terminal = Terminal.objects.get(terminal_id=terminal_id)
+                    if stop_list_query.filter(terminal=terminal).exists():
+                        raise serializers.ValidationError({
+                            'product_id': f'Продукт "{product.product_name}" временно недоступен в выбранном филиале'
+                        })
+                except (Terminal.DoesNotExist, ValueError):
+                    # Если terminal не найден, проверяем по организации
+                    if stop_list_query.exists():
+                        raise serializers.ValidationError({
+                            'product_id': f'Продукт "{product.product_name}" временно недоступен'
+                        })
+            else:
+                # Если terminal_id не указан, проверяем по организации
+                if stop_list_query.exists():
+                    raise serializers.ValidationError({
+                        'product_id': f'Продукт "{product.product_name}" временно недоступен'
+                    })
         
         # Валидация модификаторов
         modifiers_data = attrs.get('modifiers', [])
@@ -110,7 +134,7 @@ class OrderItemCreateSerializer(serializers.Serializer):
 class OrderListSerializer(serializers.ModelSerializer):
     """Сериализатор для списка заказов"""
     id = serializers.UUIDField(source='order_id', read_only=True)
-    user_name = serializers.CharField(source='user.full_name', read_only=True)
+    user_name = serializers.SerializerMethodField()
     organization_name = serializers.CharField(source='organization.org_name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     items_count = serializers.SerializerMethodField()
@@ -129,12 +153,37 @@ class OrderListSerializer(serializers.ModelSerializer):
     def get_items_count(self, obj):
         """Количество позиций в заказе"""
         return obj.items.count()
+    
+    def get_user_name(self, obj):
+        """
+        Best-effort имя клиента для админки/витрин:
+        - full_name
+        - first_name
+        - telegram_username
+        - username
+        """
+        user = getattr(obj, 'user', None)
+        if not user:
+            return "Клиент"
+        name = (getattr(user, 'full_name', '') or '').strip()
+        if name:
+            return name
+        first_name = (getattr(user, 'first_name', '') or '').strip()
+        if first_name:
+            return first_name
+        tg = (getattr(user, 'telegram_username', '') or '').strip()
+        if tg:
+            return tg
+        username = (getattr(user, 'username', '') or '').strip()
+        if username:
+            return username
+        return "Клиент"
 
 
 class OrderDetailSerializer(serializers.ModelSerializer):
     """Сериализатор для детальной информации о заказе"""
     id = serializers.UUIDField(source='order_id', read_only=True)
-    user_name = serializers.CharField(source='user.full_name', read_only=True)
+    user_name = serializers.SerializerMethodField()
     organization_name = serializers.CharField(source='organization.org_name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     payment_type_name = serializers.CharField(source='payment_type.payment_name', read_only=True)
@@ -164,6 +213,24 @@ class OrderDetailSerializer(serializers.ModelSerializer):
         if obj.delivery_address:
             return str(obj.delivery_address)
         return None
+    
+    def get_user_name(self, obj):
+        user = getattr(obj, 'user', None)
+        if not user:
+            return "Клиент"
+        name = (getattr(user, 'full_name', '') or '').strip()
+        if name:
+            return name
+        first_name = (getattr(user, 'first_name', '') or '').strip()
+        if first_name:
+            return first_name
+        tg = (getattr(user, 'telegram_username', '') or '').strip()
+        if tg:
+            return tg
+        username = (getattr(user, 'username', '') or '').strip()
+        if username:
+            return username
+        return "Клиент"
 
 
 class OrderCreateSerializer(serializers.Serializer):

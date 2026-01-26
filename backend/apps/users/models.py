@@ -2,6 +2,7 @@ import uuid
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.utils.translation import gettext_lazy as _
+from django.core.exceptions import ValidationError
 
 from apps.organizations.models import Organization, Street, Terminal
 
@@ -168,3 +169,15 @@ class DeliveryAddress(models.Model):
             return f"Координаты: {self.latitude}, {self.longitude}"
             
         return ", ".join(parts)
+
+    def delete(self, using=None, keep_parents=False):
+        """
+        Запрещаем удаление, если у пользователя остался только один адрес.
+        Это бизнес-правило для B2C UX (всегда должен оставаться минимум 1 адрес).
+        """
+        if self.user_id:
+            remaining = DeliveryAddress.objects.filter(user_id=self.user_id).count()
+            if remaining <= 1:
+                raise ValidationError('Нельзя удалить последний адрес доставки')
+
+        return super().delete(using=using, keep_parents=keep_parents)

@@ -191,6 +191,14 @@ class StopList(models.Model):
         default=0,
         help_text='Остаток продукта на складе'
     )
+    terminal = models.ForeignKey(
+        'organizations.Terminal',
+        on_delete=models.CASCADE,
+        related_name='stop_list',
+        verbose_name='Терминал',
+        null=True,
+        blank=True
+    )
     organization = models.ForeignKey(
         'organizations.Organization',
         on_delete=models.CASCADE,
@@ -211,9 +219,10 @@ class StopList(models.Model):
         db_table = 'stop_list'
         verbose_name = 'Стоп-лист'
         verbose_name_plural = 'Стоп-лист'
-        unique_together = [['product', 'organization']]
+        unique_together = [['product', 'terminal']]
         indexes = [
             models.Index(fields=['product']),
+            models.Index(fields=['terminal']),
             models.Index(fields=['organization']),
         ]
     

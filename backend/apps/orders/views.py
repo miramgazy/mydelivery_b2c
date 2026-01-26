@@ -88,8 +88,13 @@ class OrderViewSet(viewsets.ModelViewSet):
                 validated_data=serializer.validated_data
             )
             
-            # Отправляем в iiko
-            success = order_service.send_to_iiko(order)
+            # Быстрый ответ пользователю: отправку в iiko выполняем асинхронно (Celery),
+            # иначе клиент (TMA) часто ловит таймаут и показывает "ошибка", хотя заказ создаётся.
+            order.status = Order.STATUS_IN_PROGRESS
+            order.save(update_fields=['status', 'updated_at'])
+
+            from .tasks import send_order_to_iiko_task
+            transaction.on_commit(lambda: send_order_to_iiko_task.delay(str(order.order_id)))
             
             # Возвращаем созданный заказ
             response_serializer = OrderDetailSerializer(order)

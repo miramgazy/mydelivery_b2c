@@ -15,7 +15,23 @@ SECRET_KEY = config('SECRET_KEY', default='django-insecure-key-change-it')
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = config('DEBUG', default=False, cast=bool)
 
-ALLOWED_HOSTS = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+# ALLOWED_HOSTS - добавляем 'backend' для Docker сети и поддержку ngrok
+_allowed_hosts = config('ALLOWED_HOSTS', default='localhost,127.0.0.1').split(',')
+if 'backend' not in _allowed_hosts:
+    _allowed_hosts.append('backend')
+
+# Добавляем поддержку ngrok доменов (для разработки через Telegram Mini App)
+# Проверяем, есть ли ngrok домены в переменной окружения
+_ngrok_hosts = config('NGROK_HOSTS', default='').split(',')
+if _ngrok_hosts and _ngrok_hosts[0]:
+    _allowed_hosts.extend([h.strip() for h in _ngrok_hosts if h.strip()])
+
+# В DEBUG режиме также разрешаем все ngrok домены автоматически
+if DEBUG:
+    # Разрешаем все хосты в DEBUG режиме (для разработки)
+    ALLOWED_HOSTS = ['*']
+else:
+    ALLOWED_HOSTS = _allowed_hosts
 
 
 # Application definition
@@ -194,6 +210,7 @@ CORS_ALLOW_CREDENTIALS = True
 # Telegram
 TELEGRAM_BOT_TOKEN = config('TELEGRAM_BOT_TOKEN', default='')
 TELEGRAM_BOT_USERNAME = config('TELEGRAM_BOT_USERNAME', default='')
+TELEGRAM_CONTACT_SECRET = config('TELEGRAM_CONTACT_SECRET', default='')
 
 # iiko API
 IIKO_API_BASE_URL = config('IIKO_API_BASE_URL', default='https://api-ru.iiko.services/api/1')

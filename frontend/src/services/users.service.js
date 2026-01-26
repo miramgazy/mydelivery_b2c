@@ -24,6 +24,11 @@ class UserService {
         const response = await api.get('/roles/')
         return response.data
     }
+
+    async updateProfile(userData) {
+        const response = await api.patch('/users/me/', userData)
+        return response.data
+    }
 }
 
 export default new UserService()

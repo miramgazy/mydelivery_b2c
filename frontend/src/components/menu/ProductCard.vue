@@ -115,9 +115,13 @@ const addToCart = () => {
   if (props.product.has_modifiers) {
     emit('add-to-cart', props.product)
   } else {
-    cartStore.addItem(props.product)
-    telegramService.vibrate('light')
-    notificationStore.show(`${props.product.product_name} добавлен в корзину`)
+    try {
+      cartStore.addItem(props.product)
+      telegramService.vibrate('light')
+      notificationStore.show(`${props.product.product_name} добавлен в корзину`)
+    } catch (error) {
+      telegramService.showAlert(error.message || 'Не удалось добавить товар в корзину')
+    }
   }
 }
 </script>

@@ -26,6 +26,13 @@ class Terminal(models.Model):
         blank=True
     )
     
+    # Интервал обновления стоп-листа в минутах
+    stop_list_interval_min = models.IntegerField(
+        'Интервал обновления стоп-листа (мин)',
+        default=30,
+        help_text='Частота обновления стоп-листа в минутах'
+    )
+    
     is_active = models.BooleanField('Активен', default=True)
     
     created_at = models.DateTimeField('Создан', auto_now_add=True)
@@ -49,6 +56,10 @@ class Organization(models.Model):
     city = models.CharField('Город', max_length=100, blank=True, null=True)
     phone = models.CharField('Телефон', max_length=50, blank=True, null=True)
     address = models.CharField('Адрес', max_length=500, blank=True, null=True)
+    
+    # Telegram Bot fields for multi-bot support
+    bot_token = models.CharField('Токен Telegram бота', max_length=255, blank=True, null=True, unique=True)
+    bot_username = models.CharField('Юзернейм Telegram бота', max_length=255, blank=True, null=True)
     
     is_active = models.BooleanField('Активна', default=True)
     

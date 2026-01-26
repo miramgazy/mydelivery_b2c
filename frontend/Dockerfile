@@ -1,4 +1,22 @@
-# Этап 1: Сборка
+# Этап 1: Development (для разработки)
+FROM node:20-slim as development
+
+WORKDIR /app
+
+# Копируем файлы зависимостей
+COPY package*.json ./
+
+# Устанавливаем зависимости
+RUN rm -f package-lock.json && npm install
+
+# Копируем остальные файлы
+COPY . .
+
+EXPOSE 5173
+
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
+# Этап 2: Сборка
 FROM node:20-slim as build
 
 WORKDIR /app
@@ -21,7 +39,7 @@ ENV NODE_ENV=production
 COPY . .
 RUN npm run build
 
-# Этап 2: Финальный образ с Nginx
+# Этап 3: Финальный образ с Nginx
 FROM nginx:alpine as production
 
 # Копируем собранные файлы из этапа build

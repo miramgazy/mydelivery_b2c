@@ -36,10 +36,41 @@
         <div class="bg-white dark:bg-gray-800 rounded-xl overflow-hidden shadow-sm">
              <div class="p-4 border-b border-gray-100 dark:border-gray-700 font-semibold text-lg flex justify-between items-center">
                 <span>Мои адреса</span>
-                <!-- <button class="text-primary-600 text-sm">Добавить</button> -->
+                <button
+                  @click="goToAddresses"
+                  class="text-primary-600 text-sm font-semibold hover:underline"
+                >
+                  Управлять
+                </button>
             </div>
-            <div class="p-4 text-center text-gray-500 text-sm italic">
-                Адреса сохраняются автоматически при заказе
+            <div v-if="user?.addresses?.length" class="p-4 space-y-2">
+              <div
+                v-for="addr in user.addresses.slice(0, 3)"
+                :key="addr.id"
+                class="p-3 rounded-xl border border-gray-100 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 flex items-center justify-between gap-3"
+              >
+                <div class="text-sm">
+                  <div class="font-medium text-gray-900 dark:text-white">
+                    {{ addr.full_address }}
+                  </div>
+                  <div v-if="addr.is_default" class="text-xs text-primary-600 font-semibold">Основной</div>
+                </div>
+              </div>
+              <button
+                @click="goToAddresses"
+                class="w-full py-2 rounded-xl border-2 border-primary-200 text-primary-600 font-semibold hover:bg-primary-50 transition-colors"
+              >
+                Открыть список адресов
+              </button>
+            </div>
+            <div v-else class="p-4 text-center text-gray-500 text-sm italic space-y-2">
+              <div>Адресов пока нет</div>
+              <button
+                @click="goToAddresses"
+                class="text-primary-600 font-semibold underline"
+              >
+                Добавить адрес
+              </button>
             </div>
         </div>
 
@@ -82,6 +113,10 @@ const router = useRouter()
 const authStore = useAuthStore()
 const notificationStore = useNotificationStore()
 const user = computed(() => authStore.user)
+
+const goToAddresses = () => {
+    router.push('/profile/addresses')
+}
 
 const logout = () => {
     telegramService.showConfirm('Вы уверены, что хотите выйти?', () => {

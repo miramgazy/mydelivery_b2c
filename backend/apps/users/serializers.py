@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from .models import User, Role, DeliveryAddress
 from apps.organizations.serializers import TerminalSerializer
+from apps.organizations.models import Terminal
 
 
 class RoleSerializer(serializers.ModelSerializer):
@@ -109,13 +110,33 @@ class UserCreateSerializer(serializers.ModelSerializer):
 
 class UserUpdateSerializer(serializers.ModelSerializer):
     """Сериализатор для обновления данных пользователя"""
+    terminals = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Terminal.objects.all(),
+        required=False
+    )
     
     class Meta:
         model = User
         fields = [
             'first_name', 'last_name', 'username',
-            'email', 'phone', 'iiko_user_id'
+            'email', 'phone', 'iiko_user_id', 'organization', 'terminals'
         ]
+    
+    def update(self, instance, validated_data):
+        """Обновление пользователя с поддержкой терминалов"""
+        terminals = validated_data.pop('terminals', None)
+        
+        # Обновляем основные поля
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+        
+        # Обновляем терминалы, если они переданы
+        if terminals is not None:
+            instance.terminals.set(terminals)
+        
+        return instance
 
 
 class TelegramAuthSerializer(serializers.Serializer):

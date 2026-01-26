@@ -93,7 +93,7 @@ export const useOrdersStore = defineStore('orders', () => {
         error.value = null
 
         try {
-            const response = await api.post('/orders/', orderData)
+            const response = await api.post('/orders/', orderData, { timeout: 30000 })
 
             // Добавляем в список
             orders.value.unshift(response.data)

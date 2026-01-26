@@ -1,8 +1,11 @@
 import logging
-from typing import Dict, Any, List
+import uuid
+from typing import Dict, Any, List, Optional
 from django.db import transaction
-from apps.products.models import Menu, ProductCategory, Product, Modifier
-from apps.organizations.models import Organization
+from django.utils import timezone
+from apps.products.models import Menu, ProductCategory, Product, Modifier, StopList
+from apps.organizations.models import Organization, Terminal
+from apps.iiko_integration.client import IikoClient, IikoAPIException
 
 logger = logging.getLogger(__name__)
 
@@ -231,28 +234,24 @@ class MenuSyncService:
                 )
                 
                 # Identify all categories belonging to this tree
-                relevant_category_ids = {root_id}
+                # Start with empty set - we don't want root group to be a category
+                relevant_category_ids = set()
                 get_descendants(root_id, relevant_category_ids)
                 
-                # Filter groups to sync
-                # Note: Root group itself is the Menu, so we might NOT want to make it a Category?
-                # User said: "Root group is the menu name". 
-                # If we create a Category for it too, it will be a "root category" in that Menu.
-                # Let's filter groups list to include only those in relevant_category_ids
-                # BUT EXCLUDING the root itself if we treat it purely as Menu container?
-                # Usually better to have strictly hierarchical categories inside.
-                # Let's include all relevant IDs as categories for now, attached to this Menu.
-                
+                # Filter groups to sync - EXCLUDE root group, only sync dependent groups as categories
                 groups_to_sync = [g for g in all_groups if g['id'] in relevant_category_ids]
                 
                 # Sync these categories to THIS Menu
                 self._sync_categories(menu, groups_to_sync)
                 
-                # Sync Products: their 'groupId' (or parent) must be in relevant_category_ids
+                # Sync Products: their 'groupId' (or parent) must be in relevant_category_ids OR root_id
+                # Products in root group should still be synced, but without category assignment
                 products_to_sync = [
                     p for p in all_products 
                     if p.get('groupId') in relevant_category_ids 
                     or (p.get('parentGroup') in relevant_category_ids)
+                    or p.get('groupId') == root_id
+                    or p.get('parentGroup') == root_id
                 ]
                 
                 # Build map from ALL products for modifier lookup, not just synced ones
@@ -406,3 +405,237 @@ class MenuSyncService:
                     synced_types.append(payment_type_obj)
         
         return synced_types
+
+
+class StopListSyncService:
+    """Сервис для синхронизации стоп-листа с iiko API"""
+    
+    def __init__(self, api_key: str):
+        self.client = IikoClient(api_key)
+    
+    def sync_terminal_stop_list(self, terminal: Terminal) -> Dict[str, Any]:
+        """
+        Синхронизирует стоп-лист для конкретного терминала.
+        
+        Логика:
+        1. Запрос к API для получения актуального стоп-листа
+        2. UPSERT для каждой позиции из ответа
+        3. Smart DELETE для удаления записей, которых больше нет в API
+        4. Все операции выполняются в одной транзакции
+        5. Если API вернул ошибку, DELETE не выполняется
+        
+        Args:
+            terminal: Терминал для синхронизации
+            
+        Returns:
+            Dict с результатами синхронизации
+        """
+        if not terminal.organization:
+            raise ValueError("Терминал должен быть привязан к организации")
+        
+        if not terminal.organization.api_key:
+            raise ValueError("У организации должен быть настроен API ключ iiko")
+        
+        organization = terminal.organization
+        organization_id = organization.iiko_organization_id
+        
+        if not organization_id:
+            raise ValueError("У организации должен быть настроен iiko_organization_id")
+        
+        # Шаг 1: Запрос к API
+        try:
+            # API требует organizationIds как массив
+            api_response = self.client.get_stop_lists([organization_id])
+        except IikoAPIException as e:
+            logger.error(f"Ошибка при запросе стоп-листа из iiko для терминала {terminal.terminal_id}: {e}")
+            raise
+        
+        # Парсим ответ API
+        # Структура ответа iiko API для stop_lists:
+        # {
+        #   "terminalGroupStopLists": [
+        #     {
+        #       "organizationId": "uuid",
+        #       "items": [
+        #         {
+        #           "terminalGroupId": "uuid",
+        #           "items": [
+        #             {
+        #               "productId": "uuid",
+        #               "balance": 0.0,
+        #               "sku": "string",
+        #               "dateAdd": "string"
+        #             }
+        #           ]
+        #         }
+        #       ]
+        #     }
+        #   ]
+        # }
+        
+        # Получаем terminalGroupStopLists из ответа
+        terminal_group_stop_lists = api_response.get('terminalGroupStopLists', [])
+        
+        # Находим данные для текущей организации
+        terminal_id_str = str(terminal.terminal_id)
+        items = []
+        
+        for org_stop_list in terminal_group_stop_lists:
+            org_id = org_stop_list.get('organizationId')
+            
+            # Проверяем, что это наша организация
+            if str(org_id) != str(organization_id):
+                continue
+            
+            # Получаем список терминалов для этой организации
+            terminal_items = org_stop_list.get('items', [])
+            
+            # Ищем нужный терминал
+            for terminal_item in terminal_items:
+                terminal_group_id = terminal_item.get('terminalGroupId')
+                if terminal_group_id:
+                    terminal_group_id_str = str(terminal_group_id)
+                    
+                    if terminal_group_id_str == terminal_id_str:
+                        # Нашли нужный терминал, получаем его items
+                        items = terminal_item.get('items', [])
+                        break
+            
+            if items:
+                break
+        
+        if not items:
+            # Логируем доступные терминалы только при отсутствии данных
+            available_terminals = []
+            for org_stop_list in terminal_group_stop_lists:
+                if str(org_stop_list.get('organizationId')) == str(organization_id):
+                    for terminal_item in org_stop_list.get('items', []):
+                        tg_id = terminal_item.get('terminalGroupId')
+                        if tg_id:
+                            available_terminals.append(str(tg_id))
+            logger.warning(f"Данные для терминала {terminal_id_str} не найдены в ответе API. Доступные терминалы: {available_terminals}")
+        
+        # Инициализируем переменные для результатов
+        api_product_ids = []
+        created_count = 0
+        updated_count = 0
+        deleted_count = 0
+        
+        # Шаг 2 и 3: UPSERT + DELETE в транзакции
+        try:
+            with transaction.atomic():
+                
+                # Шаг 2: UPSERT для каждой позиции
+                for item in items:
+                    # Проверяем разные варианты ключей для productId
+                    product_id_str = (
+                        item.get('productId') or 
+                        item.get('product_id') or
+                        item.get('id')
+                    )
+                    
+                    if not product_id_str:
+                        logger.warning(f"Пропущен элемент стоп-листа без productId: {item}")
+                        continue
+                    
+                    try:
+                        product_id = uuid.UUID(str(product_id_str))
+                    except (ValueError, TypeError) as e:
+                        logger.warning(f"Некорректный productId: {product_id_str}, ошибка: {e}")
+                        continue
+                    
+                    # Проверяем разные варианты ключей для productName
+                    product_name = (
+                        item.get('productName') or 
+                        item.get('product_name') or
+                        item.get('name') or
+                        ''
+                    )
+                    
+                    # Проверяем разные варианты ключей для balance
+                    balance_value = (
+                        item.get('balance') or 
+                        item.get('quantity') or
+                        item.get('amount') or
+                        0.0
+                    )
+                    
+                    try:
+                        balance = float(balance_value)
+                    except (ValueError, TypeError):
+                        logger.warning(f"Некорректный balance: {balance_value}, используем 0.0")
+                        balance = 0.0
+                    
+                    # Проверяем, существует ли продукт
+                    try:
+                        product = Product.objects.get(product_id=product_id)
+                    except Product.DoesNotExist:
+                        logger.warning(f"Продукт с product_id={product_id} не найден в базе. Пропускаем.")
+                        continue
+                    
+                    api_product_ids.append(product_id)
+                    
+                    # UPSERT операция
+                    try:
+                        stop_list_obj, created = StopList.objects.update_or_create(
+                            product=product,
+                            terminal=terminal,
+                            defaults={
+                                'product_name': product_name or product.product_name,
+                                'balance': balance,
+                                'organization': organization,
+                                'is_auto_added': True,
+                                'updated_at': timezone.now()
+                            }
+                        )
+                        
+                        if created:
+                            created_count += 1
+                        else:
+                            updated_count += 1
+                    except Exception as e:
+                        logger.error(f"Ошибка при создании/обновлении записи стоп-листа для продукта {product.product_name}: {e}", exc_info=True)
+                        raise
+            
+                # Шаг 3: Smart DELETE - удаляем записи, которых нет в ответе API
+                # Только для текущего терминала
+                if api_product_ids:
+                    # Удаляем записи, которых нет в списке из API
+                    deleted_queryset = StopList.objects.filter(
+                        terminal=terminal
+                    ).exclude(
+                        product__product_id__in=api_product_ids
+                    )
+                    deleted_count = deleted_queryset.count()
+                    if deleted_count > 0:
+                        logger.info(f"Удаление {deleted_count} устаревших записей стоп-листа для терминала {terminal.terminal_id}")
+                        deleted_queryset.delete()
+                    else:
+                        logger.info("Нет устаревших записей для удаления")
+                else:
+                    # Если API вернул пустой список, удаляем все записи для терминала
+                    deleted_queryset = StopList.objects.filter(terminal=terminal)
+                    deleted_count = deleted_queryset.count()
+                    if deleted_count > 0:
+                        logger.info(f"Удаление всех {deleted_count} записей стоп-листа для терминала {terminal.terminal_id} (API вернул пустой список)")
+                        deleted_queryset.delete()
+                    else:
+                        logger.info("Нет записей для удаления")
+                
+                logger.info(
+                    f"Синхронизация стоп-листа для терминала {terminal.terminal_id} завершена: "
+                    f"создано {created_count}, обновлено {updated_count}, "
+                    f"всего обработано {len(api_product_ids)}, удалено {deleted_count}"
+                )
+                
+        except Exception as e:
+            logger.error(f"Критическая ошибка при синхронизации стоп-листа для терминала {terminal.terminal_id}: {e}", exc_info=True)
+            raise
+        
+        return {
+            'terminal_id': str(terminal.terminal_id),
+            'terminal_name': terminal.terminal_group_name,
+            'updated_count': len(api_product_ids),
+            'deleted_count': deleted_count,
+            'total_items': len(items)
+        }

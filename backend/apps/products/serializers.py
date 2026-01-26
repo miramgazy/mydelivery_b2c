@@ -58,14 +58,47 @@ class ProductListSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField(source='product_id', read_only=True)
     name = serializers.CharField(source='product_name', read_only=True)
     category = ProductCategorySerializer(read_only=True)
+    is_in_stop_list = serializers.SerializerMethodField()
     
     class Meta:
         model = Product
         fields = [
             'id', 'product_id', 'name', 'product_name', 'price',
             'description', 'image_url', 'category',
-            'is_available', 'has_modifiers', 'order_index'
+            'is_available', 'has_modifiers', 'order_index', 'is_in_stop_list'
         ]
+    
+    def get_is_in_stop_list(self, obj):
+        """Проверяет, находится ли продукт в стоп-листе для указанного терминала"""
+        request = self.context.get('request')
+        if not request or not hasattr(request, 'user'):
+            return False
+        
+        user = request.user
+        if not user.organization:
+            return False
+        
+        # Получаем terminal_id из query параметров
+        terminal_id = request.query_params.get('terminal_id')
+        
+        from apps.products.models import StopList
+        stop_list_query = StopList.objects.filter(
+            product=obj,
+            organization=user.organization
+        )
+        
+        # Если указан terminal_id, проверяем по нему
+        if terminal_id:
+            try:
+                from apps.organizations.models import Terminal
+                terminal = Terminal.objects.get(terminal_id=terminal_id)
+                return stop_list_query.filter(terminal=terminal).exists()
+            except (Terminal.DoesNotExist, ValueError):
+                # Если terminal не найден, проверяем по организации
+                return stop_list_query.exists()
+        
+        # Если terminal_id не указан, проверяем по организации
+        return stop_list_query.exists()
 
 
 class ProductDetailSerializer(serializers.ModelSerializer):
@@ -74,6 +107,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source='product_name', read_only=True)
     category = ProductCategorySerializer(read_only=True)
     modifiers = ModifierSerializer(many=True, read_only=True)
+    is_in_stop_list = serializers.SerializerMethodField()
     
     class Meta:
         model = Product
@@ -82,19 +116,61 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             'price', 'measure_unit', 'description',
             'image_url', 'category',
             'is_available', 'has_modifiers', 'modifiers',
-            'organization', 'order_index'
+            'organization', 'order_index', 'is_in_stop_list'
         ]
+    
+    def get_is_in_stop_list(self, obj):
+        """Проверяет, находится ли продукт в стоп-листе для указанного терминала"""
+        request = self.context.get('request')
+        if not request or not hasattr(request, 'user'):
+            return False
+        
+        user = request.user
+        if not user.organization:
+            return False
+        
+        # Получаем terminal_id из query параметров
+        terminal_id = request.query_params.get('terminal_id')
+        
+        from apps.products.models import StopList
+        stop_list_query = StopList.objects.filter(
+            product=obj,
+            organization=user.organization
+        )
+        
+        # Если указан terminal_id, проверяем по нему
+        if terminal_id:
+            try:
+                from apps.organizations.models import Terminal
+                terminal = Terminal.objects.get(terminal_id=terminal_id)
+                return stop_list_query.filter(terminal=terminal).exists()
+            except (Terminal.DoesNotExist, ValueError):
+                # Если terminal не найден, проверяем по организации
+                return stop_list_query.exists()
+        
+        # Если terminal_id не указан, проверяем по организации
+        return stop_list_query.exists()
 
 
 class StopListSerializer(serializers.ModelSerializer):
     """Сериализатор для стоп-листа"""
     product_name = serializers.CharField()
+    terminal_name = serializers.SerializerMethodField()
+    terminal_id = serializers.SerializerMethodField()
+    
+    def get_terminal_name(self, obj):
+        """Возвращает название терминала или None"""
+        return obj.terminal.terminal_group_name if obj.terminal else None
+    
+    def get_terminal_id(self, obj):
+        """Возвращает ID терминала или None"""
+        return str(obj.terminal.terminal_id) if obj.terminal else None
     
     class Meta:
         model = StopList
         fields = [
             'id', 'product', 'product_name',
-            'balance', 'organization',
+            'balance', 'organization', 'terminal', 'terminal_id', 'terminal_name',
             'reason', 'is_auto_added',
             'updated_at'
         ]

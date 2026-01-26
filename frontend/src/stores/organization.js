@@ -53,7 +53,21 @@ export const useOrganizationStore = defineStore('organization', () => {
             return updated
         } catch (err) {
             console.error('Update organization error:', err)
-            error.value = err.response?.data?.detail || 'Не удалось обновить организацию'
+            const apiErr = err.response?.data
+            if (typeof apiErr === 'string') {
+                error.value = apiErr
+            } else if (apiErr?.detail) {
+                error.value = apiErr.detail
+            } else if (apiErr?.error) {
+                error.value = apiErr.error
+            } else if (apiErr && typeof apiErr === 'object') {
+                // Показываем field-errors (например unique/validation)
+                error.value = Object.entries(apiErr)
+                    .map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : String(v)}`)
+                    .join('\n')
+            } else {
+                error.value = 'Не удалось обновить организацию'
+            }
             throw err
         } finally {
             loading.value = false
