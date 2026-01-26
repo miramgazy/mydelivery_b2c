@@ -529,6 +529,28 @@ class TerminalViewSet(viewsets.ModelViewSet):
                 {'error': f'Неожиданная ошибка: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+    
+    @action(detail=True, methods=['patch'], url_path='toggle-active')
+    def toggle_active(self, request, pk=None):
+        """Переключить статус активности терминала"""
+        terminal = self.get_object()
+        
+        try:
+            terminal.is_active = not terminal.is_active
+            terminal.save()
+            
+            serializer = self.get_serializer(terminal)
+            return Response({
+                'message': f'Терминал {"активирован" if terminal.is_active else "деактивирован"}',
+                'success': True,
+                'data': serializer.data
+            })
+        except Exception as e:
+            logger.error(f"Ошибка при изменении статуса терминала: {e}", exc_info=True)
+            return Response(
+                {'error': f'Неожиданная ошибка: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class StreetViewSet(viewsets.ModelViewSet):

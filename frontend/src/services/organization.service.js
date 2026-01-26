@@ -93,6 +93,12 @@ export const updateTerminalDeliveryZones = async (terminalId, deliveryZones) => 
     return response.data
 }
 
+// Toggle terminal active status
+export const toggleTerminalActive = async (terminalId) => {
+    const response = await api.patch(`/terminals/${terminalId}/toggle-active/`)
+    return response.data
+}
+
 // Get cities list
 export const getCities = async () => {
     const response = await api.get('/cities/')
@@ -114,5 +120,6 @@ export default {
     updateTerminal,
     syncTerminalStopList,
     updateTerminalDeliveryZones,
+    toggleTerminalActive,
     getCities
 }

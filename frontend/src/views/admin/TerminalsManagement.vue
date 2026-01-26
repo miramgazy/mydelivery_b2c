@@ -111,16 +111,29 @@
                 />
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                <span
-                  :class="[
-                    'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
-                    terminal.is_active
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
-                      : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400'
-                  ]"
-                >
-                  {{ terminal.is_active ? 'Активен' : 'Неактивен' }}
-                </span>
+                <div class="flex items-center gap-3">
+                  <span
+                    :class="[
+                      'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
+                      terminal.is_active
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400'
+                    ]"
+                  >
+                    {{ terminal.is_active ? 'Активен' : 'Неактивен' }}
+                  </span>
+                  <button
+                    @click="handleToggleActive(terminal)"
+                    :disabled="togglingTerminal === terminal.id"
+                    class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+                    :class="terminal.is_active ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'"
+                  >
+                    <span
+                      class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
+                      :class="terminal.is_active ? 'translate-x-6' : 'translate-x-1'"
+                    />
+                  </button>
+                </div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 <button
@@ -142,6 +155,43 @@
         </table>
       </div>
     </div>
+
+    <!-- Confirmation Modal -->
+    <div
+      v-if="showConfirmModal"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
+      @click.self="closeConfirmModal"
+    >
+      <div class="bg-white dark:bg-gray-800 w-full max-w-md rounded-2xl shadow-2xl">
+        <div class="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+          <h3 class="text-xl font-bold text-gray-900 dark:text-white">
+            Подтверждение действия
+          </h3>
+        </div>
+        
+        <div class="p-6">
+          <p class="text-gray-700 dark:text-gray-300 mb-6">
+            {{ confirmModalMessage }}
+          </p>
+          
+          <div class="flex gap-3 justify-end">
+            <button
+              @click="closeConfirmModal"
+              class="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+            >
+              Отмена
+            </button>
+            <button
+              @click="confirmToggleActive"
+              :disabled="togglingTerminal !== null"
+              class="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {{ togglingTerminal !== null ? 'Обработка...' : 'Да' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -156,6 +206,10 @@ const organizationStore = useOrganizationStore()
 const successMessage = ref('')
 const error = ref(null)
 const syncingStopList = ref(null)
+const showConfirmModal = ref(false)
+const terminalToToggle = ref(null)
+const togglingTerminal = ref(null)
+const confirmModalMessage = ref('')
 
 const loading = computed(() => organizationStore.loading)
 const terminals = computed(() => organizationStore.terminals || [])
@@ -223,6 +277,51 @@ const syncStopList = async (terminal) => {
     error.value = err.response?.data?.error || 'Не удалось синхронизировать стоп-лист'
   } finally {
     syncingStopList.value = null
+  }
+}
+
+const handleToggleActive = (terminal) => {
+  terminalToToggle.value = terminal
+  if (terminal.is_active) {
+    confirmModalMessage.value = `Вы уверены, что хотите деактивировать терминал "${terminal.name || terminal.terminal_group_name}"? Терминал останется в списке, но не будет доступен в Telegram mini app.`
+  } else {
+    confirmModalMessage.value = `Вы уверены, что хотите активировать терминал "${terminal.name || terminal.terminal_group_name}"?`
+  }
+  showConfirmModal.value = true
+}
+
+const closeConfirmModal = () => {
+  showConfirmModal.value = false
+  terminalToToggle.value = null
+  confirmModalMessage.value = ''
+}
+
+const confirmToggleActive = async () => {
+  if (!terminalToToggle.value) return
+
+  togglingTerminal.value = terminalToToggle.value.id
+  error.value = null
+  successMessage.value = ''
+
+  try {
+    const result = await organizationService.toggleTerminalActive(terminalToToggle.value.id)
+    
+    // Обновляем локальное состояние терминала
+    const terminal = terminals.value.find(t => t.id === terminalToToggle.value.id)
+    if (terminal) {
+      terminal.is_active = result.data.is_active
+    }
+    
+    successMessage.value = result.message || (result.data.is_active ? 'Терминал активирован' : 'Терминал деактивирован')
+    setTimeout(() => {
+      successMessage.value = ''
+    }, 3000)
+    
+    closeConfirmModal()
+  } catch (err) {
+    error.value = err.response?.data?.error || 'Не удалось изменить статус терминала'
+  } finally {
+    togglingTerminal.value = null
   }
 }
 </script>

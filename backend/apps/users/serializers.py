@@ -57,8 +57,13 @@ class UserSerializer(serializers.ModelSerializer):
     role_display = serializers.CharField(source='role.get_role_name_display', read_only=True, default=None)
     organization_name = serializers.CharField(source='organization.org_name', read_only=True, default=None)
     full_name = serializers.CharField(read_only=True)
-    terminals = TerminalSerializer(many=True, read_only=True)
+    terminals = serializers.SerializerMethodField()
     addresses = DeliveryAddressSerializer(many=True, read_only=True)
+    
+    def get_terminals(self, obj):
+        """Возвращает только активные терминалы пользователя"""
+        active_terminals = obj.terminals.filter(is_active=True)
+        return TerminalSerializer(active_terminals, many=True).data
     
     class Meta:
         model = User
