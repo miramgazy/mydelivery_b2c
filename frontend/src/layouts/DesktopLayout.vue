@@ -78,6 +78,14 @@
             <Icon icon="mdi:food" class="w-5 h-5" />
             <span v-if="sidebarOpen">Меню</span>
           </router-link>
+          <router-link
+            to="/admin/organization/delivery-zones"
+            class="nav-item"
+            active-class="nav-item-active"
+          >
+            <Icon icon="mdi:map-marker-radius" class="w-5 h-5" />
+            <span v-if="sidebarOpen">Зоны доставки</span>
+          </router-link>
         </div>
 
         <!-- Orders Section -->
@@ -211,6 +219,7 @@ const pageTitle = computed(() => {
     '/admin/organization/stop-list': 'Стоп-лист',
     '/admin/organization/payment-types': 'Типы оплат',
     '/admin/organization/menu': 'Управление меню',
+    '/admin/organization/delivery-zones': 'Зоны доставки',
     '/admin/orders': 'Заказы',
     '/admin/users': 'Пользователи',
     '/admin/products': 'Продукты',

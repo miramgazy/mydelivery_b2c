@@ -210,11 +210,14 @@ class MenuSyncService:
                 name = f"Modifier {mod_product_id}"
 
             # If create_modifier is just linking, we generate a new ID for the link
+            # Конвертируем mod_product_id в строку для сохранения в modifier_code
+            modifier_code_str = str(mod_product_id) if mod_product_id else None
+            
             Modifier.objects.create(
                 modifier_id=uuid.uuid4(),
                 modifier_name=name,
                 product=product,
-                modifier_code=mod_product_id, # Keep iiko product ID here
+                modifier_code=modifier_code_str, # Keep iiko product ID here (as string)
                 min_amount=int(mod_data.get('minAmount') or 0),
                 max_amount=int(mod_data.get('maxAmount') or 1),
                 is_required=bool(mod_data.get('required')) or bool(group_info and group_info.get('required')),

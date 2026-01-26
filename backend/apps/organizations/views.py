@@ -7,11 +7,11 @@ from django.shortcuts import get_object_or_404
 
 logger = logging.getLogger(__name__)
 
-from .models import Organization, Terminal, Street, PaymentType
+from .models import Organization, Terminal, Street, PaymentType, City
 from .serializers import (
     OrganizationSerializer, TerminalSerializer,
     StreetSerializer, PaymentTypeSerializer,
-    ExternalMenuSerializer
+    CitySerializer, ExternalMenuSerializer
 )
 from apps.iiko_integration.client import IikoClient, IikoAPIException
 from apps.iiko_integration.services import MenuSyncService, StopListSyncService
@@ -463,6 +463,71 @@ class TerminalViewSet(viewsets.ModelViewSet):
                 {'error': f'Неожиданная ошибка: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+    
+    @action(detail=True, methods=['patch'], url_path='delivery-zones')
+    def update_delivery_zones(self, request, pk=None):
+        """Обновить зоны доставки для терминала"""
+        terminal = self.get_object()
+        
+        delivery_zones = request.data.get('delivery_zones_conditions')
+        
+        if delivery_zones is None:
+            return Response(
+                {'error': 'Поле delivery_zones_conditions обязательно'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Валидация формата данных
+        if not isinstance(delivery_zones, list):
+            return Response(
+                {'error': 'delivery_zones_conditions должен быть массивом'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Валидация структуры каждой зоны
+        for i, zone in enumerate(delivery_zones):
+            if not isinstance(zone, dict):
+                return Response(
+                    {'error': f'Зона #{i+1} должна быть объектом'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Проверка обязательных полей
+            if 'coordinates' not in zone or not zone['coordinates']:
+                return Response(
+                    {'error': f'В зоне #{i+1} отсутствуют координаты'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            if not isinstance(zone['coordinates'], list) or len(zone['coordinates']) < 3:
+                return Response(
+                    {'error': f'В зоне #{i+1} должно быть минимум 3 точки координат'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Установка значений по умолчанию
+            zone.setdefault('name', f'Зона {i+1}')
+            zone.setdefault('priority', i+1)
+            zone.setdefault('color', '#FF0000')
+            zone.setdefault('delivery_type', 'free')
+            zone.setdefault('delivery_cost', 0)
+        
+        try:
+            terminal.delivery_zones_conditions = delivery_zones
+            terminal.save()
+            
+            serializer = self.get_serializer(terminal)
+            return Response({
+                'message': 'Зоны доставки успешно обновлены',
+                'success': True,
+                'data': serializer.data
+            })
+        except Exception as e:
+            logger.error(f"Ошибка при обновлении зон доставки: {e}", exc_info=True)
+            return Response(
+                {'error': f'Неожиданная ошибка: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class StreetViewSet(viewsets.ModelViewSet):
@@ -482,3 +547,13 @@ class PaymentTypeViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticatedOrReadOnly]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['organization', 'is_active', 'payment_type']
+
+
+class CityViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet для городов (только чтение)"""
+    queryset = City.objects.filter(is_active=True)
+    serializer_class = CitySerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    filterset_fields = ['organization', 'is_active']
+    search_fields = ['name']

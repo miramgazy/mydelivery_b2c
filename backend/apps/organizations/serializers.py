@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Organization, Terminal, Street, PaymentType
+from .models import Organization, Terminal, Street, PaymentType, City
 
 
 class TerminalSerializer(serializers.ModelSerializer):
@@ -7,13 +7,16 @@ class TerminalSerializer(serializers.ModelSerializer):
     id = serializers.UUIDField(source='terminal_id', read_only=True)
     name = serializers.CharField(source='terminal_group_name', read_only=True)
     iiko_terminal_id = serializers.UUIDField(source='terminal_id', read_only=True)
+    city_id = serializers.UUIDField(source='city.city_id', read_only=True, allow_null=True)
+    city_name = serializers.CharField(source='city.name', read_only=True, allow_null=True)
     
     class Meta:
         model = Terminal
         fields = [
             'id', 'terminal_id', 'iiko_terminal_id', 'iiko_organization_id', 
             'terminal_group_name', 'name', 'is_active', 'organization',
-            'stop_list_interval_min',
+            'city', 'city_id', 'city_name',
+            'stop_list_interval_min', 'delivery_zones_conditions',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'terminal_id', 'created_at', 'updated_at']
@@ -73,6 +76,20 @@ class PaymentTypeSerializer(serializers.ModelSerializer):
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'payment_id', 'created_at', 'updated_at']
+
+
+class CitySerializer(serializers.ModelSerializer):
+    """Сериализатор для городов"""
+    id = serializers.UUIDField(source='city_id', read_only=True)
+    
+    class Meta:
+        model = City
+        fields = [
+            'id', 'city_id', 'name', 'iiko_city_id',
+            'organization', 'is_active',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'city_id', 'created_at', 'updated_at']
 
 
 class ExternalMenuSerializer(serializers.Serializer):

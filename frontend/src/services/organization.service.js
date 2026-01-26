@@ -85,6 +85,20 @@ export const syncTerminalStopList = async (terminalId) => {
     return response.data
 }
 
+// Update delivery zones for terminal
+export const updateTerminalDeliveryZones = async (terminalId, deliveryZones) => {
+    const response = await api.patch(`/terminals/${terminalId}/delivery-zones/`, {
+        delivery_zones_conditions: deliveryZones
+    })
+    return response.data
+}
+
+// Get cities list
+export const getCities = async () => {
+    const response = await api.get('/cities/')
+    return response.data.results || response.data
+}
+
 export default {
     getOrganization,
     updateOrganization,
@@ -98,5 +112,7 @@ export default {
     loadMenuGroups,
     getAllOrganizations,
     updateTerminal,
-    syncTerminalStopList
+    syncTerminalStopList,
+    updateTerminalDeliveryZones,
+    getCities
 }

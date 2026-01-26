@@ -118,6 +118,11 @@ const routes = [
                 name: 'admin-organization-stop-list',
                 component: () => import('@/views/admin/StopListView.vue')
             },
+            {
+                path: 'organization/delivery-zones',
+                name: 'admin-organization-delivery-zones',
+                component: () => import('@/views/admin/DeliveryZonesView.vue')
+            },
             // Orders routes
             {
                 path: 'orders',
