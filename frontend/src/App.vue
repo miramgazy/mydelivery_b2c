@@ -11,17 +11,8 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 
-// Скрывать навигацию на странице логина, в админке, onboarding и для админов в десктопе
+// Скрывать навигацию на странице логина, в админке и onboarding
 const showBottomNav = computed(() => {
-  // Если не в Telegram и пользователь админ - не показываем BottomNav
-  const isAdmin = authStore.isAuthenticated && 
-    (authStore.user?.role_name === 'superadmin' || authStore.user?.role_name === 'org_admin')
-  const isDesktop = !telegramService.isInTelegram()
-  
-  if (isDesktop && isAdmin) {
-    return false
-  }
-  
   return route.name !== 'login' && 
          !route.path.startsWith('/admin') && 
          !route.path.startsWith('/onboarding') &&
@@ -33,19 +24,8 @@ onMounted(async () => {
     // Инициализация Telegram
     telegramService.init()
     
-    // Дополнительная проверка окружения для отладки
-    const isInTelegram = telegramService.isInTelegram()
-    console.log('[App] Environment check:', {
-      isInTelegram,
-      userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : 'N/A',
-      hasWebApp: !!telegramService.webApp,
-      initData: telegramService.webApp?.initData ? 'present' : 'missing',
-      platform: telegramService.webApp?.platform,
-      hasUser: !!telegramService.webApp?.initDataUnsafe?.user
-    })
-    
     // Если запущено в Telegram
-    if (isInTelegram) {
+    if (telegramService.isInTelegram()) {
       const tgUser = telegramService.getUser()
       if (tgUser) {
         console.log('TG User:', tgUser.id)
@@ -102,45 +82,39 @@ onMounted(async () => {
       }
     } else {
         // Если запущено в браузере (десктоп)
-        console.log('[App] Desktop mode detected')
         // Проверяем, есть ли токен в localStorage
         if (authService.isAuthenticated()) {
             // Если токен есть, но пользователь не загружен - загружаем
             if (!authStore.isAuthenticated) {
-                console.log('[App] Loading user from token...')
                 await authStore.fetchCurrentUser()
             }
             
             // Если авторизован
             if (authStore.isAuthenticated) {
                 const user = authStore.user
-                console.log('[App] Desktop user loaded:', user)
+                console.log('Desktop user loaded:', user)
                 const isAdmin = user?.role_name === 'superadmin' || user?.role_name === 'org_admin'
-                console.log('[App] Desktop isAdmin:', isAdmin, 'route:', route.name, 'path:', route.path)
+                console.log('Desktop isAdmin:', isAdmin, 'route:', route.name)
                 
                 // Если на странице логина - редирект в зависимости от роли
                 if (route.name === 'login') {
                     if (isAdmin) {
-                        console.log('[App] Desktop: redirecting from login to /admin')
+                        console.log('Desktop: redirecting from login to /admin')
                         router.push('/admin')
-                        return
                     } else {
-                        console.log('[App] Desktop: redirecting from login to /')
+                        console.log('Desktop: redirecting from login to /')
                         router.push('/')
-                        return
                     }
                 }
                 // Если на главной странице и админ - редирект в админку
-                if ((route.name === 'home' || route.path === '/') && isAdmin) {
-                    console.log('[App] Desktop: redirecting from home to /admin')
+                else if (route.name === 'home' && isAdmin) {
+                    console.log('Desktop: redirecting from home to /admin')
                     router.push('/admin')
-                    return
                 }
             }
         } else {
             // Если нет токена и не на странице логина - редирект на логин
             if (route.name !== 'login' && route.name !== 'access-denied') {
-                console.log('[App] Desktop: no token, redirecting to /login')
                 router.push('/login')
             }
         }

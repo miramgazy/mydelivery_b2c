@@ -194,16 +194,12 @@ router.beforeEach((to, from, next) => {
     }
     
     // Если админ пытается попасть на главную (не в Telegram) - редирект в админку
-    if (!telegramService.isInTelegram() && authStore.isAuthenticated) {
+    if (to.name === 'home' && !telegramService.isInTelegram() && authStore.isAuthenticated) {
         const user = authStore.user
         const isAdmin = user?.role_name === 'superadmin' || user?.role_name === 'org_admin'
         if (isAdmin) {
-            // Если админ на главной странице - редирект в админку
-            if ((to.name === 'home' || to.path === '/') && !to.path.startsWith('/admin')) {
-                console.log('[Router] Admin on home page, redirecting to /admin')
-                next('/admin')
-                return
-            }
+            next('/admin')
+            return
         }
     }
 
