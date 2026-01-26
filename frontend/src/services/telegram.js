@@ -20,56 +20,8 @@ class TelegramService {
      * Проверка запуска в Telegram
      */
     isInTelegram() {
-        // ПРИОРИТЕТ 1: Проверка user agent - самая надежная проверка
-        const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '';
-        const isTelegramUserAgent = userAgent.includes('Telegram') || userAgent.includes('WebApp');
-        
-        // Если user agent не Telegram - сразу false (даже если скрипт загружен)
-        if (!isTelegramUserAgent) {
-            console.log('[TelegramService] isInTelegram: false - not Telegram user agent:', userAgent.substring(0, 100));
-            return false;
-        }
-        
-        // ПРИОРИТЕТ 2: WebApp должен существовать
-        if (!this.webApp) {
-            console.log('[TelegramService] isInTelegram: false - no webApp (but user agent is Telegram)');
-            return false;
-        }
-        
-        // ПРИОРИТЕТ 3: initData должен быть непустой строкой с реальными данными
-        const initData = this.webApp.initData;
-        const hasInitData = initData && typeof initData === 'string' && initData.length > 20; // Минимум 20 символов
-        
-        // ПРИОРИТЕТ 4: initDataUnsafe.user должен существовать (это реальный признак Telegram MiniApp)
-        const user = this.webApp.initDataUnsafe?.user;
-        const hasUser = !!user && !!user.id && typeof user.id === 'number';
-        
-        // ПРИОРИТЕТ 5: Проверка платформы (в браузере обычно 'web', 'unknown' или undefined)
-        const platform = this.webApp.platform;
-        const isRealTelegramPlatform = platform && platform !== 'web' && platform !== 'unknown' && platform !== undefined;
-        
-        // Логирование для отладки (всегда, чтобы видеть в production)
-        console.log('[TelegramService] isInTelegram check:', {
-            userAgent: userAgent.substring(0, 50),
-            isTelegramUserAgent,
-            hasWebApp: !!this.webApp,
-            hasInitData,
-            initDataLength: initData?.length || 0,
-            hasUser,
-            userId: user?.id,
-            platform,
-            isRealTelegramPlatform
-        });
-        
-        // Возвращаем true ТОЛЬКО если:
-        // - User agent Telegram (уже проверили выше)
-        // - Есть initData с данными (минимум 20 символов)
-        // - Есть пользователь с числовым ID
-        const result = hasInitData && hasUser;
-        
-        console.log('[TelegramService] isInTelegram result:', result);
-        
-        return result;
+        // Проверяем наличие WebApp И initData (чтобы отличить от расширений браузера)
+        return !!this.webApp && !!this.webApp.initData;
     }
 
     /**

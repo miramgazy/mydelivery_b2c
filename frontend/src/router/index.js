@@ -158,9 +158,7 @@ router.beforeEach((to, from, next) => {
     if (to.meta.requiresAuth && !authStore.isAuthenticated) {
         // Если мы в Telegram, пускаем на главную (там сработает авто-вход)
         // Если не в Telegram, отправляем на страницу логина
-        const isInTelegram = telegramService.isInTelegram()
-        console.log('[Router] Auth required, isInTelegram:', isInTelegram)
-        if (isInTelegram) {
+        if (telegramService.isInTelegram()) {
             if (to.path === '/') {
                 next()
             } else {
@@ -196,8 +194,7 @@ router.beforeEach((to, from, next) => {
     }
     
     // Если админ пытается попасть на главную (не в Telegram) - редирект в админку
-    const isInTelegram = telegramService.isInTelegram()
-    if (to.name === 'home' && !isInTelegram && authStore.isAuthenticated) {
+    if (to.name === 'home' && !telegramService.isInTelegram() && authStore.isAuthenticated) {
         const user = authStore.user
         const isAdmin = user?.role_name === 'superadmin' || user?.role_name === 'org_admin'
         if (isAdmin) {
@@ -207,8 +204,7 @@ router.beforeEach((to, from, next) => {
     }
 
     // Onboarding: только для Telegram MiniApp - если пользователь авторизован, но нет телефона/адреса/терминала - редирект на onboarding
-    const isInTelegram = telegramService.isInTelegram()
-    if (isInTelegram && authStore.isAuthenticated && !to.meta.isOnboarding) {
+    if (telegramService.isInTelegram() && authStore.isAuthenticated && !to.meta.isOnboarding) {
         const user = authStore.user
         // Если нет телефона - редирект на welcome (первый экран onboarding)
         if (!user?.phone && to.name !== 'onboarding-welcome' && to.name !== 'onboarding-phone' && to.name !== 'onboarding-address' && to.name !== 'onboarding-terminal') {
