@@ -20,59 +20,54 @@ class TelegramService {
      * Проверка запуска в Telegram
      */
     isInTelegram() {
-        // Строгая проверка: должны быть выполнены ВСЕ условия
-        
-        // 1. WebApp должен существовать
-        if (!this.webApp) {
-            console.log('[TelegramService] isInTelegram: false - no webApp');
-            return false;
-        }
-        
-        // 2. Проверка user agent - если это не Telegram, сразу false
+        // ПРИОРИТЕТ 1: Проверка user agent - самая надежная проверка
         const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : '';
         const isTelegramUserAgent = userAgent.includes('Telegram') || userAgent.includes('WebApp');
         
-        // 3. initData должен быть непустой строкой с реальными данными
+        // Если user agent не Telegram - сразу false (даже если скрипт загружен)
+        if (!isTelegramUserAgent) {
+            console.log('[TelegramService] isInTelegram: false - not Telegram user agent:', userAgent.substring(0, 100));
+            return false;
+        }
+        
+        // ПРИОРИТЕТ 2: WebApp должен существовать
+        if (!this.webApp) {
+            console.log('[TelegramService] isInTelegram: false - no webApp (but user agent is Telegram)');
+            return false;
+        }
+        
+        // ПРИОРИТЕТ 3: initData должен быть непустой строкой с реальными данными
         const initData = this.webApp.initData;
-        const hasInitData = initData && typeof initData === 'string' && initData.length > 0;
+        const hasInitData = initData && typeof initData === 'string' && initData.length > 20; // Минимум 20 символов
         
-        // 4. initDataUnsafe.user должен существовать (это реальный признак Telegram MiniApp)
+        // ПРИОРИТЕТ 4: initDataUnsafe.user должен существовать (это реальный признак Telegram MiniApp)
         const user = this.webApp.initDataUnsafe?.user;
-        const hasUser = !!user && !!user.id;
+        const hasUser = !!user && !!user.id && typeof user.id === 'number';
         
-        // 5. Проверка платформы (в браузере обычно 'web', 'unknown' или undefined)
+        // ПРИОРИТЕТ 5: Проверка платформы (в браузере обычно 'web', 'unknown' или undefined)
         const platform = this.webApp.platform;
         const isRealTelegramPlatform = platform && platform !== 'web' && platform !== 'unknown' && platform !== undefined;
         
-        // 6. Проверка версии (в реальном Telegram всегда есть версия)
-        const version = this.webApp.version;
-        const hasVersion = version && typeof version === 'string';
-        
-        // Логирование для отладки (только в development)
-        if (import.meta.env.DEV) {
-            console.log('[TelegramService] isInTelegram check:', {
-                hasWebApp: !!this.webApp,
-                isTelegramUserAgent,
-                hasInitData,
-                hasUser,
-                isRealTelegramPlatform,
-                hasVersion,
-                platform,
-                version,
-                initDataLength: initData?.length || 0,
-                userId: user?.id
-            });
-        }
+        // Логирование для отладки (всегда, чтобы видеть в production)
+        console.log('[TelegramService] isInTelegram check:', {
+            userAgent: userAgent.substring(0, 50),
+            isTelegramUserAgent,
+            hasWebApp: !!this.webApp,
+            hasInitData,
+            initDataLength: initData?.length || 0,
+            hasUser,
+            userId: user?.id,
+            platform,
+            isRealTelegramPlatform
+        });
         
         // Возвращаем true ТОЛЬКО если:
-        // - Есть initData с данными
-        // - Есть пользователь с ID
-        // - И (есть Telegram user agent ИЛИ реальная платформа Telegram)
-        const result = hasInitData && hasUser && (isTelegramUserAgent || isRealTelegramPlatform);
+        // - User agent Telegram (уже проверили выше)
+        // - Есть initData с данными (минимум 20 символов)
+        // - Есть пользователь с числовым ID
+        const result = hasInitData && hasUser;
         
-        if (import.meta.env.DEV) {
-            console.log('[TelegramService] isInTelegram result:', result);
-        }
+        console.log('[TelegramService] isInTelegram result:', result);
         
         return result;
     }
