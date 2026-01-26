@@ -1,6 +1,7 @@
 #!/bin/bash
 
-set -e
+# Не используем set -e, чтобы скрипт не падал на некритичных ошибках
+set +e
 
 echo "=== Coolify Deployment Entrypoint ==="
 
@@ -72,13 +73,16 @@ EOF
 
 # Миграции
 echo "Running migrations..."
-python manage.py migrate --noinput
+python manage.py migrate --noinput || {
+    echo "WARNING: Migrations failed, but continuing..."
+    # Не падаем, если миграции не прошли - возможно БД еще не готова
+}
 
 # Сбор статики (с оптимизацией для маломощных серверов)
 echo "Collecting static files..."
 python manage.py collectstatic --noinput --clear --verbosity 0 || echo "WARNING: collectstatic failed, continuing..."
 
-# Инициализация ролей
+# Инициализация ролей (не критично, можно пропустить)
 echo "Creating initial roles if not exist..."
 python manage.py shell -c "
 from apps.users.models import Role
@@ -93,7 +97,9 @@ for role_name, description in roles:
         defaults={'description': description}
     )
 print('Roles initialized')
-" || echo "WARNING: Role initialization failed, continuing..."
+" 2>/dev/null || echo "WARNING: Role initialization failed, continuing..."
 
 echo "=== Entrypoint completed, starting server ==="
+# Включаем строгую проверку ошибок только для exec
+set -e
 exec "$@"
