@@ -74,9 +74,9 @@ EOF
 echo "Running migrations..."
 python manage.py migrate --noinput
 
-# Сбор статики
+# Сбор статики (с оптимизацией для маломощных серверов)
 echo "Collecting static files..."
-python manage.py collectstatic --noinput || echo "WARNING: collectstatic failed, continuing..."
+python manage.py collectstatic --noinput --clear --verbosity 0 || echo "WARNING: collectstatic failed, continuing..."
 
 # Инициализация ролей
 echo "Creating initial roles if not exist..."

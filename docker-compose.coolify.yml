@@ -3,7 +3,7 @@ version: '3.8'
 services:
   tg-redis:
     image: redis:alpine
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy allkeys-lru --save "" --save 900 1 --save 300 10
     volumes:
       - redis_data:/data
     healthcheck:
@@ -14,11 +14,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '0.25'
+          memory: 256M
         reservations:
-          cpus: '0.1'
-          memory: 128M
+          cpus: '0.05'
+          memory: 64M
     restart: always
     networks:
       - default
@@ -28,7 +28,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     entrypoint: ["/app/docker-entrypoint-coolify.sh"]
-    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --worker-class gthread --threads 4 --timeout 60 --access-logfile - --error-logfile -
+    command: gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 1 --worker-class sync --threads 2 --timeout 120 --max-requests 1000 --max-requests-jitter 100 --access-logfile - --error-logfile -
     volumes:
       - django_static:/app/staticfiles
       - django_media:/app/media
@@ -58,11 +58,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '2'
-          memory: 2G
+          cpus: '1'
+          memory: 1.5G
         reservations:
-          cpus: '0.5'
-          memory: 512M
+          cpus: '0.25'
+          memory: 256M
     restart: always
     networks:
       - default
@@ -72,36 +72,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    command: celery -A config worker --loglevel=info --max-tasks-per-child=1000
-    environment:
-      - DEBUG=${DEBUG:-0}
-      - DATABASE_URL=${DATABASE_URL}
-      - REDIS_URL=${REDIS_URL:-redis://tg-redis:6379/1}
-      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://tg-redis:6379/0}
-      - IIKO_API_BASE_URL=${IIKO_API_BASE_URL}
-    depends_on:
-      tg-redis:
-        condition: service_healthy
-      backend:
-        condition: service_healthy
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1G
-        reservations:
-          cpus: '0.25'
-          memory: 256M
-    restart: always
-    networks:
-      - default
-      - coolify
-
-  celery-beat:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    command: celery -A config beat --loglevel=info
+    command: celery -A config worker --loglevel=warning --max-tasks-per-child=500 --concurrency=2 --prefetch-multiplier=2
     environment:
       - DEBUG=${DEBUG:-0}
       - DATABASE_URL=${DATABASE_URL}
@@ -126,6 +97,35 @@ services:
       - default
       - coolify
 
+  celery-beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A config beat --loglevel=warning
+    environment:
+      - DEBUG=${DEBUG:-0}
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_URL=${REDIS_URL:-redis://tg-redis:6379/1}
+      - CELERY_BROKER_URL=${CELERY_BROKER_URL:-redis://tg-redis:6379/0}
+      - IIKO_API_BASE_URL=${IIKO_API_BASE_URL}
+    depends_on:
+      tg-redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          cpus: '0.05'
+          memory: 64M
+    restart: always
+    networks:
+      - default
+      - coolify
+
   frontend:
     build:
       context: ./frontend
@@ -140,11 +140,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '1'
-          memory: 1G
+          cpus: '0.5'
+          memory: 512M
         reservations:
-          cpus: '0.25'
-          memory: 256M
+          cpus: '0.1'
+          memory: 128M
     restart: always
     networks:
       - default
@@ -166,11 +166,11 @@ services:
     deploy:
       resources:
         limits:
-          cpus: '0.5'
-          memory: 256M
+          cpus: '0.25'
+          memory: 128M
         reservations:
-          cpus: '0.1'
-          memory: 64M
+          cpus: '0.05'
+          memory: 32M
     restart: always
     networks:
       - default
