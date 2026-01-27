@@ -94,15 +94,24 @@
                     :key="addr.id"
                     @click="selectDeliveryAddress(addr)"
                     class="p-3 rounded-xl border-2 cursor-pointer transition-all"
-                    :class="form.delivery_address_id === addr.id ? 'border-primary-600 bg-primary-50' : 'border-gray-100 bg-white dark:bg-gray-800 dark:border-gray-700'"
+                    :class="form.delivery_address_id === addr.id 
+                        ? 'border-primary-600 bg-primary-50 dark:bg-primary-900/30' 
+                        : 'border-gray-100 bg-white dark:bg-gray-800 dark:border-gray-700'"
                 >
                     <div class="flex items-center gap-3">
-                        <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center" :class="form.delivery_address_id === addr.id ? 'border-primary-600' : 'border-gray-300'">
+                        <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center" :class="form.delivery_address_id === addr.id ? 'border-primary-600' : 'border-gray-300 dark:border-gray-600'">
                             <div v-if="form.delivery_address_id === addr.id" class="w-2.5 h-2.5 bg-primary-600 rounded-full"></div>
                         </div>
                         <div class="flex-1">
                             <div class="flex items-center gap-2">
-                                <span class="text-sm text-gray-900 dark:text-white">{{ addr.full_address }}</span>
+                                <span 
+                                    class="text-sm"
+                                    :class="form.delivery_address_id === addr.id 
+                                        ? 'text-gray-900 dark:text-gray-100' 
+                                        : 'text-gray-900 dark:text-white'"
+                                >
+                                    {{ addr.full_address }}
+                                </span>
                                 <!-- Индикация верификации -->
                                 <span v-if="addr.is_verified" class="text-sm" title="Адрес верифицирован">✅</span>
                                 <span v-else class="text-sm" title="Адрес не верифицирован">⚠️</span>
@@ -171,7 +180,7 @@
               class="mt-3 space-y-2"
             >
               <p class="text-xs text-gray-600 dark:text-gray-400">
-                Счет Kaspi будет выставлен на указанный номер после подтверждения заказа.
+                Удаленный счет будет выставлен на указанный номер после подтверждения заказа.
               </p>
 
               <div class="flex items-center justify-between bg-gray-50 dark:bg-gray-800 rounded-xl px-3 py-2">

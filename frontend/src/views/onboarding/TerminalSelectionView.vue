@@ -134,8 +134,9 @@ async function selectTerminal(terminal) {
       const terminalIds = currentTerminals.map(t => typeof t === 'object' ? t.id || t.terminal_id : t)
       
       // Добавляем выбранный терминал, если его еще нет
-      if (!terminalIds.includes(terminal.id || terminal.terminal_id)) {
-        terminalIds.push(terminal.id || terminal.terminal_id)
+      const terminalId = terminal.id || terminal.terminal_id
+      if (!terminalIds.includes(terminalId)) {
+        terminalIds.push(terminalId)
       }
       
       // Обновляем пользователя через API
@@ -144,15 +145,36 @@ async function selectTerminal(terminal) {
         terminals: terminalIds 
       })
       
-      // Перезагружаем данные пользователя для получения обновленных терминалов
-      await authStore.fetchCurrentUser()
+      // Принудительно перезагружаем данные пользователя (force=true) для получения обновленных терминалов
+      await authStore.fetchCurrentUser(true)
+      
+      // Проверяем, что терминалы действительно обновились
+      let updatedUser = authStore.user
+      if (!updatedUser?.terminals || updatedUser.terminals.length === 0) {
+        console.warn('Terminals not updated after fetchCurrentUser, retrying...')
+        // Повторная попытка через небольшую задержку
+        await new Promise(resolve => setTimeout(resolve, 500))
+        await authStore.fetchCurrentUser(true)
+        updatedUser = authStore.user
+      }
+      
+      // Убеждаемся, что терминалы обновились перед переходом
+      if (!updatedUser?.terminals || updatedUser.terminals.length === 0) {
+        throw new Error('Не удалось обновить терминалы пользователя')
+      }
     }
     
-    // Переходим к меню
-    router.push('/menu')
+    // Небольшая задержка перед редиректом, чтобы роутер guard успел увидеть обновленные данные
+    await new Promise(resolve => setTimeout(resolve, 100))
+    
+    // Используем router.replace вместо push, чтобы не создавать новую запись в истории
+    // и избежать проблем с роутер guard
+    await router.replace('/menu')
   } catch (err) {
     console.error('Select terminal error:', err)
     error.value = err.response?.data?.detail || err.response?.data?.error || 'Не удалось выбрать терминал'
+  } finally {
+    // Всегда сбрасываем состояние загрузки
     saving.value = false
   }
 }
