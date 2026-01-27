@@ -46,6 +46,12 @@ const routes = [
         meta: { requiresAuth: true }
     },
     {
+        path: '/fast-menu/:groupId',
+        name: 'fast-menu-group',
+        component: () => import('@/views/FastMenuGroupView.vue'),
+        meta: { requiresAuth: true }
+    },
+    {
         path: '/login',
         name: 'login',
         component: () => import('@/views/LoginView.vue'),
@@ -145,6 +151,11 @@ const routes = [
                 path: 'modifiers',
                 name: 'admin-modifiers',
                 component: () => import('@/views/admin/ModifiersManagement.vue')
+            },
+            {
+                path: 'fast-menu',
+                name: 'admin-fast-menu',
+                component: () => import('@/views/admin/FastMenuManagement.vue')
             }
         ]
     }

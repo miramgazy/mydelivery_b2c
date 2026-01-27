@@ -31,13 +31,18 @@
           <label class="block text-sm font-semibold text-gray-700 mb-2">
             Город <span class="text-red-500">*</span>
           </label>
-          <input
-            v-model="form.city_name"
-            type="text"
+          <select
+            v-model="form.city_id"
             required
-            class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            placeholder="Например: Алматы"
-          />
+            class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 bg-white"
+            :disabled="loadingCities"
+          >
+            <option value="">Выберите город</option>
+            <option v-for="city in cities" :key="city.id" :value="city.id">
+              {{ city.name }}
+            </option>
+          </select>
+          <p v-if="loadingCities" class="text-xs text-gray-500 mt-1">Загрузка городов...</p>
         </div>
 
         <!-- Street -->
@@ -125,12 +130,13 @@ import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import deliveryAddressService from '@/services/delivery-address.service'
+import { getCities } from '@/services/organization.service'
 
 const router = useRouter()
 const authStore = useAuthStore()
 
 const form = reactive({
-  city_name: '',
+  city_id: '',
   street_name: '',
   house: '',
   flat: '',
@@ -139,6 +145,8 @@ const form = reactive({
 
 const saving = ref(false)
 const error = ref('')
+const cities = ref([])
+const loadingCities = ref(false)
 
 onMounted(async () => {
   // Организация теперь определяется по контексту бота.
@@ -146,7 +154,28 @@ onMounted(async () => {
   if (!authStore.user?.organization) {
     await authStore.fetchCurrentUser()
   }
+  
+  // Загружаем города организации
+  await loadCities()
 })
+
+async function loadCities() {
+  if (!authStore.user?.organization) {
+    return
+  }
+  
+  loadingCities.value = true
+  try {
+    // Загружаем города с фильтрацией по организации на сервере
+    const response = await getCities(authStore.user.organization)
+    cities.value = Array.isArray(response) ? response : []
+  } catch (err) {
+    console.error('Failed to load cities:', err)
+    error.value = 'Не удалось загрузить список городов'
+  } finally {
+    loadingCities.value = false
+  }
+}
 
 async function handleSubmit() {
   // В текущей архитектуре пользователь должен быть привязан к организации через бота
@@ -155,7 +184,7 @@ async function handleSubmit() {
     return
   }
 
-  if (!form.city_name || !form.street_name || !form.house) {
+  if (!form.city_id || !form.street_name || !form.house) {
     error.value = 'Заполните обязательные поля: город, улица, дом'
     return
   }
@@ -164,9 +193,13 @@ async function handleSubmit() {
   error.value = ''
 
   try {
+    // Получаем название города для обратной совместимости
+    const city = cities.value.find(c => c.id === form.city_id)
+    
     // Создаем адрес доставки
     await deliveryAddressService.createAddress({
-      city_name: form.city_name,
+      city: form.city_id, // ID города из справочника
+      city_name: city ? city.name : '', // Название города для обратной совместимости
       street_name: form.street_name,
       house: form.house,
       flat: form.flat,

@@ -56,6 +56,26 @@
         </div>
     </div>
 
+    <!-- Fast Menu Groups -->
+    <div class="px-4 mt-4" v-if="fastMenuGroups.length > 0">
+        <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-3">Быстрое меню</h3>
+        <div class="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
+            <button
+                v-for="group in fastMenuGroups"
+                :key="group.id"
+                @click="openFastMenuGroup(group)"
+                class="flex-shrink-0 px-4 py-3 bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-100 dark:border-gray-700"
+            >
+                <div class="flex items-center gap-2">
+                    <svg class="w-5 h-5 text-yellow-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    <span class="font-semibold text-gray-900 dark:text-white">{{ group.name }}</span>
+                </div>
+            </button>
+        </div>
+    </div>
+
     <!-- Features Grid -->
     <div class="p-4 grid grid-cols-2 gap-4 mt-2">
         <router-link to="/orders" class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm hover:shadow-md transition-shadow">
@@ -98,21 +118,41 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useOrdersStore } from '@/stores/orders'
+import fastMenuService from '@/services/fast-menu.service'
 
+const router = useRouter()
 const authStore = useAuthStore()
 const ordersStore = useOrdersStore()
 
 const user = computed(() => authStore.user)
 const isAdmin = computed(() => authStore.isSuperAdmin || authStore.isOrgAdmin)
 const activeOrder = computed(() => ordersStore.activeOrders[0])
+const fastMenuGroups = ref([])
 
-onMounted(() => {
+onMounted(async () => {
     // Refresh orders to check active one
     ordersStore.fetchMyOrders().catch(console.error)
+    
+    // Load fast menu groups
+    try {
+        const terminalId = user.value?.terminals?.[0]?.terminal_id || user.value?.terminals?.[0]?.id || null
+        fastMenuGroups.value = await fastMenuService.getPublicGroups(terminalId)
+    } catch (err) {
+        console.error('Failed to load fast menu groups:', err)
+    }
 })
+
+const openFastMenuGroup = (group) => {
+    router.push({
+        name: 'fast-menu-group',
+        params: { groupId: group.id },
+        query: { name: group.name }
+    })
+}
 </script>
 
 <style scoped>

@@ -151,6 +151,14 @@
             <Icon icon="mdi:tune" class="w-5 h-5" />
             <span v-if="sidebarOpen">Модификаторы</span>
           </router-link>
+          <router-link
+            to="/admin/fast-menu"
+            class="nav-item"
+            active-class="nav-item-active"
+          >
+            <Icon icon="mdi:flash" class="w-5 h-5" />
+            <span v-if="sidebarOpen">Быстрое меню</span>
+          </router-link>
         </div>
 
         <!-- Logout -->
@@ -224,6 +232,7 @@ const pageTitle = computed(() => {
     '/admin/users': 'Пользователи',
     '/admin/products': 'Продукты',
     '/admin/modifiers': 'Модификаторы',
+    '/admin/fast-menu': 'Быстрое меню',
   }
   return titles[route.path] || 'Админ панель'
 })

@@ -228,3 +228,70 @@ class StopList(models.Model):
     
     def __str__(self):
         return f"{self.product_name} - остаток: {self.balance}"
+
+
+class FastMenuGroup(models.Model):
+    """Группа быстрого меню (подборка товаров)"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField('Название группы', max_length=255)
+    organization = models.ForeignKey(
+        'organizations.Organization',
+        on_delete=models.CASCADE,
+        related_name='fast_menu_groups',
+        verbose_name='Организация'
+    )
+    is_active = models.BooleanField('Активна', default=True)
+    order = models.PositiveIntegerField('Порядок сортировки', default=0)
+    
+    created_at = models.DateTimeField('Создана', auto_now_add=True)
+    updated_at = models.DateTimeField('Обновлена', auto_now=True)
+    
+    class Meta:
+        db_table = 'fast_menu_groups'
+        verbose_name = 'Группа быстрого меню'
+        verbose_name_plural = 'Группы быстрого меню'
+        ordering = ['order', 'name']
+        indexes = [
+            models.Index(fields=['organization']),
+            models.Index(fields=['is_active']),
+            models.Index(fields=['order']),
+        ]
+    
+    def __str__(self):
+        return f"{self.name} ({self.organization.org_name})"
+
+
+class FastMenuItem(models.Model):
+    """Элемент быстрого меню (связь группы с товаром)"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    group = models.ForeignKey(
+        FastMenuGroup,
+        on_delete=models.CASCADE,
+        related_name='items',
+        verbose_name='Группа'
+    )
+    product = models.ForeignKey(
+        Product,
+        on_delete=models.CASCADE,
+        related_name='fast_menu_items',
+        verbose_name='Товар'
+    )
+    order = models.IntegerField('Порядок', default=0)
+    
+    created_at = models.DateTimeField('Создан', auto_now_add=True)
+    updated_at = models.DateTimeField('Обновлен', auto_now=True)
+    
+    class Meta:
+        db_table = 'fast_menu_items'
+        verbose_name = 'Элемент быстрого меню'
+        verbose_name_plural = 'Элементы быстрого меню'
+        ordering = ['order', 'product__product_name']
+        unique_together = [['group', 'product']]
+        indexes = [
+            models.Index(fields=['group']),
+            models.Index(fields=['product']),
+            models.Index(fields=['order']),
+        ]
+    
+    def __str__(self):
+        return f"{self.group.name} - {self.product.product_name}"

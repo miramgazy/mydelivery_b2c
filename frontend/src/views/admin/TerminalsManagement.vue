@@ -73,6 +73,9 @@
                 Интервал обновления (мин)
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Рабочее время
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Статус
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -109,6 +112,35 @@
                          bg-white dark:bg-gray-700 text-gray-900 dark:text-white
                          focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 />
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="flex items-center gap-2">
+                  <div class="flex flex-col gap-1">
+                    <label class="text-xs text-gray-500 dark:text-gray-400">Начало</label>
+                    <input
+                      :value="getWorkingHoursValue(terminal, 'start')"
+                      @input="(e) => setWorkingHoursValue(terminal, 'start', e.target.value)"
+                      @blur="updateWorkingHours(terminal)"
+                      type="time"
+                      class="w-24 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded 
+                             bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+                             focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                  <span class="text-gray-400 mt-5">-</span>
+                  <div class="flex flex-col gap-1">
+                    <label class="text-xs text-gray-500 dark:text-gray-400">Конец</label>
+                    <input
+                      :value="getWorkingHoursValue(terminal, 'end')"
+                      @input="(e) => setWorkingHoursValue(terminal, 'end', e.target.value)"
+                      @blur="updateWorkingHours(terminal)"
+                      type="time"
+                      class="w-24 px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded 
+                             bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+                             focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    />
+                  </div>
+                </div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 <div class="flex items-center gap-3">
@@ -240,6 +272,85 @@ const handleLoadFromIiko = async () => {
     }, 3000)
   } catch (err) {
     error.value = organizationStore.error || 'Не удалось загрузить терминалы из IIKO'
+  }
+}
+
+// Хранилище временных значений рабочего времени для каждого терминала
+const workingHoursTemp = ref({})
+
+// Получение значения рабочего времени (из временного хранилища или из терминала)
+const getWorkingHoursValue = (terminal, field) => {
+  // Инициализируем, если еще нет
+  if (!workingHoursTemp.value[terminal.id]) {
+    workingHoursTemp.value[terminal.id] = {
+      start: terminal.working_hours?.start || '',
+      end: terminal.working_hours?.end || ''
+    }
+  }
+  return workingHoursTemp.value[terminal.id][field] || ''
+}
+
+// Установка временного значения рабочего времени
+const setWorkingHoursValue = (terminal, field, value) => {
+  if (!workingHoursTemp.value[terminal.id]) {
+    workingHoursTemp.value[terminal.id] = {
+      start: terminal.working_hours?.start || '',
+      end: terminal.working_hours?.end || ''
+    }
+  }
+  workingHoursTemp.value[terminal.id][field] = value
+}
+
+const updateWorkingHours = async (terminal) => {
+  // Инициализируем временные значения, если их еще нет
+  if (!workingHoursTemp.value[terminal.id]) {
+    workingHoursTemp.value[terminal.id] = {
+      start: terminal.working_hours?.start || '',
+      end: terminal.working_hours?.end || ''
+    }
+  }
+  
+  const tempHours = workingHoursTemp.value[terminal.id]
+  
+  // Сохраняем только если указаны оба поля (начало и конец)
+  if (!tempHours.start || !tempHours.end) {
+    return // Не сохраняем, если не заполнены оба поля
+  }
+  
+  // Проверяем, изменились ли значения
+  const currentStart = terminal.working_hours?.start || ''
+  const currentEnd = terminal.working_hours?.end || ''
+  
+  if (tempHours.start === currentStart && tempHours.end === currentEnd) {
+    return // Значения не изменились, не нужно сохранять
+  }
+
+  try {
+    error.value = null
+    
+    const updatedWorkingHours = {
+      start: tempHours.start,
+      end: tempHours.end
+    }
+    
+    await organizationService.updateTerminal(terminal.id, {
+      working_hours: updatedWorkingHours
+    })
+    
+    // Обновляем локальное состояние терминала
+    terminal.working_hours = updatedWorkingHours
+    
+    successMessage.value = 'Рабочее время сохранено'
+    setTimeout(() => {
+      successMessage.value = ''
+    }, 2000)
+  } catch (err) {
+    error.value = err.response?.data?.error || 'Не удалось обновить рабочее время'
+    // Восстанавливаем исходные значения при ошибке
+    workingHoursTemp.value[terminal.id] = {
+      start: terminal.working_hours?.start || '',
+      end: terminal.working_hours?.end || ''
+    }
   }
 }
 

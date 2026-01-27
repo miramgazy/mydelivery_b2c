@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Menu, ProductCategory, Product, Modifier, StopList
+from .models import Menu, ProductCategory, Product, Modifier, StopList, FastMenuGroup, FastMenuItem
 
 class BaseProductAdmin(admin.ModelAdmin):
     """Базовый класс для админки с поддержкой UUID фильтров и прав доступа по организации"""
@@ -117,3 +117,21 @@ class StopListAdmin(BaseProductAdmin):
     list_display = ('product', 'organization', 'reason', 'is_auto_added', 'created_at')
     list_filter = (('organization', admin.RelatedOnlyFieldListFilter), 'is_auto_added')
     search_fields = ('product__product_name', 'reason')
+
+@admin.register(FastMenuGroup)
+class FastMenuGroupAdmin(BaseProductAdmin):
+    list_display = ('name', 'organization', 'is_active', 'order', 'created_at')
+    list_filter = (('organization', admin.RelatedOnlyFieldListFilter), 'is_active')
+    search_fields = ('name',)
+    ordering = ('order', 'name')
+
+@admin.register(FastMenuItem)
+class FastMenuItemAdmin(BaseProductAdmin):
+    list_display = ('group', 'product', 'order')
+    list_filter = (
+        ('group__organization', admin.RelatedOnlyFieldListFilter),
+        ('group', admin.RelatedOnlyFieldListFilter),
+        ('product__organization', admin.RelatedOnlyFieldListFilter)
+    )
+    search_fields = ('group__name', 'product__product_name')
+    ordering = ('group', 'order')

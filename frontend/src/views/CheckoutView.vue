@@ -246,6 +246,59 @@ const formatPrice = (price) => {
   return new Intl.NumberFormat('ru-KZ').format(price)
 }
 
+// Функция проверки рабочего времени
+const checkWorkingHours = () => {
+    // Определяем терминал
+    let terminal = null
+    if (form.terminal_id) {
+        // Ищем терминал по terminal_id или id (оба могут быть в данных)
+        terminal = authStore.user?.terminals?.find(t => 
+            t.terminal_id === form.terminal_id || t.id === form.terminal_id
+        )
+    } else if (authStore.user?.terminals?.length === 1) {
+        terminal = authStore.user.terminals[0]
+    }
+    
+    // Если терминал не найден или нет настроек рабочего времени, пропускаем проверку
+    if (!terminal || !terminal.working_hours || !terminal.working_hours.start || !terminal.working_hours.end) {
+        return true // Разрешаем оформление, если рабочее время не настроено
+    }
+    
+    const { start, end } = terminal.working_hours
+    const now = new Date()
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+    
+    // Преобразуем время в минуты для удобства сравнения
+    const timeToMinutes = (timeStr) => {
+        const [hours, minutes] = timeStr.split(':').map(Number)
+        return hours * 60 + minutes
+    }
+    
+    const currentMinutes = timeToMinutes(currentTime)
+    const startMinutes = timeToMinutes(start)
+    const endMinutes = timeToMinutes(end)
+    
+    // Проверяем, находится ли текущее время в рабочем диапазоне
+    let isWorkingTime = false
+    
+    if (startMinutes <= endMinutes) {
+        // Обычный случай: рабочее время в пределах одного дня (например, 09:00 - 22:00)
+        isWorkingTime = currentMinutes >= startMinutes && currentMinutes < endMinutes
+    } else {
+        // Переход через полночь (например, 18:00 - 04:00)
+        // Рабочее время: с 18:00 до 23:59 или с 00:00 до 04:00
+        isWorkingTime = currentMinutes >= startMinutes || currentMinutes < endMinutes
+    }
+    
+    if (!isWorkingTime) {
+        const message = `Извините, мы сейчас не принимаем заказы. Время работы: с ${start} до ${end}`
+        telegramService.showAlert(message)
+        return false
+    }
+    
+    return true
+}
+
 const submitOrder = async () => {
     // Validation
     if (!form.phone || form.phone.length < 10) {
@@ -263,6 +316,11 @@ const submitOrder = async () => {
     }
     if (authStore.user?.terminals?.length > 1 && !form.terminal_id) {
         telegramService.showAlert('Выберите филиал для заказа')
+        return
+    }
+    
+    // Проверка рабочего времени
+    if (!checkWorkingHours()) {
         return
     }
 

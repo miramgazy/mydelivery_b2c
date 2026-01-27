@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import User, Role, DeliveryAddress
 from apps.organizations.serializers import TerminalSerializer
-from apps.organizations.models import Terminal
+from apps.organizations.models import Terminal, City
 
 
 class RoleSerializer(serializers.ModelSerializer):
@@ -20,7 +20,7 @@ class DeliveryAddressSerializer(serializers.ModelSerializer):
     class Meta:
         model = DeliveryAddress
         fields = [
-            'id', 'user', 'city_name', 'iiko_city_id',
+            'id', 'user', 'city', 'city_name', 'iiko_city_id',
             'street', 'street_name', 'iiko_street_id',
             'house', 'flat', 'entrance', 'floor',
             'latitude', 'longitude', 'comment',
@@ -47,6 +47,23 @@ class DeliveryAddressSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({
                 'longitude': 'Долгота должна быть в диапазоне от -180 до 180'
             })
+        
+        # Если передан city (ID города из справочника), но не передан city_name,
+        # автоматически заполняем city_name из выбранного города
+        city_id = attrs.get('city')
+        city_name = attrs.get('city_name')
+        
+        if city_id and not city_name:
+            try:
+                # city_id может быть UUID или объектом City
+                if isinstance(city_id, City):
+                    attrs['city_name'] = city_id.name
+                else:
+                    # Если это ID, получаем объект
+                    city = City.objects.get(city_id=city_id)
+                    attrs['city_name'] = city.name
+            except City.DoesNotExist:
+                pass  # Если город не найден, оставляем city_name пустым
         
         return attrs
 

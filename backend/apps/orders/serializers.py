@@ -1,9 +1,10 @@
 from rest_framework import serializers
 from decimal import Decimal
+from datetime import datetime, time
 from .models import Order, OrderItem, OrderItemModifier
 from apps.products.models import Product, Modifier, StopList
 from apps.users.models import DeliveryAddress
-from apps.organizations.models import PaymentType
+from apps.organizations.models import PaymentType, Terminal
 
 
 class OrderItemModifierSerializer(serializers.ModelSerializer):
@@ -290,6 +291,46 @@ class OrderCreateSerializer(serializers.Serializer):
                     raise serializers.ValidationError('Адрес доставки не найден')
         return value
     
+    def validate_terminal_id(self, value):
+        """Проверка терминала и рабочего времени"""
+        if value:
+            request = self.context.get('request')
+            if request and hasattr(request, 'user'):
+                try:
+                    terminal = Terminal.objects.get(terminal_id=value)
+                    
+                    # Проверяем рабочее время
+                    working_hours = terminal.working_hours
+                    if working_hours and working_hours.get('start') and working_hours.get('end'):
+                        now = datetime.now()
+                        current_time = now.time()
+                        
+                        # Парсим время начала и конца
+                        start_parts = working_hours['start'].split(':')
+                        end_parts = working_hours['end'].split(':')
+                        start_time = time(int(start_parts[0]), int(start_parts[1]))
+                        end_time = time(int(end_parts[0]), int(end_parts[1]))
+                        
+                        # Проверяем, находится ли текущее время в рабочем диапазоне
+                        is_working_time = False
+                        
+                        if start_time <= end_time:
+                            # Обычный случай: рабочее время в пределах одного дня
+                            is_working_time = start_time <= current_time < end_time
+                        else:
+                            # Переход через полночь (например, 18:00 - 04:00)
+                            is_working_time = current_time >= start_time or current_time < end_time
+                        
+                        if not is_working_time:
+                            raise serializers.ValidationError(
+                                f'Извините, мы сейчас не принимаем заказы. Время работы: с {working_hours["start"]} до {working_hours["end"]}'
+                            )
+                    
+                    return value
+                except Terminal.DoesNotExist:
+                    raise serializers.ValidationError('Терминал не найден')
+        return value
+    
     def validate_items(self, value):
         """Проверка позиций заказа"""
         if not value:
@@ -307,6 +348,7 @@ class OrderCreateSerializer(serializers.Serializer):
         longitude = attrs.get('longitude')
         street_id = attrs.get('street_id')
         house = attrs.get('house')
+        terminal_id = attrs.get('terminal_id')
         
         # Должен быть указан либо адрес, либо координаты
         if not delivery_address_id:
@@ -315,5 +357,34 @@ class OrderCreateSerializer(serializers.Serializer):
                     raise serializers.ValidationError(
                         'Необходимо указать адрес доставки, координаты или данные улицы и дома'
                     )
+        
+        # Если terminal_id не указан, но у пользователя есть терминалы, проверяем первый
+        request = self.context.get('request')
+        if not terminal_id and request and hasattr(request, 'user'):
+            user = request.user
+            if hasattr(user, 'terminals') and user.terminals.exists():
+                # Берем первый активный терминал пользователя
+                terminal = user.terminals.filter(is_active=True).first()
+                if terminal:
+                    working_hours = terminal.working_hours
+                    if working_hours and working_hours.get('start') and working_hours.get('end'):
+                        now = datetime.now()
+                        current_time = now.time()
+                        
+                        start_parts = working_hours['start'].split(':')
+                        end_parts = working_hours['end'].split(':')
+                        start_time = time(int(start_parts[0]), int(start_parts[1]))
+                        end_time = time(int(end_parts[0]), int(end_parts[1]))
+                        
+                        is_working_time = False
+                        if start_time <= end_time:
+                            is_working_time = start_time <= current_time < end_time
+                        else:
+                            is_working_time = current_time >= start_time or current_time < end_time
+                        
+                        if not is_working_time:
+                            raise serializers.ValidationError(
+                                f'Извините, мы сейчас не принимаем заказы. Время работы: с {working_hours["start"]} до {working_hours["end"]}'
+                            )
         
         return attrs

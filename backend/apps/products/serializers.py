@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Menu, ProductCategory, Product, Modifier, StopList
+from .models import Menu, ProductCategory, Product, Modifier, StopList, FastMenuGroup, FastMenuItem
 
 
 class MenuSerializer(serializers.ModelSerializer):
@@ -174,3 +174,92 @@ class StopListSerializer(serializers.ModelSerializer):
             'reason', 'is_auto_added',
             'updated_at'
         ]
+
+
+class FastMenuItemSerializer(serializers.ModelSerializer):
+    """Сериализатор для элемента быстрого меню"""
+    product = ProductListSerializer(read_only=True)
+    product_id = serializers.UUIDField(write_only=True, required=False)
+    
+    class Meta:
+        model = FastMenuItem
+        fields = ['id', 'product', 'product_id', 'order']
+        read_only_fields = ['id']
+
+
+class FastMenuGroupSerializer(serializers.ModelSerializer):
+    """Сериализатор для группы быстрого меню (для админки)"""
+    items = FastMenuItemSerializer(many=True, read_only=True)
+    organization_name = serializers.CharField(source='organization.org_name', read_only=True)
+    items_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = FastMenuGroup
+        fields = [
+            'id', 'name', 'organization', 'organization_name',
+            'is_active', 'order', 'items', 'items_count',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+    
+    def get_items_count(self, obj):
+        """Возвращает количество элементов в группе"""
+        return obj.items.count()
+
+
+class FastMenuGroupPublicSerializer(serializers.ModelSerializer):
+    """Сериализатор для группы быстрого меню (для TMA)"""
+    products = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = FastMenuGroup
+        fields = ['id', 'name', 'products', 'order']
+    
+    def get_products(self, obj):
+        """Возвращает список продуктов группы, исключая те, что в стоп-листе"""
+        request = self.context.get('request')
+        if not request or not hasattr(request, 'user'):
+            return []
+        
+        user = request.user
+        if not user.organization:
+            return []
+        
+        # Получаем terminal_id из query параметров
+        terminal_id = request.query_params.get('terminal_id')
+        
+        # Получаем все элементы группы с продуктами
+        items = obj.items.select_related('product', 'product__category').prefetch_related(
+            'product__modifiers'
+        ).order_by('order')
+        
+        # Фильтруем продукты по стоп-листу
+        from apps.products.models import StopList
+        stop_list_query = StopList.objects.filter(
+            organization=user.organization
+        )
+        
+        # Если указан terminal_id, фильтруем по нему
+        if terminal_id:
+            try:
+                from apps.organizations.models import Terminal
+                terminal = Terminal.objects.get(terminal_id=terminal_id)
+                stop_list_query = stop_list_query.filter(terminal=terminal)
+            except (Terminal.DoesNotExist, ValueError):
+                pass
+        
+        stop_list_product_ids = set(stop_list_query.values_list('product_id', flat=True))
+        
+        # Формируем список продуктов, исключая те, что в стоп-листе
+        products = []
+        for item in items:
+            product = item.product
+            # Пропускаем продукты, которые в стоп-листе или недоступны
+            if product.product_id in stop_list_product_ids or not product.is_available:
+                continue
+            
+            # Используем ProductListSerializer для сериализации
+            product_serializer = ProductListSerializer(product, context={'request': request})
+            products.append(product_serializer.data)
+        
+        return products

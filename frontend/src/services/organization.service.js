@@ -100,8 +100,12 @@ export const toggleTerminalActive = async (terminalId) => {
 }
 
 // Get cities list
-export const getCities = async () => {
-    const response = await api.get('/cities/')
+export const getCities = async (organizationId = null) => {
+    const params = {}
+    if (organizationId) {
+        params.organization = organizationId
+    }
+    const response = await api.get('/cities/', { params })
     return response.data.results || response.data
 }
 

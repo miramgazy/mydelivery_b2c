@@ -42,6 +42,15 @@ class Terminal(models.Model):
         help_text='Массив объектов зон доставки с координатами, названием, приоритетом, цветом и типом доставки'
     )
     
+    # Рабочее время терминала
+    working_hours = models.JSONField(
+        'Рабочее время',
+        default=dict,
+        blank=True,
+        null=True,
+        help_text="Рабочее время терминала в формате {'start': 'HH:mm', 'end': 'HH:mm'}"
+    )
+    
     is_active = models.BooleanField('Активен', default=True)
     
     created_at = models.DateTimeField('Создан', auto_now_add=True)

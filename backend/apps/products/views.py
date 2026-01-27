@@ -1,11 +1,15 @@
-from rest_framework import viewsets, permissions, filters
+from rest_framework import viewsets, permissions, filters, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Prefetch
-from .models import Menu, ProductCategory, Product, Modifier, StopList
+from django.db import transaction
+from .models import Menu, ProductCategory, Product, Modifier, StopList, FastMenuGroup, FastMenuItem
 from .serializers import (
     MenuSerializer, ProductCategorySerializer,
     ProductListSerializer, ProductDetailSerializer,
-    ModifierSerializer, StopListSerializer
+    ModifierSerializer, StopListSerializer,
+    FastMenuGroupSerializer, FastMenuGroupPublicSerializer, FastMenuItemSerializer
 )
 from core.permissions import IsSuperAdmin, IsOrgAdmin
 
@@ -197,3 +201,156 @@ class StopListViewSet(viewsets.ModelViewSet):
         product = serializer.validated_data.get('product')
         if product:
             serializer.save(product_name=product.product_name)
+
+
+class FastMenuGroupViewSet(viewsets.ModelViewSet):
+    """ViewSet для групп быстрого меню (админка)"""
+    queryset = FastMenuGroup.objects.select_related('organization').prefetch_related(
+        'items__product', 'items__product__category'
+    )
+    serializer_class = FastMenuGroupSerializer
+    permission_classes = [IsSuperAdmin | IsOrgAdmin]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['organization', 'is_active']
+    search_fields = ['name']
+    ordering_fields = ['order', 'name', 'created_at']
+    ordering = ['order', 'name']
+    
+    def get_queryset(self):
+        """Фильтрация групп по организации пользователя"""
+        user = self.request.user
+        queryset = self.queryset
+        
+        if user.is_org_admin:
+            # Используем ту же логику, что и в StopListViewSet
+            organization = None
+            
+            if hasattr(user, 'organization') and user.organization:
+                organization = user.organization
+            else:
+                try:
+                    user_terminals = user.terminals.all()
+                    if user_terminals.exists():
+                        first_terminal = user_terminals.first()
+                        if first_terminal and first_terminal.organization:
+                            organization = first_terminal.organization
+                except Exception:
+                    pass
+            
+            if not organization:
+                try:
+                    from apps.organizations.models import Organization
+                    organization = Organization.objects.filter(is_active=True).first()
+                except Exception:
+                    pass
+            
+            if organization:
+                queryset = queryset.filter(organization=organization)
+            else:
+                queryset = queryset.none()
+        
+        return queryset
+    
+    def perform_create(self, serializer):
+        """Автоматическое заполнение organization при создании"""
+        user = self.request.user
+        organization = serializer.validated_data.get('organization')
+        
+        if not organization and user.is_org_admin:
+            # Получаем организацию пользователя
+            if hasattr(user, 'organization') and user.organization:
+                organization = user.organization
+            else:
+                try:
+                    user_terminals = user.terminals.all()
+                    if user_terminals.exists():
+                        first_terminal = user_terminals.first()
+                        if first_terminal and first_terminal.organization:
+                            organization = first_terminal.organization
+                except Exception:
+                    pass
+            
+            if not organization:
+                try:
+                    from apps.organizations.models import Organization
+                    organization = Organization.objects.filter(is_active=True).first()
+                except Exception:
+                    pass
+        
+        if organization:
+            serializer.save(organization=organization)
+        else:
+            serializer.save()
+    
+    @action(detail=True, methods=['put', 'patch'], url_path='items')
+    def update_items(self, request, pk=None):
+        """Обновление списка товаров в группе"""
+        group = self.get_object()
+        product_ids = request.data.get('product_ids', [])
+        
+        if not isinstance(product_ids, list):
+            return Response(
+                {'error': 'product_ids должен быть массивом'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            with transaction.atomic():
+                # Удаляем все существующие элементы
+                group.items.all().delete()
+                
+                # Создаем новые элементы
+                products = Product.objects.filter(
+                    product_id__in=product_ids,
+                    organization=group.organization
+                )
+                
+                items = []
+                for order, product in enumerate(products):
+                    items.append(
+                        FastMenuItem(
+                            group=group,
+                            product=product,
+                            order=order
+                        )
+                    )
+                
+                FastMenuItem.objects.bulk_create(items)
+                
+                # Возвращаем обновленную группу
+                serializer = self.get_serializer(group)
+                return Response(serializer.data)
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
+class FastMenuGroupPublicViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet для групп быстрого меню (для TMA)"""
+    queryset = FastMenuGroup.objects.filter(is_active=True).prefetch_related(
+        Prefetch(
+            'items',
+            queryset=FastMenuItem.objects.select_related('product', 'product__category')
+                .prefetch_related('product__modifiers')
+                .order_by('order')
+        )
+    )
+    serializer_class = FastMenuGroupPublicSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['organization']
+    ordering_fields = ['order', 'name']
+    ordering = ['order', 'name']
+    pagination_class = None
+    
+    def get_queryset(self):
+        """Фильтрация групп по организации пользователя"""
+        user = self.request.user
+        queryset = self.queryset.filter(is_active=True)
+        
+        if not user.is_superadmin and user.organization:
+            queryset = queryset.filter(organization=user.organization)
+        
+        return queryset
