@@ -310,31 +310,45 @@ async function createAddress() {
 async function requestLocation() {
   if (requestingLocation.value) return
   
+  // Проверяем, есть ли адреса для обновления
+  if (addresses.value.length === 0) {
+    telegramService.showAlert('Сначала добавьте адрес доставки')
+    return
+  }
+  
   requestingLocation.value = true
   try {
-    // Вызываем метод Telegram для отправки геолокации
-    telegramService.requestLocation()
+    // Запрашиваем геолокацию через браузерный API (миниап может получить координаты напрямую)
+    const location = await telegramService.requestLocation()
     
-    // Координаты будут обработаны сторонним инструментом и записаны в БД
-    // Ждем 5-7 секунд и проверяем верификацию адресов
-    telegramService.showAlert('Геолокация отправлена. Ожидайте обработки...')
+    if (!location || !location.latitude || !location.longitude) {
+      telegramService.showAlert('Не удалось получить координаты')
+      return
+    }
     
-    // Ждем 6 секунд (среднее значение между 5-7)
-    await new Promise(resolve => setTimeout(resolve, 6000))
+    // Находим адрес по умолчанию или первый адрес
+    const addressToUpdate = addresses.value.find(addr => addr.is_default) || addresses.value[0]
     
-    // Обновляем список адресов для проверки верификации
+    if (!addressToUpdate) {
+      telegramService.showAlert('Не найден адрес для обновления')
+      return
+    }
+    
+    // Обновляем адрес с полученными координатами
+    // is_verified автоматически установится в True при сохранении (см. модель DeliveryAddress.save())
+    await deliveryAddressService.updateAddress(addressToUpdate.id, {
+      latitude: location.latitude,
+      longitude: location.longitude
+    })
+    
+    // Обновляем список адресов
     await refreshAll()
     
-    // Проверяем, есть ли верифицированные адреса
-    const verifiedAddresses = addresses.value.filter(addr => addr.is_verified)
-    if (verifiedAddresses.length === 0) {
-      telegramService.showAlert('Ошибка: данные о верификации не найдены. Пожалуйста, попробуйте еще раз.')
-    } else {
-      telegramService.showAlert('Геопозиция успешно обработана!')
-    }
+    telegramService.showAlert('Геопозиция успешно сохранена! Адрес верифицирован.')
   } catch (err) {
     console.error('Request location failed', err)
-    telegramService.showAlert('Ошибка при запросе геолокации')
+    const errorMessage = err.response?.data?.detail || err.message || 'Ошибка при сохранении геолокации'
+    telegramService.showAlert(errorMessage)
   } finally {
     requestingLocation.value = false
   }
