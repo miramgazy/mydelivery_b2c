@@ -9,6 +9,9 @@ export const useAuthStore = defineStore('auth', () => {
     const loading = ref(false)
     const accessCheckResult = ref(null)
     const error = ref(null)
+    const lastFetchTime = ref(0)
+    const isFetching = ref(false)
+    const CACHE_DURATION = 10000 // 10 секунд кэширования
 
     // Getters
     const isAuthenticated = computed(() => !!user.value)
@@ -114,18 +117,40 @@ export const useAuthStore = defineStore('auth', () => {
 
     /**
      * Загрузка данных текущего пользователя
+     * С кэшированием на 10 секунд для предотвращения избыточных запросов
      */
-    async function fetchCurrentUser() {
+    async function fetchCurrentUser(force = false) {
         if (!authService.isAuthenticated()) {
             return null
         }
 
+        // Проверка кэша - возвращаем кэшированные данные если они свежие
+        const now = Date.now()
+        if (!force && user.value && (now - lastFetchTime.value) < CACHE_DURATION) {
+            return user.value
+        }
+
+        // Предотвращаем параллельные запросы
+        if (isFetching.value) {
+            // Ждем завершения текущего запроса
+            return new Promise((resolve) => {
+                const checkInterval = setInterval(() => {
+                    if (!isFetching.value) {
+                        clearInterval(checkInterval)
+                        resolve(user.value)
+                    }
+                }, 100)
+            })
+        }
+
+        isFetching.value = true
         loading.value = true
         error.value = null
 
         try {
             const userData = await authService.getCurrentUser()
             user.value = userData
+            lastFetchTime.value = now
             return userData
         } catch (err) {
             console.error('Fetch current user error:', err)
@@ -139,6 +164,7 @@ export const useAuthStore = defineStore('auth', () => {
             return null
         } finally {
             loading.value = false
+            isFetching.value = false
         }
     }
 
@@ -203,3 +229,6 @@ export const useAuthStore = defineStore('auth', () => {
         clearError
     }
 })
+
+// Экспортируем константы для использования в других местах
+export const AUTH_CACHE_DURATION = 10000

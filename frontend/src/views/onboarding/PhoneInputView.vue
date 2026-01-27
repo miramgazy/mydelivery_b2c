@@ -141,7 +141,7 @@ function normalizePhoneValue(value) {
   return `+7${digits}`
 }
 
-async function waitForPhoneFromBackend({ maxWaitMs = 5000, intervalMs = 500 } = {}) {
+async function waitForPhoneFromBackend({ maxWaitMs = 5000, intervalMs = 2000 } = {}) {
   cleanupPhonePolling()
 
   // Быстрая попытка сразу
@@ -151,6 +151,11 @@ async function waitForPhoneFromBackend({ maxWaitMs = 5000, intervalMs = 500 } = 
   return await new Promise((resolve) => {
     const startedAt = Date.now()
     phonePollInterval = setInterval(async () => {
+      // Проверка видимости страницы - не делать запросы если страница скрыта
+      if (document.hidden) {
+        return
+      }
+      
       const current = await fetchPhoneFromBackendOnce()
       if (current) {
         cleanupPhonePolling()
@@ -170,16 +175,33 @@ async function waitForPhoneFromBackend({ maxWaitMs = 5000, intervalMs = 500 } = 
   })
 }
 
-function startBackgroundPhonePolling({ maxWaitMs = 30000, intervalMs = 1000 } = {}) {
+function startBackgroundPhonePolling({ maxWaitMs = 15000, intervalMs = 3000 } = {}) {
   cleanupPhonePolling()
 
   const startedAt = Date.now()
+  let attemptCount = 0
+  const maxAttempts = Math.ceil(maxWaitMs / intervalMs)
+  
   backgroundPollInterval = setInterval(async () => {
+    // Проверка видимости страницы - не делать запросы если страница скрыта
+    if (document.hidden) {
+      cleanupPhonePolling()
+      return
+    }
+    
     // Не перетираем ручной ввод
     if (phone.value) {
       cleanupPhonePolling()
       return
     }
+    
+    // Экспоненциальный backoff: увеличиваем интервал с каждой попыткой
+    attemptCount++
+    if (attemptCount > maxAttempts) {
+      cleanupPhonePolling()
+      return
+    }
+    
     const current = await fetchPhoneFromBackendOnce()
     if (current) {
       phone.value = normalizePhoneValue(current)

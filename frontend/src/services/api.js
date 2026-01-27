@@ -22,9 +22,16 @@ api.interceptors.request.use(
             config.headers.Authorization = `Bearer ${token}`
         }
 
-        // Анти-кэш и уникализация запроса
-        config.params = config.params || {};
-        config.params._t = Date.now();
+        // Анти-кэш только для POST/PUT/DELETE или если явно указано skipCacheBust: false
+        // Для GET запросов не добавляем _t, чтобы использовать кэш браузера/прокси
+        const method = config.method?.toLowerCase() || 'get'
+        const shouldBustCache = config.skipCacheBust === false || 
+                               ['post', 'put', 'patch', 'delete'].includes(method)
+        
+        if (shouldBustCache) {
+            config.params = config.params || {};
+            config.params._t = Date.now();
+        }
 
         return config
     },
