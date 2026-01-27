@@ -102,7 +102,7 @@
                         </div>
                         <div class="flex-1">
                             <div class="flex items-center gap-2">
-                                <span class="text-sm">{{ addr.full_address }}</span>
+                                <span class="text-sm text-gray-900 dark:text-white">{{ addr.full_address }}</span>
                                 <!-- Индикация верификации -->
                                 <span v-if="addr.is_verified" class="text-sm" title="Адрес верифицирован">✅</span>
                                 <span v-else class="text-sm" title="Адрес не верифицирован">⚠️</span>
@@ -135,9 +135,9 @@
                 </button>
              </div>
 
-             <div v-else class="p-4 bg-orange-50 text-orange-700 rounded-xl text-sm">
+             <div v-else class="p-4 bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-300 rounded-xl text-sm border border-orange-200 dark:border-orange-800">
                  У вас нет сохраненных адресов. Пожалуйста, добавьте адрес в профиле.
-                 <button @click="$router.push('/profile/addresses')" class="block mt-2 font-bold underline">Добавить адрес</button>
+                 <button @click="$router.push('/profile/addresses')" class="block mt-2 font-bold underline text-orange-800 dark:text-orange-200">Добавить адрес</button>
              </div>
 
              <textarea 
