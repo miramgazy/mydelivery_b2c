@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from decimal import Decimal
-from datetime import datetime, time
+from datetime import time
+from django.utils import timezone
 from .models import Order, OrderItem, OrderItemModifier
 from apps.products.models import Product, Modifier, StopList
 from apps.users.models import DeliveryAddress
@@ -318,24 +319,29 @@ class OrderCreateSerializer(serializers.Serializer):
                     # Проверяем рабочее время
                     working_hours = terminal.working_hours
                     if working_hours and working_hours.get('start') and working_hours.get('end'):
-                        now = datetime.now()
-                        current_time = now.time()
+                        # Используем timezone.now() для получения времени в часовом поясе проекта
+                        now = timezone.now()
+                        current_time_str = now.strftime('%H:%M')
                         
-                        # Парсим время начала и конца
-                        start_parts = working_hours['start'].split(':')
-                        end_parts = working_hours['end'].split(':')
-                        start_time = time(int(start_parts[0]), int(start_parts[1]))
-                        end_time = time(int(end_parts[0]), int(end_parts[1]))
+                        # Преобразуем время в минуты для удобства сравнения
+                        def time_to_minutes(time_str: str) -> int:
+                            hours, minutes = map(int, time_str.split(':'))
+                            return hours * 60 + minutes
+                        
+                        current_minutes = time_to_minutes(current_time_str)
+                        start_minutes = time_to_minutes(working_hours['start'])
+                        end_minutes = time_to_minutes(working_hours['end'])
                         
                         # Проверяем, находится ли текущее время в рабочем диапазоне
                         is_working_time = False
                         
-                        if start_time <= end_time:
-                            # Обычный случай: рабочее время в пределах одного дня
-                            is_working_time = start_time <= current_time < end_time
+                        if start_minutes <= end_minutes:
+                            # Обычный случай: рабочее время в пределах одного дня (например, 09:00 - 22:00)
+                            is_working_time = start_minutes <= current_minutes < end_minutes
                         else:
                             # Переход через полночь (например, 18:00 - 04:00)
-                            is_working_time = current_time >= start_time or current_time < end_time
+                            # Рабочее время: с 18:00 до 23:59 или с 00:00 до 04:00
+                            is_working_time = current_minutes >= start_minutes or current_minutes < end_minutes
                         
                         if not is_working_time:
                             raise serializers.ValidationError(

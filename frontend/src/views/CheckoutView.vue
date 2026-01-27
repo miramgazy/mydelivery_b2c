@@ -506,6 +506,9 @@ watch(() => cartStore.totalPrice, () => {
 })
 
 // Функция проверки рабочего времени
+// ВАЖНО: Это предварительная проверка на клиенте для улучшения UX.
+// Финальная проверка рабочего времени выполняется на бэкенде при создании заказа.
+// Используется локальное время браузера, но бэкенд использует серверное время в часовом поясе проекта.
 const checkWorkingHours = () => {
     // Определяем терминал
     let terminal = null
@@ -524,6 +527,9 @@ const checkWorkingHours = () => {
     }
     
     const { start, end } = terminal.working_hours
+    
+    // Получаем текущее время (локальное время браузера)
+    // Примечание: для точной проверки лучше использовать серверное время, но для UX достаточно локального
     const now = new Date()
     const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
     
@@ -538,10 +544,12 @@ const checkWorkingHours = () => {
     const endMinutes = timeToMinutes(end)
     
     // Проверяем, находится ли текущее время в рабочем диапазоне
+    // Логика должна совпадать с бэкендом (OrderCreateSerializer.validate_terminal_id)
     let isWorkingTime = false
     
     if (startMinutes <= endMinutes) {
         // Обычный случай: рабочее время в пределах одного дня (например, 09:00 - 22:00)
+        // Проверяем: start <= current < end (не включая end)
         isWorkingTime = currentMinutes >= startMinutes && currentMinutes < endMinutes
     } else {
         // Переход через полночь (например, 18:00 - 04:00)
