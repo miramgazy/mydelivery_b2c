@@ -48,7 +48,7 @@
                 v-model="form.phone"
                 type="tel"
                 placeholder="+7 (___) ___-__-__"
-                class="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none"
+                class="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-primary-500 outline-none"
             />
         </div>
 
@@ -113,7 +113,7 @@
                 v-model="form.comment"
                 placeholder="Комментарий к заказу (код домофона и т.д.)"
                 rows="2"
-                class="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none"
+                class="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-primary-500 outline-none"
             ></textarea>
         </div>
 
@@ -122,7 +122,7 @@
             <label class="font-semibold text-gray-700 dark:text-gray-300">Способ оплаты</label>
             <select 
                 v-model="form.payment_type_id"
-                class="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none"
+                class="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
             >
                 <option :value="null" disabled>Выберите способ оплаты</option>
                 <option 
@@ -203,7 +203,7 @@
                     v-model="remotePaymentPhoneInput"
                     type="tel"
                     placeholder="+7 (___) ___-__-__"
-                    class="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+                    class="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 text-sm focus:ring-2 focus:ring-primary-500 outline-none"
                     @input="onRemotePhoneInput"
                   />
                 </div>
@@ -225,7 +225,7 @@
             <label class="font-semibold text-gray-700 dark:text-gray-300">Выберите филиал</label>
             <select 
                 v-model="form.terminal_id"
-                class="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none"
+                class="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
                 required
             >
                 <option :value="null" disabled>Выберите терминал</option>

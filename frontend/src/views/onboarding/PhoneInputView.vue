@@ -55,7 +55,7 @@
             type="tel"
             required
             placeholder="+7 (700) 123 45 67"
-            class="w-full px-4 py-3 rounded-xl border border-gray-300 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-lg"
+            class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-lg"
             @input="formatPhone"
           />
           <p class="text-xs text-gray-500 mt-1">

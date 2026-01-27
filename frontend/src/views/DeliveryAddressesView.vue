@@ -95,35 +95,35 @@
         <div class="grid grid-cols-1 gap-3">
           <div>
             <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Город *</label>
-            <input v-model="form.city_name" type="text" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none" />
+            <input v-model="form.city_name" type="text" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-primary-500 outline-none" />
           </div>
           <div>
             <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Улица *</label>
-            <input v-model="form.street_name" type="text" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none" />
+            <input v-model="form.street_name" type="text" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-primary-500 outline-none" />
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Дом *</label>
-              <input v-model="form.house" type="text" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none" />
+              <input v-model="form.house" type="text" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-primary-500 outline-none" />
             </div>
             <div>
               <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Квартира</label>
-              <input v-model="form.flat" type="text" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none" />
+              <input v-model="form.flat" type="text" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-primary-500 outline-none" />
             </div>
           </div>
           <div class="grid grid-cols-2 gap-3">
             <div>
               <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Подъезд</label>
-              <input v-model="form.entrance" type="text" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none" />
+              <input v-model="form.entrance" type="text" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-primary-500 outline-none" />
             </div>
             <div>
               <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Этаж</label>
-              <input v-model="form.floor" type="text" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none" />
+              <input v-model="form.floor" type="text" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-primary-500 outline-none" />
             </div>
           </div>
           <div>
             <label class="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Комментарий</label>
-            <textarea v-model="form.comment" rows="2" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-primary-500 outline-none"></textarea>
+            <textarea v-model="form.comment" rows="2" class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-primary-500 outline-none"></textarea>
           </div>
         </div>
 
