@@ -97,7 +97,22 @@ const productsStore = useProductsStore()
 const notificationStore = useNotificationStore()
 
 const categoryName = computed(() => {
-  const category = productsStore.categories.find(c => c.subgroup_id === props.product.category)
+  // Категория может быть объектом (из сериализатора) или ID
+  if (!props.product.category) {
+    return 'Без категории'
+  }
+  
+  // Если категория - это объект с subgroup_name
+  if (typeof props.product.category === 'object' && props.product.category.subgroup_name) {
+    return props.product.category.subgroup_name
+  }
+  
+  // Если категория - это ID, ищем в списке категорий
+  const categoryId = typeof props.product.category === 'object' 
+    ? props.product.category.subgroup_id 
+    : props.product.category
+    
+  const category = productsStore.categories.find(c => c.subgroup_id === categoryId)
   return category ? category.subgroup_name : 'Без категории'
 })
 
