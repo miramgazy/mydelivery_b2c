@@ -202,6 +202,14 @@ CELERY_TASK_SERIALIZER = 'json'
 CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 
+# Celery Beat Schedule - периодические задачи
+CELERY_BEAT_SCHEDULE = {
+    'sync-stop-lists': {
+        'task': 'apps.products.tasks.sync_all_terminals_stop_lists',
+        'schedule': 300.0,  # Каждые 5 минут проверяем терминалы и обновляем стоп-листы
+    },
+}
+
 # CORS Configuration
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='http://localhost:5173,http://localhost:3000').split(',')

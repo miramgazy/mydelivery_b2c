@@ -98,11 +98,13 @@ const waitingForContact = ref(false)
 let mainButtonClickHandler = null
 let autoContinueTriggered = false
 let contactRequestedEventHandler = null
-let retryTimeout = null
+let pollingInterval = null
+let pollingAttempts = 0
+const MAX_POLLING_ATTEMPTS = 5 // Максимум 5 попыток
+const POLLING_INTERVAL = 4000 // Интервал между попытками: 4 секунды
 
 /**
  * Запросить телефон из базы данных
- * Простой запрос без polling
  */
 async function fetchPhoneFromBackend() {
   try {
@@ -125,25 +127,52 @@ function normalizePhoneValue(value) {
 }
 
 /**
- * Попытка получить телефон из базы после запроса контакта
- * Делаем одну попытку через 3 секунды (время на сохранение в базу)
+ * Остановить polling проверку номера телефона
  */
-async function tryFetchPhoneAfterContact() {
-  // Очищаем предыдущий таймаут если есть
-  if (retryTimeout) {
-    clearTimeout(retryTimeout)
-    retryTimeout = null
+function stopPhonePolling() {
+  if (pollingInterval) {
+    clearInterval(pollingInterval)
+    pollingInterval = null
   }
+  pollingAttempts = 0
+}
 
-  // Ждем 3 секунды, чтобы сторонний инструмент успел сохранить телефон в базу
-  retryTimeout = setTimeout(async () => {
+/**
+ * Периодическая проверка наличия номера телефона в базе после отправки контакта
+ * Делает 5 попыток с интервалом 4 секунды (максимум 20 секунд)
+ * Если номер не найден за это время - показываем сообщение о ручном вводе
+ */
+function startPhonePolling() {
+  // Останавливаем предыдущий polling если есть
+  stopPhonePolling()
+  
+  pollingAttempts = 0
+  
+  // Первая попытка сразу, затем каждые 4 секунды
+  const checkPhone = async () => {
     // Не перетираем ручной ввод
     if (phone.value) {
+      stopPhonePolling()
       return
     }
-
+    
+    // Проверяем, не превысили ли максимальное количество попыток
+    pollingAttempts++
+    if (pollingAttempts > MAX_POLLING_ATTEMPTS) {
+      stopPhonePolling()
+      // Если номер так и не найден, показываем сообщение о ручном вводе
+      if (!phone.value && waitingForContact.value) {
+        waitingForContact.value = false
+        error.value = 'Номер телефона не получен автоматически. Пожалуйста, введите номер вручную.'
+      }
+      return
+    }
+    
+    // Запрашиваем номер из базы
     const phoneFromBackend = await fetchPhoneFromBackend()
     if (phoneFromBackend) {
+      // Номер найден! Останавливаем polling и продолжаем
+      stopPhonePolling()
       phone.value = normalizePhoneValue(phoneFromBackend)
       error.value = ''
       waitingForContact.value = false
@@ -156,8 +185,13 @@ async function tryFetchPhoneAfterContact() {
         }, 500)
       }
     }
-    retryTimeout = null
-  }, 3000)
+  }
+  
+  // Первая попытка сразу
+  checkPhone()
+  
+  // Последующие попытки каждые 4 секунды
+  pollingInterval = setInterval(checkPhone, POLLING_INTERVAL)
 }
 
 onMounted(async () => {
@@ -172,10 +206,7 @@ onMounted(async () => {
 
 onUnmounted(() => {
   // Очистка при размонтировании
-  if (retryTimeout) {
-    clearTimeout(retryTimeout)
-    retryTimeout = null
-  }
+  stopPhonePolling()
   
   if (isInTelegram.value && contactRequestedEventHandler) {
     const webApp = window.Telegram?.WebApp
@@ -199,10 +230,7 @@ watch(phone, (newPhone) => {
     // Если пользователь начал вводить телефон вручную — прекращаем ожидание контакта
     if (waitingForContact.value) {
       waitingForContact.value = false
-      if (retryTimeout) {
-        clearTimeout(retryTimeout)
-        retryTimeout = null
-      }
+      stopPhonePolling()
     }
     const webApp = window.Telegram?.WebApp
     if (webApp?.MainButton && mainButtonClickHandler) {
@@ -238,11 +266,15 @@ async function requestContact() {
   }
 
   const finishManual = (message) => {
-    waitingForContact.value = false
-    error.value = message
-    // Делаем одну попытку получить телефон через 3 секунды
-    // (время на сохранение в базу сторонним инструментом)
-    tryFetchPhoneAfterContact()
+    // Не останавливаем waitingForContact сразу - даем время на polling
+    // Начинаем периодическую проверку наличия номера в базе
+    startPhonePolling()
+    
+    // Если это отмена пользователем, показываем сообщение
+    if (message && message.includes('отменили')) {
+      waitingForContact.value = false
+      error.value = message
+    }
   }
 
   // Современный путь: Telegram WebApp.requestContact()
@@ -261,8 +293,8 @@ async function requestContact() {
         return
       }
       if (status === 'sent') {
-        // Контакт отправлен, делаем попытку получить телефон через 3 секунды
-        tryFetchPhoneAfterContact()
+        // Контакт отправлен, начинаем периодическую проверку наличия номера в базе
+        startPhonePolling()
       }
     }
     webApp.onEvent?.('contactRequested', contactRequestedEventHandler)
@@ -280,9 +312,8 @@ async function requestContact() {
       return
     }
 
-    // Делаем попытку получить телефон через 3 секунды
-    // (время на сохранение в базу сторонним инструментом)
-    tryFetchPhoneAfterContact()
+    // Начинаем периодическую проверку наличия номера в базе
+    startPhonePolling()
     return
   }
 
@@ -301,9 +332,8 @@ async function requestContact() {
     waitingForContact.value = true
     error.value = ''
 
-    // Делаем попытку получить телефон через 3 секунды
-    // (время на сохранение в базу сторонним инструментом)
-    tryFetchPhoneAfterContact()
+    // Начинаем периодическую проверку наличия номера в базе
+    startPhonePolling()
     
     // Скрываем кнопку, так как контакт уже запрошен
     mainButton.hide()
