@@ -17,7 +17,7 @@ class TerminalSerializer(serializers.ModelSerializer):
             'terminal_group_name', 'name', 'is_active', 'organization',
             'city', 'city_id', 'city_name',
             'stop_list_interval_min', 'delivery_zones_conditions',
-            'working_hours',
+            'working_hours', 'is_delivery_calculation_apply',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'terminal_id', 'created_at', 'updated_at']

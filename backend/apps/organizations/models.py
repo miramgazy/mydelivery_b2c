@@ -53,6 +53,13 @@ class Terminal(models.Model):
     
     is_active = models.BooleanField('Активен', default=True)
     
+    # Глобальный переключатель для активации расчета стоимости доставки
+    is_delivery_calculation_apply = models.BooleanField(
+        'Применять расчет стоимости доставки',
+        default=False,
+        help_text='Если включено, для этого терминала будет применяться расчет стоимости доставки на основе зон'
+    )
+    
     created_at = models.DateTimeField('Создан', auto_now_add=True)
     updated_at = models.DateTimeField('Обновлен', auto_now=True)
     

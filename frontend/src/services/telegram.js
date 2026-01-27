@@ -120,6 +120,57 @@ class TelegramService {
             this.webApp.close();
         }
     }
+
+    /**
+     * Запросить геолокацию пользователя через Telegram
+     * В Telegram Mini App используется специальный метод для запроса геолокации
+     * Координаты будут обработаны сторонним инструментом и записаны в БД
+     */
+    requestLocation() {
+        if (!this.isInTelegram()) {
+            // В браузере используем стандартный API
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        // В браузере просто возвращаем координаты
+                        console.log('Location:', {
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude
+                        })
+                    },
+                    (error) => {
+                        console.error('Geolocation error:', error)
+                    }
+                )
+            }
+            return
+        }
+
+        // В Telegram Mini App используем метод для запроса геолокации
+        // Telegram откроет стандартный интерфейс для отправки геолокации
+        // Координаты будут обработаны сторонним инструментом (ботом) и записаны в БД
+        // Используем стандартный способ через открытие ссылки для отправки геолокации
+        if (this.webApp && this.webApp.openTelegramLink) {
+            // Открываем интерфейс отправки геолокации
+            // В реальности это должно быть обработано ботом через webhook
+            this.webApp.openTelegramLink('tg://location')
+        } else {
+            // Fallback: используем стандартный API браузера
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        console.log('Location:', {
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude
+                        })
+                    },
+                    (error) => {
+                        console.error('Geolocation error:', error)
+                    }
+                )
+            }
+        }
+    }
 }
 
 export default new TelegramService();

@@ -35,9 +35,19 @@
                     <span>{{ formatPrice(item.price * item.quantity) }} ₸</span>
                 </div>
             </div>
-            <div class="flex justify-between items-center text-lg font-bold border-t pt-2 border-gray-100 dark:border-gray-700">
-                <span>Итого:</span>
-                <span class="text-primary-600">{{ formatPrice(cartStore.totalPrice) }} ₸</span>
+            <div class="space-y-2 border-t pt-2 border-gray-100 dark:border-gray-700">
+                <div class="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+                    <span>Товары:</span>
+                    <span>{{ formatPrice(cartStore.totalPrice) }} ₸</span>
+                </div>
+                <div v-if="form.deliveryType === 'delivery' && deliveryCost !== null" class="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+                    <span>Доставка:</span>
+                    <span>{{ deliveryCost === 0 ? 'Бесплатно' : formatPrice(deliveryCost) + ' ₸' }}</span>
+                </div>
+                <div class="flex justify-between items-center text-lg font-bold">
+                    <span>Итого:</span>
+                    <span class="text-primary-600">{{ formatPrice(totalWithDelivery) }} ₸</span>
+                </div>
             </div>
         </div>
 
@@ -57,14 +67,14 @@
             <label class="font-semibold text-gray-700 dark:text-gray-300">Способ получения</label>
             <div class="grid grid-cols-2 gap-3">
                 <button 
-                    @click="form.deliveryType = 'delivery'"
+                    @click="form.deliveryType = 'delivery'; if (form.delivery_address_id) { const addr = authStore.user?.addresses?.find(a => a.id === form.delivery_address_id); if (addr) selectDeliveryAddress(addr) }"
                     class="p-3 rounded-xl border-2 transition-all text-center font-medium"
                     :class="form.deliveryType === 'delivery' ? 'border-primary-600 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-600'"
                 >
                     Доставка
                 </button>
                  <button 
-                    @click="form.deliveryType = 'pickup'"
+                    @click="form.deliveryType = 'pickup'; deliveryCost = null; deliveryCostMessage = ''"
                     class="p-3 rounded-xl border-2 transition-all text-center font-medium"
                     :class="form.deliveryType === 'pickup' ? 'border-primary-600 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-600'"
                 >
@@ -82,7 +92,7 @@
                 <div 
                     v-for="addr in authStore.user.addresses" 
                     :key="addr.id"
-                    @click="form.delivery_address_id = addr.id"
+                    @click="selectDeliveryAddress(addr)"
                     class="p-3 rounded-xl border-2 cursor-pointer transition-all"
                     :class="form.delivery_address_id === addr.id ? 'border-primary-600 bg-primary-50' : 'border-gray-100 bg-white dark:bg-gray-800 dark:border-gray-700'"
                 >
@@ -90,8 +100,29 @@
                         <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center" :class="form.delivery_address_id === addr.id ? 'border-primary-600' : 'border-gray-300'">
                             <div v-if="form.delivery_address_id === addr.id" class="w-2.5 h-2.5 bg-primary-600 rounded-full"></div>
                         </div>
-                        <span class="text-sm">{{ addr.full_address }}</span>
+                        <div class="flex-1">
+                            <div class="flex items-center gap-2">
+                                <span class="text-sm">{{ addr.full_address }}</span>
+                                <!-- Индикация верификации -->
+                                <span v-if="addr.is_verified" class="text-sm" title="Адрес верифицирован">✅</span>
+                                <span v-else class="text-sm" title="Адрес не верифицирован">⚠️</span>
+                            </div>
+                        </div>
                     </div>
+                </div>
+                
+                <!-- Информация о стоимости доставки -->
+                <div v-if="form.delivery_address_id && deliveryCostMessage" class="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                    <p class="text-sm text-blue-700 dark:text-blue-300">{{ deliveryCostMessage }}</p>
+                </div>
+                <div v-else-if="form.delivery_address_id && deliveryCost !== null && !deliveryCostLoading" class="p-3 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                    <p class="text-sm font-semibold text-green-700 dark:text-green-300">
+                        <span v-if="deliveryCost === 0">Бесплатно</span>
+                        <span v-else>Стоимость доставки: {{ formatPrice(deliveryCost) }} ₸</span>
+                    </p>
+                </div>
+                <div v-if="deliveryCostLoading" class="p-3 rounded-xl bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                    <p class="text-sm text-gray-600 dark:text-gray-400">Расчет стоимости доставки...</p>
                 </div>
                 
                 <button
@@ -253,7 +284,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCartStore } from '@/stores/cart'
 import { useOrdersStore } from '@/stores/orders'
@@ -261,6 +292,7 @@ import { useAuthStore } from '@/stores/auth'
 import telegramService from '@/services/telegram'
 import { useNotificationStore } from '@/stores/notifications'
 import api from '@/services/api'
+import organizationService from '@/services/organization.service'
 
 const router = useRouter()
 const cartStore = useCartStore()
@@ -276,6 +308,11 @@ const selectedBillingPhoneId = ref(null)
 const remotePaymentPhoneInput = ref('')
 const saveBillingPhone = ref(true)
 const showPhoneSelector = ref(false)
+
+// Состояние для стоимости доставки
+const deliveryCost = ref(null)
+const deliveryCostLoading = ref(false)
+const deliveryCostMessage = ref('')
 
 const form = reactive({
     phone: '',
@@ -363,6 +400,10 @@ onMounted(async () => {
         const defaultAddr = authStore.user.addresses?.find(a => a.is_default) || authStore.user.addresses?.[0]
         if (defaultAddr) {
             form.delivery_address_id = defaultAddr.id
+            // Рассчитываем стоимость доставки для адреса по умолчанию
+            if (form.deliveryType === 'delivery') {
+                selectDeliveryAddress(defaultAddr)
+            }
         }
     }
     dataLoaded.value = true
@@ -371,6 +412,98 @@ onMounted(async () => {
 const formatPrice = (price) => {
   return new Intl.NumberFormat('ru-KZ').format(price)
 }
+
+// Итоговая сумма с доставкой
+const totalWithDelivery = computed(() => {
+  let total = cartStore.totalPrice
+  if (form.deliveryType === 'delivery' && deliveryCost.value !== null) {
+    total += deliveryCost.value
+  }
+  return total
+})
+
+// Функция выбора адреса доставки
+async function selectDeliveryAddress(addr) {
+  form.delivery_address_id = addr.id
+  
+  // Если адрес не верифицирован, показываем сообщение
+  if (!addr.is_verified) {
+    deliveryCost.value = null
+    deliveryCostMessage.value = 'Стоимость доставки для вашего района будет уточнена оператором. Ориентировочная цена — от 600 ₸. Итоговая сумма зависит от удаленности вашего адреса.'
+    return
+  }
+  
+  // Если адрес верифицирован, рассчитываем стоимость доставки
+  if (!addr.latitude || !addr.longitude) {
+    deliveryCost.value = null
+    deliveryCostMessage.value = 'Координаты адреса не указаны'
+    return
+  }
+  
+  // Получаем терминал
+  let terminal = null
+  if (form.terminal_id) {
+    terminal = authStore.user?.terminals?.find(t => 
+      t.terminal_id === form.terminal_id || t.id === form.terminal_id
+    )
+  } else if (authStore.user?.terminals?.length === 1) {
+    terminal = authStore.user.terminals[0]
+  }
+  
+  if (!terminal) {
+    deliveryCost.value = null
+    deliveryCostMessage.value = 'Терминал не выбран'
+    return
+  }
+  
+  // Проверяем, включен ли расчет стоимости доставки для терминала
+  if (!terminal.is_delivery_calculation_apply) {
+    deliveryCost.value = null
+    deliveryCostMessage.value = 'Расчет стоимости доставки не включен для этого терминала'
+    return
+  }
+  
+  // Рассчитываем стоимость доставки
+  deliveryCostLoading.value = true
+  deliveryCostMessage.value = ''
+  
+  try {
+    const result = await organizationService.calculateDeliveryCost(
+      terminal.terminal_id,
+      parseFloat(addr.latitude),
+      parseFloat(addr.longitude),
+      cartStore.totalPrice
+    )
+    
+    if (result.zone_found) {
+      deliveryCost.value = result.cost || 0
+      if (result.message) {
+        deliveryCostMessage.value = result.message
+      } else {
+        deliveryCostMessage.value = ''
+      }
+    } else {
+      deliveryCost.value = null
+      deliveryCostMessage.value = result.message || 'Адрес не попадает в зоны доставки'
+    }
+  } catch (err) {
+    console.error('Failed to calculate delivery cost', err)
+    deliveryCost.value = null
+    deliveryCostMessage.value = 'Не удалось рассчитать стоимость доставки'
+  } finally {
+    deliveryCostLoading.value = false
+  }
+}
+
+// Отслеживаем изменение суммы заказа для пересчета стоимости доставки
+watch(() => cartStore.totalPrice, () => {
+  if (form.delivery_address_id && deliveryCost.value !== null) {
+    const selectedAddr = authStore.user?.addresses?.find(a => a.id === form.delivery_address_id)
+    if (selectedAddr && selectedAddr.is_verified) {
+      selectDeliveryAddress(selectedAddr)
+    }
+  }
+})
 
 // Функция проверки рабочего времени
 const checkWorkingHours = () => {

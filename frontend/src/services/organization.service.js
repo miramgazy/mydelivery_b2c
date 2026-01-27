@@ -99,6 +99,16 @@ export const toggleTerminalActive = async (terminalId) => {
     return response.data
 }
 
+// Calculate delivery cost for coordinates
+export const calculateDeliveryCost = async (terminalId, latitude, longitude, orderAmount = 0) => {
+    const response = await api.post(`/terminals/${terminalId}/calculate-delivery-cost/`, {
+        latitude,
+        longitude,
+        order_amount: orderAmount
+    })
+    return response.data
+}
+
 // Get cities list
 export const getCities = async (organizationId = null) => {
     const params = {}
@@ -125,5 +135,6 @@ export default {
     syncTerminalStopList,
     updateTerminalDeliveryZones,
     toggleTerminalActive,
-    getCities
+    getCities,
+    calculateDeliveryCost
 }

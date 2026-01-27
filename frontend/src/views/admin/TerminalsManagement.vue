@@ -79,6 +79,9 @@
                 Статус
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Расчет доставки
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Действия
               </th>
             </tr>
@@ -168,6 +171,31 @@
                 </div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
+                <div class="flex items-center gap-3">
+                  <span
+                    :class="[
+                      'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium',
+                      (terminal.is_delivery_calculation_apply ?? false)
+                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400'
+                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-400'
+                    ]"
+                  >
+                    {{ (terminal.is_delivery_calculation_apply ?? false) ? 'Включен' : 'Выключен' }}
+                  </span>
+                  <button
+                    @click="toggleDeliveryCalculation(terminal)"
+                    :disabled="togglingDeliveryCalculation === terminal.id"
+                    class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+                    :class="(terminal.is_delivery_calculation_apply ?? false) ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'"
+                  >
+                    <span
+                      class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
+                      :class="(terminal.is_delivery_calculation_apply ?? false) ? 'translate-x-6' : 'translate-x-1'"
+                    />
+                  </button>
+                </div>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
                 <button
                   @click="syncStopList(terminal)"
                   :disabled="syncingStopList === terminal.id"
@@ -242,6 +270,7 @@ const showConfirmModal = ref(false)
 const terminalToToggle = ref(null)
 const togglingTerminal = ref(null)
 const confirmModalMessage = ref('')
+const togglingDeliveryCalculation = ref(null)
 
 const loading = computed(() => organizationStore.loading)
 const terminals = computed(() => organizationStore.terminals || [])
@@ -433,6 +462,35 @@ const confirmToggleActive = async () => {
     error.value = err.response?.data?.error || 'Не удалось изменить статус терминала'
   } finally {
     togglingTerminal.value = null
+  }
+}
+
+const toggleDeliveryCalculation = async (terminal) => {
+  togglingDeliveryCalculation.value = terminal.id
+  error.value = null
+  successMessage.value = ''
+
+  try {
+    const currentValue = terminal.is_delivery_calculation_apply ?? false
+    const newValue = !currentValue
+    
+    await organizationService.updateTerminal(terminal.id, {
+      is_delivery_calculation_apply: newValue
+    })
+    
+    // Обновляем локальное состояние терминала
+    terminal.is_delivery_calculation_apply = newValue
+    
+    successMessage.value = newValue 
+      ? 'Расчет стоимости доставки включен' 
+      : 'Расчет стоимости доставки выключен'
+    setTimeout(() => {
+      successMessage.value = ''
+    }, 2000)
+  } catch (err) {
+    error.value = err.response?.data?.error || 'Не удалось изменить настройку расчета доставки'
+  } finally {
+    togglingDeliveryCalculation.value = null
   }
 }
 </script>

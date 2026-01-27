@@ -24,7 +24,7 @@ class DeliveryAddressSerializer(serializers.ModelSerializer):
             'street', 'street_name', 'iiko_street_id',
             'house', 'flat', 'entrance', 'floor',
             'latitude', 'longitude', 'comment',
-            'is_default', 'full_address',
+            'is_default', 'is_verified', 'full_address',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'user', 'created_at', 'updated_at']

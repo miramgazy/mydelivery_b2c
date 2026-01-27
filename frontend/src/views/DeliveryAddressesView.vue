@@ -43,6 +43,9 @@
               <div class="font-semibold text-gray-900 dark:text-white text-sm">
                 {{ addr.full_address || formatAddress(addr) }}
               </div>
+              <!-- Индикация верификации -->
+              <span v-if="addr.is_verified" class="text-lg" title="Адрес верифицирован">✅</span>
+              <span v-else class="text-lg" title="Адрес не верифицирован">⚠️</span>
               <span v-if="addr.is_default" class="text-xs bg-primary-50 text-primary-700 px-2 py-0.5 rounded-full border border-primary-100">
                 Основной
               </span>
@@ -74,6 +77,18 @@
           Адресов пока нет. Добавьте первый адрес.
         </div>
       </div>
+
+      <!-- Кнопка "Уточнить геопозицию" -->
+      <button
+        v-if="addresses.length > 0"
+        @click="requestLocation"
+        :disabled="requestingLocation"
+        class="w-full py-3 rounded-xl font-semibold border-2 transition-all flex items-center justify-center gap-2"
+        :class="requestingLocation ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-white dark:bg-gray-800 text-primary-600 border-primary-200 hover:bg-primary-50'"
+      >
+        <span v-if="requestingLocation" class="animate-spin w-5 h-5 border-2 border-primary-600 border-t-transparent rounded-full"></span>
+        <span v-else>📍 Уточнить геопозицию</span>
+      </button>
 
       <!-- Add button -->
       <button
@@ -164,6 +179,7 @@ const showForm = ref(false)
 const saving = ref(false)
 const settingDefault = ref(false)
 const deletingId = ref(null)
+const requestingLocation = ref(false)
 
 const form = reactive({
   city_name: '',
@@ -288,6 +304,39 @@ async function createAddress() {
     telegramService.showAlert(err.response?.data?.detail || 'Не удалось сохранить адрес')
   } finally {
     saving.value = false
+  }
+}
+
+async function requestLocation() {
+  if (requestingLocation.value) return
+  
+  requestingLocation.value = true
+  try {
+    // Вызываем метод Telegram для отправки геолокации
+    telegramService.requestLocation()
+    
+    // Координаты будут обработаны сторонним инструментом и записаны в БД
+    // Ждем 5-7 секунд и проверяем верификацию адресов
+    telegramService.showAlert('Геолокация отправлена. Ожидайте обработки...')
+    
+    // Ждем 6 секунд (среднее значение между 5-7)
+    await new Promise(resolve => setTimeout(resolve, 6000))
+    
+    // Обновляем список адресов для проверки верификации
+    await refreshAll()
+    
+    // Проверяем, есть ли верифицированные адреса
+    const verifiedAddresses = addresses.value.filter(addr => addr.is_verified)
+    if (verifiedAddresses.length === 0) {
+      telegramService.showAlert('Ошибка: данные о верификации не найдены. Пожалуйста, попробуйте еще раз.')
+    } else {
+      telegramService.showAlert('Геопозиция успешно обработана!')
+    }
+  } catch (err) {
+    console.error('Request location failed', err)
+    telegramService.showAlert('Ошибка при запросе геолокации')
+  } finally {
+    requestingLocation.value = false
   }
 }
 

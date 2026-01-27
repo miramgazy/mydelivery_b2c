@@ -141,6 +141,13 @@ class DeliveryAddress(models.Model):
     comment = models.TextField('Комментарий к адресу', blank=True, null=True)
     is_default = models.BooleanField('Основной', default=False)
     
+    # Поле верификации адреса (наличие точных координат)
+    is_verified = models.BooleanField(
+        'Верифицирован',
+        default=False,
+        help_text='Указывает, привязаны ли к адресу точные координаты latitude и longitude'
+    )
+    
     created_at = models.DateTimeField('Создан', auto_now_add=True)
     updated_at = models.DateTimeField('Обновлен', auto_now=True)
     
@@ -148,6 +155,15 @@ class DeliveryAddress(models.Model):
         db_table = 'delivery_addresses'
         verbose_name = 'Адрес доставки'
         verbose_name_plural = 'Адреса доставки'
+    
+    def save(self, *args, **kwargs):
+        """Автоматически обновляем is_verified при наличии координат"""
+        # Если есть и latitude, и longitude, адрес считается верифицированным
+        if self.latitude is not None and self.longitude is not None:
+            self.is_verified = True
+        else:
+            self.is_verified = False
+        super().save(*args, **kwargs)
     
     def __str__(self):
         parts = []

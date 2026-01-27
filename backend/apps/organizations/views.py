@@ -15,6 +15,7 @@ from .serializers import (
 )
 from apps.iiko_integration.client import IikoClient, IikoAPIException
 from apps.iiko_integration.services import MenuSyncService, StopListSyncService
+from .delivery_utils import calculate_delivery_cost
 
 
 class OrganizationViewSet(viewsets.ModelViewSet):
@@ -551,6 +552,67 @@ class TerminalViewSet(viewsets.ModelViewSet):
                 {'error': f'Неожиданная ошибка: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+    
+    @action(detail=True, methods=['post'], url_path='calculate-delivery-cost')
+    def calculate_delivery_cost(self, request, pk=None):
+        """
+        Рассчитать стоимость доставки для указанных координат
+        
+        Ожидает:
+        {
+            "latitude": float,
+            "longitude": float,
+            "order_amount": float (опционально, для проверки min_order_amount)
+        }
+        """
+        terminal = self.get_object()
+        
+        # Проверяем, включен ли расчет стоимости доставки для терминала
+        if not terminal.is_delivery_calculation_apply:
+            return Response({
+                'cost': None,
+                'zone_name': None,
+                'is_free': False,
+                'zone_found': False,
+                'message': 'Расчет стоимости доставки не включен для этого терминала'
+            })
+        
+        latitude = request.data.get('latitude')
+        longitude = request.data.get('longitude')
+        order_amount = request.data.get('order_amount', 0)
+        
+        if latitude is None or longitude is None:
+            return Response(
+                {'error': 'Поля latitude и longitude обязательны'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            latitude = float(latitude)
+            longitude = float(longitude)
+            order_amount = float(order_amount) if order_amount else 0
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'latitude, longitude и order_amount должны быть числами'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Получаем зоны доставки
+        delivery_zones = terminal.delivery_zones_conditions
+        
+        if not delivery_zones:
+            return Response({
+                'cost': None,
+                'zone_name': None,
+                'is_free': False,
+                'zone_found': False,
+                'message': 'Зоны доставки не настроены для этого терминала'
+            })
+        
+        # Рассчитываем стоимость доставки
+        result = calculate_delivery_cost(latitude, longitude, delivery_zones, order_amount)
+        
+        return Response(result)
 
 
 class StreetViewSet(viewsets.ModelViewSet):

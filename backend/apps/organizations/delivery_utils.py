@@ -1,0 +1,138 @@
+"""
+Утилиты для расчета стоимости доставки на основе зон
+"""
+
+
+def point_in_polygon(lat, lon, polygon_coords):
+    """
+    Проверяет, находится ли точка (lat, lon) внутри полигона.
+    
+    Использует алгоритм Ray Casting (луч из точки в бесконечность).
+    
+    Args:
+        lat: Широта точки
+        lon: Долгота точки
+        polygon_coords: Список координат полигона [[lat1, lon1], [lat2, lon2], ...]
+    
+    Returns:
+        bool: True если точка внутри полигона, False иначе
+    """
+    if not polygon_coords or len(polygon_coords) < 3:
+        return False
+    
+    # Нормализуем координаты: если это список списков, берем первый уровень
+    # Формат может быть [[lat, lon], [lat, lon], ...] или [[[lat, lon], ...]]
+    coords = polygon_coords
+    if len(coords) > 0 and isinstance(coords[0], list) and len(coords[0]) > 0:
+        if isinstance(coords[0][0], (int, float)):
+            # Формат: [[lat, lon], [lat, lon], ...]
+            coords = polygon_coords
+        elif isinstance(coords[0][0], list):
+            # Формат: [[[lat, lon], ...]] - берем первый элемент
+            coords = coords[0]
+    
+    # Проверяем, что координаты в правильном формате
+    if not all(isinstance(coord, (list, tuple)) and len(coord) >= 2 for coord in coords):
+        return False
+    
+    n = len(coords)
+    inside = False
+    
+    j = n - 1
+    for i in range(n):
+        xi, yi = coords[i][1], coords[i][0]  # lon, lat
+        xj, yj = coords[j][1], coords[j][0]  # lon, lat
+        
+        # Проверяем пересечение луча с ребром полигона
+        if ((yi > lon) != (yj > lon)) and (lat < (xj - xi) * (lon - yi) / (yj - yi) + xi):
+            inside = not inside
+        
+        j = i
+    
+    return inside
+
+
+def calculate_delivery_cost(lat, lon, delivery_zones, order_amount=0):
+    """
+    Рассчитывает стоимость доставки на основе координат и зон доставки.
+    
+    Args:
+        lat: Широта точки доставки
+        lon: Долгота точки доставки
+        delivery_zones: Список зон доставки из delivery_zones_conditions
+        order_amount: Сумма заказа (для проверки min_order_amount)
+    
+    Returns:
+        dict: {
+            'cost': float,  # Стоимость доставки (0 для бесплатной)
+            'zone_name': str,  # Название зоны
+            'is_free': bool,  # Бесплатная ли доставка
+            'zone_found': bool  # Найдена ли подходящая зона
+        }
+    """
+    if not delivery_zones or not isinstance(delivery_zones, list):
+        return {
+            'cost': None,
+            'zone_name': None,
+            'is_free': False,
+            'zone_found': False,
+            'message': 'Зоны доставки не настроены'
+        }
+    
+    # Сортируем зоны по приоритету (1 - наивысший приоритет)
+    sorted_zones = sorted(
+        delivery_zones,
+        key=lambda z: z.get('priority', 999)
+    )
+    
+    # Проверяем каждую зону, начиная с наивысшим приоритетом
+    for zone in sorted_zones:
+        coordinates = zone.get('coordinates', [])
+        if not coordinates or len(coordinates) < 3:
+            continue
+        
+        # Проверяем попадание точки в зону
+        if point_in_polygon(lat, lon, coordinates):
+            delivery_type = zone.get('delivery_type', 'free')
+            zone_name = zone.get('name', 'Неизвестная зона')
+            
+            if delivery_type == 'free':
+                # Проверяем минимальную сумму заказа для бесплатной доставки
+                min_order_amount = zone.get('min_order_amount', 0)
+                if order_amount >= min_order_amount:
+                    return {
+                        'cost': 0,
+                        'zone_name': zone_name,
+                        'is_free': True,
+                        'zone_found': True,
+                        'min_order_amount': min_order_amount
+                    }
+                else:
+                    # Заказ меньше минимальной суммы - доставка платная
+                    delivery_cost = zone.get('delivery_cost', 0)
+                    return {
+                        'cost': delivery_cost,
+                        'zone_name': zone_name,
+                        'is_free': False,
+                        'zone_found': True,
+                        'min_order_amount': min_order_amount,
+                        'message': f'Для бесплатной доставки минимальная сумма заказа {min_order_amount} ₸'
+                    }
+            else:
+                # Платная доставка
+                delivery_cost = zone.get('delivery_cost', 0)
+                return {
+                    'cost': delivery_cost,
+                    'zone_name': zone_name,
+                    'is_free': False,
+                    'zone_found': True
+                }
+    
+    # Точка не попала ни в одну зону
+    return {
+        'cost': None,
+        'zone_name': None,
+        'is_free': False,
+        'zone_found': False,
+        'message': 'Адрес не попадает в зоны доставки'
+    }
