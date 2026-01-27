@@ -72,7 +72,7 @@ class PaymentTypeSerializer(serializers.ModelSerializer):
         model = PaymentType
         fields = [
             'id', 'payment_id', 'iiko_payment_id',
-            'name', 'payment_name', 'payment_type',
+            'name', 'payment_name', 'payment_type', 'system_type',
             'organization', 'is_active',
             'created_at', 'updated_at'
         ]

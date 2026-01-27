@@ -162,9 +162,18 @@ class Street(models.Model):
 
 class PaymentType(models.Model):
     """Типы оплаты"""
-    payment_id = models.UUIDField(primary_key=True)
+    payment_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     payment_name = models.CharField('Название', max_length=255)
     payment_type = models.CharField('Тип оплаты (код)', max_length=100)
+    # Внутренний системный тип, чтобы фронтенд понимал бизнес-логику оплаты.
+    # Примеры: "cash", "remote_payment", "card_on_delivery"
+    system_type = models.CharField(
+        'Системный тип',
+        max_length=50,
+        blank=True,
+        null=True,
+        help_text='Варианты: cash, remote_payment, card_on_delivery и др.'
+    )
     
     organization = models.ForeignKey(
         Organization,

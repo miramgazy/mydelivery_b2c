@@ -140,6 +140,8 @@ class OrderListSerializer(serializers.ModelSerializer):
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     items_count = serializers.SerializerMethodField()
     total_price = serializers.DecimalField(source='total_amount', max_digits=10, decimal_places=2, read_only=True)
+    payment_type_name = serializers.CharField(source='payment_type.payment_name', read_only=True)
+    payment_type_system_type = serializers.CharField(source='payment_type.system_type', read_only=True)
     
     class Meta:
         model = Order
@@ -148,6 +150,8 @@ class OrderListSerializer(serializers.ModelSerializer):
             'organization', 'organization_name',
             'status', 'status_display', 'total_amount', 'total_price',
             'phone', 'items_count',
+            'payment_type', 'payment_type_name', 'payment_type_system_type',
+            'comment',
             'created_at', 'updated_at'
         ]
     
@@ -188,6 +192,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     organization_name = serializers.CharField(source='organization.org_name', read_only=True)
     status_display = serializers.CharField(source='get_status_display', read_only=True)
     payment_type_name = serializers.CharField(source='payment_type.payment_name', read_only=True)
+    payment_type_system_type = serializers.CharField(source='payment_type.system_type', read_only=True)
     terminal_name = serializers.CharField(source='terminal.terminal_group_name', read_only=True)
     items = OrderItemSerializer(many=True, read_only=True)
     delivery_address_full = serializers.SerializerMethodField()
@@ -201,7 +206,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             'status', 'status_display', 'total_amount', 'total_price',
             'delivery_address', 'delivery_address_full',
             'phone', 'comment',
-            'payment_type', 'payment_type_name',
+            'payment_type', 'payment_type_name', 'payment_type_system_type',
             'terminal', 'terminal_name',
             'latitude', 'longitude',
             'items', 'sent_to_iiko_at', 'error_message',
@@ -242,6 +247,17 @@ class OrderCreateSerializer(serializers.Serializer):
     payment_type_id = serializers.UUIDField()
     terminal_id = serializers.UUIDField(required=False, allow_null=True)
     items = OrderItemCreateSerializer(many=True)
+
+    # Оплата удалённым счётом (Kaspi и др.)
+    remote_payment_phone = serializers.CharField(
+        max_length=20,
+        required=False,
+        allow_blank=True
+    )
+    save_billing_phone = serializers.BooleanField(
+        required=False,
+        default=False
+    )
     
     # Координаты (если адрес не указан)
     latitude = serializers.DecimalField(

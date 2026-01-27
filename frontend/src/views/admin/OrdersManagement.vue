@@ -49,6 +49,9 @@
                 Сумма
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Оплата
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Статус
               </th>
               <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -87,6 +90,25 @@
                 <span class="text-sm font-semibold text-gray-900 dark:text-white">
                   {{ formatPrice(order.total_price) }} ₸
                 </span>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <div class="flex flex-col gap-1">
+                  <span class="text-sm font-medium text-gray-900 dark:text-white">
+                    {{ order.payment_type_name || 'Не указан' }}
+                  </span>
+                  <span
+                    v-if="order.payment_type_system_type === 'remote_payment' && extractPhoneFromComment(order.comment)"
+                    class="text-xs text-blue-600 dark:text-blue-400"
+                  >
+                    📱 {{ extractPhoneFromComment(order.comment) }}
+                  </span>
+                  <span
+                    v-else-if="order.payment_type_system_type"
+                    class="text-xs text-gray-500 dark:text-gray-400"
+                  >
+                    {{ getSystemTypeLabel(order.payment_type_system_type) }}
+                  </span>
+                </div>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 <span :class="getStatusClass(order.status)">
@@ -176,6 +198,26 @@
                     {{ getStatusLabel(selectedOrder.status) }}
                   </span>
                 </div>
+                <div>
+                  <p class="text-sm text-gray-500 dark:text-gray-400">Тип оплаты</p>
+                  <div class="flex flex-col gap-1">
+                    <p class="text-base font-medium text-gray-900 dark:text-white">
+                      {{ selectedOrder.payment_type_name || 'Не указан' }}
+                    </p>
+                    <span
+                      v-if="selectedOrder.payment_type_system_type === 'remote_payment' && extractPhoneFromComment(selectedOrder.comment)"
+                      class="text-sm text-blue-600 dark:text-blue-400"
+                    >
+                      📱 Номер для Kaspi: {{ extractPhoneFromComment(selectedOrder.comment) }}
+                    </span>
+                    <span
+                      v-else-if="selectedOrder.payment_type_system_type"
+                      class="text-xs text-gray-500 dark:text-gray-400"
+                    >
+                      {{ getSystemTypeLabel(selectedOrder.payment_type_system_type) }}
+                    </span>
+                  </div>
+                </div>
               </div>
 
               <!-- Delivery Address -->
@@ -183,6 +225,14 @@
                 <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Адрес доставки</p>
                 <p class="text-base text-gray-900 dark:text-white">
                   {{ selectedOrder.delivery_address_full || formatAddress(selectedOrder.delivery_address) }}
+                </p>
+              </div>
+
+              <!-- Comment -->
+              <div v-if="selectedOrder.comment">
+                <p class="text-sm text-gray-500 dark:text-gray-400 mb-1">Комментарий</p>
+                <p class="text-base text-gray-900 dark:text-white whitespace-pre-wrap">
+                  {{ selectedOrder.comment }}
                 </p>
               </div>
 
@@ -349,5 +399,36 @@ const getStatusClass = (status) => {
     'Success': 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
   }
   return `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${classes[status] || ''}`
+}
+
+const getSystemTypeLabel = (systemType) => {
+  const labels = {
+    'cash': 'Наличные',
+    'remote_payment': 'Удаленный счет',
+    'card_on_delivery': 'Карта при получении'
+  }
+  return labels[systemType] || systemType
+}
+
+const extractPhoneFromComment = (comment) => {
+  if (!comment) return null
+  // Ищем паттерн "Выставить на номер: +7..." или "номер: +7..."
+  // Формат комментария: "Оплата: Удаленный счет. Выставить на номер: +77771234567."
+  const patterns = [
+    /номер[:\s]+([+\d\s\-()]+)/i,
+    /на номер[:\s]+([+\d\s\-()]+)/i,
+    /номер[:\s]+([+\d]+)/i
+  ]
+  
+  for (const pattern of patterns) {
+    const match = comment.match(pattern)
+    if (match && match[1]) {
+      const phone = match[1].trim().replace(/[^\d+]/g, '')
+      if (phone && phone.length >= 10) {
+        return phone
+      }
+    }
+  }
+  return null
 }
 </script>

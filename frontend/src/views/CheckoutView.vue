@@ -43,7 +43,7 @@
 
         <!-- Phone -->
         <div class="space-y-2">
-            <label class="font-semibold text-gray-700 dark:text-gray-300">Номер телефона</label>
+            <label class="font-semibold text-gray-700 dark:text-gray-300">Номер телефона для связи</label>
             <input 
                 v-model="form.phone"
                 type="tel"
@@ -133,6 +133,91 @@
                     {{ pt.payment_name }}
                 </option>
             </select>
+
+            <!-- Remote payment (Kaspi) phone selection -->
+            <div
+              v-if="selectedPaymentSystemType === 'remote_payment'"
+              class="mt-3 space-y-2"
+            >
+              <p class="text-xs text-gray-600 dark:text-gray-400">
+                Счет Kaspi будет выставлен на указанный номер после подтверждения заказа.
+              </p>
+
+              <div class="flex items-center justify-between bg-gray-50 dark:bg-gray-800 rounded-xl px-3 py-2">
+                <div class="flex flex-col">
+                  <span class="text-xs text-gray-500 dark:text-gray-400">Номер для Kaspi</span>
+                  <span class="text-sm font-semibold text-gray-900 dark:text-white">
+                    {{ remotePaymentPhoneDisplay || 'Не указан' }}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  @click="showPhoneSelector = !showPhoneSelector"
+                  class="text-xs font-semibold text-primary-600 hover:text-primary-700"
+                >
+                  Изменить номер
+                </button>
+              </div>
+
+              <div v-if="showPhoneSelector" class="space-y-3 mt-2">
+                <!-- Saved billing phones -->
+                <div v-if="billingPhones.length > 0" class="space-y-2">
+                  <div
+                    v-for="bp in billingPhones"
+                    :key="bp.id"
+                    @click="selectBillingPhone(bp)"
+                    class="flex items-center justify-between px-3 py-2 rounded-xl border-2 cursor-pointer transition-all"
+                    :class="bp.id === selectedBillingPhoneId
+                      ? 'border-primary-600 bg-primary-50'
+                      : 'border-gray-200 bg-white dark:bg-gray-900 dark:border-gray-700'"
+                  >
+                    <div class="flex items-center gap-3">
+                      <div
+                        class="w-5 h-5 rounded-full border-2 flex items-center justify-center"
+                        :class="bp.id === selectedBillingPhoneId ? 'border-primary-600' : 'border-gray-300'"
+                      >
+                        <div
+                          v-if="bp.id === selectedBillingPhoneId"
+                          class="w-2.5 h-2.5 bg-primary-600 rounded-full"
+                        />
+                      </div>
+                      <span class="text-sm text-gray-800 dark:text-gray-100">
+                        {{ bp.phone }}
+                        <span
+                          v-if="bp.is_default"
+                          class="ml-1 text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-800 text-gray-500"
+                        >
+                          основной
+                        </span>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- New phone input -->
+                <div class="space-y-1">
+                  <label class="text-xs font-semibold text-gray-600 dark:text-gray-300">
+                    Ввести новый номер
+                  </label>
+                  <input
+                    v-model="remotePaymentPhoneInput"
+                    type="tel"
+                    placeholder="+7 (___) ___-__-__"
+                    class="w-full p-2.5 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+                    @input="onRemotePhoneInput"
+                  />
+                </div>
+
+                <label class="flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300">
+                  <input
+                    v-model="saveBillingPhone"
+                    type="checkbox"
+                    class="rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  />
+                  <span>Сохранить этот номер для следующих заказов</span>
+                </label>
+              </div>
+            </div>
         </div>
 
         <!-- Terminal Selection (if multiple) -->
@@ -175,6 +260,7 @@ import { useOrdersStore } from '@/stores/orders'
 import { useAuthStore } from '@/stores/auth'
 import telegramService from '@/services/telegram'
 import { useNotificationStore } from '@/stores/notifications'
+import api from '@/services/api'
 
 const router = useRouter()
 const cartStore = useCartStore()
@@ -185,6 +271,12 @@ const notificationStore = useNotificationStore()
 const loading = ref(false)
 const dataLoaded = ref(false)
 
+const billingPhones = ref([])
+const selectedBillingPhoneId = ref(null)
+const remotePaymentPhoneInput = ref('')
+const saveBillingPhone = ref(true)
+const showPhoneSelector = ref(false)
+
 const form = reactive({
     phone: '',
     deliveryType: 'delivery',
@@ -192,6 +284,26 @@ const form = reactive({
     comment: '',
     payment_type_id: null,
     terminal_id: null
+})
+
+const selectedPayment = computed(() => {
+    return ordersStore.paymentTypes.find(
+        (pt) => pt.payment_id === form.payment_type_id
+    )
+})
+
+const selectedPaymentSystemType = computed(() => {
+    return selectedPayment.value?.system_type || null
+})
+
+const remotePaymentPhoneDisplay = computed(() => {
+    if (remotePaymentPhoneInput.value.trim()) {
+        return remotePaymentPhoneInput.value.trim()
+    }
+    const selected = billingPhones.value.find(
+        (bp) => bp.id === selectedBillingPhoneId.value
+    )
+    return selected?.phone || authStore.user?.phone || ''
 })
 
 // Validation for system-level data
@@ -221,6 +333,20 @@ onMounted(async () => {
             }
         } catch (e) {
             console.error('Failed to load payment types', e)
+        }
+
+        // Load saved billing phones
+        try {
+            const response = await api.get('/phones/')
+            billingPhones.value = response.data.results || response.data || []
+            const defaultPhone =
+              billingPhones.value.find((bp) => bp.is_default) ||
+              billingPhones.value[0]
+            if (defaultPhone) {
+              selectedBillingPhoneId.value = defaultPhone.id
+            }
+        } catch (e) {
+            console.error('Failed to load billing phones', e)
         }
 
         // Set default terminal if only one
@@ -329,13 +455,18 @@ const submitOrder = async () => {
         // Normalize phone (remove spaces, parentheses, dashes etc.)
         const normalizedPhone = String(form.phone).replace(/[^\d+]/g, '')
 
+        let remotePhone = remotePaymentPhoneDisplay.value
+        remotePhone = String(remotePhone || '').replace(/[^\d+]/g, '')
+
         const orderData = {
             items: cartStore.getOrderData(),
             phone: normalizedPhone,
             comment: form.comment,
             payment_type_id: form.payment_type_id,
             terminal_id: form.terminal_id,
-            delivery_address_id: form.deliveryType === 'delivery' ? form.delivery_address_id : null
+            delivery_address_id: form.deliveryType === 'delivery' ? form.delivery_address_id : null,
+            remote_payment_phone: selectedPaymentSystemType.value === 'remote_payment' ? remotePhone : null,
+            save_billing_phone: selectedPaymentSystemType.value === 'remote_payment' ? saveBillingPhone.value : false
         }
 
         await ordersStore.createOrder(orderData)
@@ -348,6 +479,18 @@ const submitOrder = async () => {
         telegramService.showAlert('Ошибка при создании заказа: ' + msg)
     } finally {
         loading.value = false
+    }
+}
+
+const selectBillingPhone = (bp) => {
+    selectedBillingPhoneId.value = bp.id
+    remotePaymentPhoneInput.value = bp.phone
+}
+
+const onRemotePhoneInput = () => {
+    // Явно сбрасываем выбранный сохранённый номер, если пользователь вводит новый
+    if (remotePaymentPhoneInput.value.trim()) {
+        selectedBillingPhoneId.value = null
     }
 }
 </script>

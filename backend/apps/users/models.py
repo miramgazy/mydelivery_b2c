@@ -170,6 +170,33 @@ class DeliveryAddress(models.Model):
             
         return ", ".join(parts)
 
+
+class BillingPhone(models.Model):
+    """Дополнительные номера телефонов для биллинга (Kaspi и др.)"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='billing_phones',
+        verbose_name='Пользователь'
+    )
+    phone = models.CharField('Телефон', max_length=20)
+    is_default = models.BooleanField('Основной', default=False)
+    created_at = models.DateTimeField('Создан', auto_now_add=True)
+    updated_at = models.DateTimeField('Обновлен', auto_now=True)
+
+    class Meta:
+        db_table = 'billing_phones'
+        verbose_name = 'Биллинг‑номер'
+        verbose_name_plural = 'Биллинг‑номера'
+        indexes = [
+            models.Index(fields=['user']),
+            models.Index(fields=['phone']),
+        ]
+
+    def __str__(self):
+        return f"{self.phone} ({self.user})"
+
     def delete(self, using=None, keep_parents=False):
         """
         Запрещаем удаление, если у пользователя остался только один адрес.

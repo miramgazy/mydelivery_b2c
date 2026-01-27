@@ -10,7 +10,7 @@ from django.db import transaction
 from django.utils import timezone
 from .models import Order, OrderItem, OrderItemModifier
 from apps.products.models import Product, Modifier, StopList
-from apps.users.models import User, DeliveryAddress
+from apps.users.models import User, DeliveryAddress, BillingPhone
 from apps.organizations.models import Organization, PaymentType, Terminal
 from apps.iiko_integration.client import IikoClient, IikoAPIException
 
@@ -80,6 +80,10 @@ class OrderService:
         delivery_address_id = validated_data.get('delivery_address_id')
         phone = self._normalize_phone(validated_data.get('phone'))
         comment = validated_data.get('comment', '')
+        remote_payment_phone = self._normalize_phone(
+            validated_data.get('remote_payment_phone')
+        )
+        save_billing_phone = bool(validated_data.get('save_billing_phone'))
         payment_type_id = validated_data.get('payment_type_id')
         terminal_id = validated_data.get('terminal_id')
         items_data = validated_data.get('items', [])
@@ -131,6 +135,30 @@ class OrderService:
             )
         except PaymentType.DoesNotExist:
             raise ValueError('Тип оплаты не найден')
+
+        # Собираем комментарий об оплате для передачи в iiko
+        kaspi_phone = remote_payment_phone or phone
+        payment_comment = None
+
+        system_type = (payment_type.system_type or '').strip()
+
+        if system_type == 'remote_payment':
+            # Удалённый счёт (Kaspi)
+            payment_comment = (
+                f"Оплата: Удаленный счет. Выставить на номер: {kaspi_phone or '—'}."
+            )
+        elif system_type == 'cash':
+            payment_comment = "Оплата: Наличными курьеру."
+        elif system_type == 'card_on_delivery':
+            payment_comment = "Оплата: Картой при получении."
+        else:
+            # Fallback, если системный тип не настроен
+            payment_comment = f"Оплата: {payment_type.payment_name}."
+
+        final_comment = payment_comment
+        if comment:
+            # Сохраняем пользовательский комментарий, не теряя информацию об оплате
+            final_comment = f"{payment_comment}\n{comment}"
         
         # Создаем заказ
         order = Order.objects.create(
@@ -141,7 +169,7 @@ class OrderService:
             total_amount=Decimal('0'),
             delivery_address=delivery_address,
             phone=phone,
-            comment=comment,
+            comment=final_comment,
             payment_type=payment_type,
             terminal=selected_terminal,
             latitude=validated_data.get('latitude'),
@@ -152,6 +180,31 @@ class OrderService:
         if phone and not user.phone:
             user.phone = phone
             user.save(update_fields=['phone'])
+
+        # При удалённой оплате по Kaspi по желанию пользователя сохраняем номер в BillingPhone
+        if system_type == 'remote_payment' and kaspi_phone and save_billing_phone:
+            existing = BillingPhone.objects.filter(
+                user=user,
+                phone=kaspi_phone
+            ).first()
+
+            if existing:
+                # Делаем существующий номер основным
+                if not existing.is_default:
+                    existing.is_default = True
+                    existing.save(update_fields=['is_default'])
+                    BillingPhone.objects.filter(user=user).exclude(
+                        id=existing.id
+                    ).update(is_default=False)
+            else:
+                bp = BillingPhone.objects.create(
+                    user=user,
+                    phone=kaspi_phone,
+                    is_default=True,
+                )
+                BillingPhone.objects.filter(user=user).exclude(
+                    id=bp.id
+                ).update(is_default=False)
         
         # Создаем позиции заказа
         total_amount = Decimal('0')

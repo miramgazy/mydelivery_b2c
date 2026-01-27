@@ -1,14 +1,16 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    UserViewSet, RoleViewSet, 
-    DeliveryAddressViewSet, TelegramAuthView, ClientLogView, TelegramWebhookView
+    UserViewSet, RoleViewSet,
+    DeliveryAddressViewSet, BillingPhoneViewSet,
+    TelegramAuthView, ClientLogView, TelegramWebhookView
 )
 
 router = DefaultRouter()
 router.register(r'users', UserViewSet)
 router.register(r'roles', RoleViewSet)
 router.register(r'addresses', DeliveryAddressViewSet)
+router.register(r'phones', BillingPhoneViewSet, basename='billingphone')
 
 urlpatterns = [
     path('auth/telegram/', TelegramAuthView.as_view({'post': 'login'}), name='telegram-auth'),

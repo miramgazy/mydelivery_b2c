@@ -10,10 +10,11 @@ from django.db import transaction
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
 import re
-from .models import User, Role, DeliveryAddress
+from .models import User, Role, DeliveryAddress, BillingPhone
 from .serializers import (
     UserSerializer, UserCreateSerializer, UserUpdateSerializer,
-    RoleSerializer, DeliveryAddressSerializer, TelegramAuthSerializer
+    RoleSerializer, DeliveryAddressSerializer, BillingPhoneSerializer,
+    TelegramAuthSerializer
 )
 from .telegram_auth import validate_telegram_init_data, TelegramAuthException
 from core.permissions import IsSuperAdmin, IsOrgAdmin, IsOwner
@@ -24,6 +25,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 MAX_DELIVERY_ADDRESSES_PER_USER = 3
+MAX_BILLING_PHONES_PER_USER = 5
 
 class TelegramAuthView(viewsets.ViewSet):
     """Аутентификация через Telegram Mini App"""
@@ -117,8 +119,8 @@ class TelegramAuthView(viewsets.ViewSet):
             # Генерируем JWT токены
             refresh = RefreshToken.for_user(user)
             
-            # Загружаем пользователя для полного ответа (адреса + терминалы)
-            user_with_addresses = User.objects.select_related('role', 'organization').prefetch_related('addresses', 'terminals').get(id=user.id)
+            # Загружаем пользователя для полного ответа (адреса + терминалы + billing_phones)
+            user_with_addresses = User.objects.select_related('role', 'organization').prefetch_related('addresses', 'terminals', 'billing_phones').get(id=user.id)
             
             return Response({
                 'access': str(refresh.access_token),
@@ -210,7 +212,7 @@ class ClientLogView(viewsets.ViewSet):
 
 class UserViewSet(viewsets.ModelViewSet):
     """ViewSet для управления пользователями"""
-    queryset = User.objects.select_related('role', 'organization').all().order_by('-created_at')
+    queryset = User.objects.select_related('role', 'organization').prefetch_related('addresses', 'billing_phones').all().order_by('-created_at')
     serializer_class = UserSerializer
     filter_backends = [filters.SearchFilter, DjangoFilterBackend]
     search_fields = ['first_name', 'last_name', 'username', 'phone', 'email']
@@ -307,7 +309,7 @@ class UserViewSet(viewsets.ModelViewSet):
         
         if request.method == 'GET':
             # Загружаем пользователя с адресами и связанными данными
-            user = User.objects.select_related('role', 'organization').prefetch_related('addresses').get(id=user.id)
+            user = User.objects.select_related('role', 'organization').prefetch_related('addresses', 'billing_phones').get(id=user.id)
             serializer = UserSerializer(user)
             return Response(serializer.data)
         else:
@@ -315,7 +317,7 @@ class UserViewSet(viewsets.ModelViewSet):
             serializer.is_valid(raise_exception=True)
             serializer.save()
             # После обновления загружаем полные данные
-            user = User.objects.select_related('role', 'organization').prefetch_related('addresses').get(id=user.id)
+            user = User.objects.select_related('role', 'organization').prefetch_related('addresses', 'billing_phones').get(id=user.id)
             return Response(UserSerializer(user).data)
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny], url_path='telegram-contact')
@@ -474,3 +476,66 @@ class DeliveryAddressViewSet(viewsets.ModelViewSet):
         return Response(
             DeliveryAddressSerializer(address).data
         )
+
+
+class BillingPhoneViewSet(viewsets.ModelViewSet):
+    """ViewSet для управления дополнительными номерами телефонов (Kaspi и др.)"""
+    queryset = BillingPhone.objects.select_related('user').all()
+    serializer_class = BillingPhoneSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        """Пользователь видит только свои номера"""
+        return self.queryset.filter(user=self.request.user).order_by('-is_default', '-updated_at')
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        """
+        Создание номера:
+        - Лимит: не более 5 номеров на пользователя
+        - Если is_default=True -> снимаем флаг с остальных номеров
+        - Если это первый номер, делаем его основным
+        """
+        user = self.request.user
+
+        BillingPhone.objects.select_for_update().filter(user=user).exists()
+
+        existing_count = BillingPhone.objects.filter(user=user).count()
+        if existing_count >= MAX_BILLING_PHONES_PER_USER:
+            raise ValidationError({'detail': f'Можно сохранить не более {MAX_BILLING_PHONES_PER_USER} номеров'})
+
+        phone = serializer.validated_data.get('phone', '').strip()
+        if not phone:
+            raise ValidationError({'phone': 'Номер телефона обязателен'})
+
+        billing_phone = serializer.save(user=user)
+
+        # Если это первый номер — делаем его основным
+        if existing_count == 0 and not billing_phone.is_default:
+            billing_phone.is_default = True
+            billing_phone.save(update_fields=['is_default'])
+
+        if billing_phone.is_default:
+            BillingPhone.objects.filter(user=user).exclude(id=billing_phone.id).update(is_default=False)
+
+        return billing_phone
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        """
+        Обновление номера:
+        - Если is_default=True -> снимаем флаг с остальных номеров пользователя
+        """
+        user = self.request.user
+        billing_phone = serializer.save()
+
+        if billing_phone.is_default:
+            BillingPhone.objects.filter(user=user).exclude(id=billing_phone.id).update(is_default=False)
+
+        return billing_phone
+
+    def destroy(self, request, *args, **kwargs):
+        """
+        Удаление номера: без специальных ограничений (всегда можно удалить).
+        """
+        return super().destroy(request, *args, **kwargs)

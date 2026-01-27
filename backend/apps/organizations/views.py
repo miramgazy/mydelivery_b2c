@@ -1,5 +1,5 @@
 import logging
-from rest_framework import viewsets, permissions, filters, status
+from rest_framework import viewsets, permissions, filters, status, serializers
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
@@ -567,9 +567,48 @@ class PaymentTypeViewSet(viewsets.ModelViewSet):
     """ViewSet для типов оплаты"""
     queryset = PaymentType.objects.all()
     serializer_class = PaymentTypeSerializer
-    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+    permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['organization', 'is_active', 'payment_type']
+    
+    def get_queryset(self):
+        """Фильтрация по организации пользователя"""
+        queryset = super().get_queryset()
+        user = self.request.user
+        
+        # Если у пользователя есть организация, фильтруем по ней
+        if hasattr(user, 'organization') and user.organization:
+            queryset = queryset.filter(organization=user.organization)
+        
+        return queryset
+    
+    def perform_create(self, serializer):
+        """Автоматически устанавливаем организацию из пользователя при создании"""
+        user = self.request.user
+        
+        # Если организация не указана в данных, берем из пользователя
+        if not serializer.validated_data.get('organization'):
+            if hasattr(user, 'organization') and user.organization:
+                serializer.save(organization=user.organization)
+            else:
+                raise serializers.ValidationError({
+                    'organization': 'Необходимо указать организацию или привязать пользователя к организации'
+                })
+        else:
+            serializer.save()
+    
+    def perform_update(self, serializer):
+        """Обновление типа оплаты - организация не изменяется"""
+        # При обновлении не позволяем менять организацию
+        if 'organization' in serializer.validated_data:
+            # Проверяем, что пользователь пытается изменить организацию на свою
+            user = self.request.user
+            requested_org = serializer.validated_data.get('organization')
+            if hasattr(user, 'organization') and user.organization:
+                # Если организация не совпадает с организацией пользователя, используем организацию пользователя
+                if requested_org != user.organization:
+                    serializer.validated_data['organization'] = user.organization
+        serializer.save()
 
 
 class CityViewSet(viewsets.ReadOnlyModelViewSet):

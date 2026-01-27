@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Role, DeliveryAddress
+from .models import User, Role, DeliveryAddress, BillingPhone
 from apps.organizations.serializers import TerminalSerializer
 from apps.organizations.models import Terminal, City
 
@@ -68,6 +68,18 @@ class DeliveryAddressSerializer(serializers.ModelSerializer):
         return attrs
 
 
+class BillingPhoneSerializer(serializers.ModelSerializer):
+    """Сериализатор для дополнительных биллинг‑номеров"""
+
+    class Meta:
+        model = BillingPhone
+        fields = [
+            'id', 'user', 'phone', 'is_default',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'user', 'created_at', 'updated_at']
+
+
 class UserSerializer(serializers.ModelSerializer):
     """Сериализатор для пользователей"""
     role_name = serializers.CharField(source='role.role_name', read_only=True, default=None)
@@ -76,11 +88,23 @@ class UserSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(read_only=True)
     terminals = serializers.SerializerMethodField()
     addresses = DeliveryAddressSerializer(many=True, read_only=True)
+    billing_phones = serializers.SerializerMethodField()
     
     def get_terminals(self, obj):
         """Возвращает только активные терминалы пользователя"""
         active_terminals = obj.terminals.filter(is_active=True)
         return TerminalSerializer(active_terminals, many=True).data
+    
+    def get_billing_phones(self, obj):
+        """Возвращает биллинг-номера пользователя, безопасно обрабатывая случай отсутствия таблицы"""
+        try:
+            # Проверяем, есть ли у объекта доступ к billing_phones
+            if hasattr(obj, 'billing_phones'):
+                return BillingPhoneSerializer(obj.billing_phones.all(), many=True).data
+            return []
+        except Exception:
+            # Если таблица не существует или произошла другая ошибка, возвращаем пустой список
+            return []
     
     class Meta:
         model = User
@@ -89,7 +113,7 @@ class UserSerializer(serializers.ModelSerializer):
             'email', 'phone', 'telegram_username', 'full_name',
             'role', 'role_name', 'role_display',
             'organization', 'organization_name',
-            'terminals', 'addresses',
+            'terminals', 'addresses', 'billing_phones',
             'iiko_user_id', 'is_active', 'last_login',
             'created_at', 'updated_at'
         ]
