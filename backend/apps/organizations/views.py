@@ -610,7 +610,9 @@ class TerminalViewSet(viewsets.ModelViewSet):
             })
         
         # Рассчитываем стоимость доставки
+        logger.info(f"Calculating delivery cost for point ({latitude}, {longitude}), order_amount={order_amount}, zones_count={len(delivery_zones)}")
         result = calculate_delivery_cost(latitude, longitude, delivery_zones, order_amount)
+        logger.info(f"Delivery cost calculation result: {result}")
         
         return Response(result)
 

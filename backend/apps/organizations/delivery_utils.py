@@ -1,6 +1,9 @@
 """
 Утилиты для расчета стоимости доставки на основе зон
 """
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def point_in_polygon(lat, lon, polygon_coords):
@@ -13,6 +16,7 @@ def point_in_polygon(lat, lon, polygon_coords):
         lat: Широта точки
         lon: Долгота точки
         polygon_coords: Список координат полигона [[lat1, lon1], [lat2, lon2], ...]
+                       Координаты хранятся в формате [lat, lon] (как в Yandex Maps)
     
     Returns:
         bool: True если точка внутри полигона, False иначе
@@ -35,17 +39,40 @@ def point_in_polygon(lat, lon, polygon_coords):
     if not all(isinstance(coord, (list, tuple)) and len(coord) >= 2 for coord in coords):
         return False
     
-    n = len(coords)
+    # Конвертируем координаты полигона из [lat, lon] в [lon, lat] для алгоритма
+    # Алгоритм Ray Casting работает с координатами в формате [lon, lat]
+    polygon_lon_lat = [[coord[1], coord[0]] for coord in coords]
+    
+    # Точка в формате [lon, lat]
+    point_lon = lon
+    point_lat = lat
+    
+    n = len(polygon_lon_lat)
     inside = False
     
     j = n - 1
     for i in range(n):
-        xi, yi = coords[i][1], coords[i][0]  # lon, lat
-        xj, yj = coords[j][1], coords[j][0]  # lon, lat
+        xi, yi = polygon_lon_lat[i]  # [lon, lat] для точки i
+        xj, yj = polygon_lon_lat[j]  # [lon, lat] для точки j
         
-        # Проверяем пересечение луча с ребром полигона
-        if ((yi > lon) != (yj > lon)) and (lat < (xj - xi) * (lon - yi) / (yj - yi) + xi):
-            inside = not inside
+        # Проверяем пересечение горизонтального луча (идущего вправо от точки)
+        # с ребром полигона между точками i и j
+        # Условие: луч пересекает ребро, если:
+        # 1. Одна вершина выше луча, другая ниже (yi > point_lat) != (yj > point_lat)
+        # 2. Точка пересечения находится справа от точки (point_lon < ...)
+        # 3. Ребро не горизонтальное (yj != yi)
+        
+        # Пропускаем горизонтальные ребра
+        if yj == yi:
+            j = i
+            continue
+        
+        # Проверяем пересечение
+        if ((yi > point_lat) != (yj > point_lat)):
+            # Вычисляем x-координату точки пересечения
+            intersect_x = ((xj - xi) * (point_lat - yi)) / (yj - yi) + xi
+            if point_lon < intersect_x:
+                inside = not inside
         
         j = i
     
@@ -89,10 +116,15 @@ def calculate_delivery_cost(lat, lon, delivery_zones, order_amount=0):
     for zone in sorted_zones:
         coordinates = zone.get('coordinates', [])
         if not coordinates or len(coordinates) < 3:
+            logger.debug(f"Zone {zone.get('name', 'Unknown')} skipped: invalid coordinates")
             continue
         
         # Проверяем попадание точки в зону
-        if point_in_polygon(lat, lon, coordinates):
+        logger.debug(f"Checking point ({lat}, {lon}) in zone {zone.get('name', 'Unknown')} with {len(coordinates)} coordinates")
+        is_inside = point_in_polygon(lat, lon, coordinates)
+        logger.debug(f"Point ({lat}, {lon}) {'INSIDE' if is_inside else 'OUTSIDE'} zone {zone.get('name', 'Unknown')}")
+        
+        if is_inside:
             delivery_type = zone.get('delivery_type', 'free')
             zone_name = zone.get('name', 'Неизвестная зона')
             
