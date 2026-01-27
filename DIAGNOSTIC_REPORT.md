@@ -36,34 +36,24 @@ config.params._t = Date.now();
 
 ---
 
-### 2. ⚠️ Агрессивный polling телефона в PhoneInputView
+### 2. ✅ ИСПРАВЛЕНО: Агрессивный polling телефона в PhoneInputView
 
-**Файл:** `frontend/src/views/onboarding/PhoneInputView.vue:153-193`
+**Файл:** `frontend/src/views/onboarding/PhoneInputView.vue`
 
-**Проблема:**
-```javascript
-// Polling каждые 500ms-1000ms
-phonePollInterval = setInterval(async () => {
-  const current = await fetchPhoneFromBackendOnce() // Вызывает fetchCurrentUser()
-}, intervalMs)
+**Было:**
+- Polling каждые 500ms-1000ms в течение 30 секунд
+- Фоновый polling до 30 секунд каждую секунду
+- При 10 пользователях = 300+ запросов
 
-// Фоновый polling до 30 секунд
-backgroundPollInterval = setInterval(async () => {
-  const current = await fetchPhoneFromBackendOnce()
-}, 1000) // Каждую секунду!
-```
+**Исправлено:**
+- ✅ Полностью убран агрессивный polling
+- ✅ Оставлен только один запрос при загрузке компонента
+- ✅ После запроса контакта делается одна попытка получить телефон через 3 секунды (время на сохранение в базу сторонним инструментом)
+- ✅ Нет постоянных интервалов и множественных запросов
 
-**Влияние:**
-- Каждый пользователь на странице ввода телефона делает запрос каждую секунду
-- `fetchPhoneFromBackendOnce()` вызывает `authStore.fetchCurrentUser()` → `/api/users/me/`
-- При 10 пользователях одновременно = 10 запросов/сек в течение 30 секунд = 300 запросов
-- Если пользователь не закрывает страницу, polling продолжается
-
-**Рекомендация:**
-- Увеличить интервал до 3-5 секунд
-- Добавить экспоненциальный backoff (увеличивать интервал со временем)
-- Ограничить максимальное время polling до 15 секунд
-- Добавить проверку: если страница неактивна (tab hidden), остановить polling
+**Результат:**
+- Снижение запросов с 30+ до 1-2 запросов на пользователя
+- Устранена основная причина избыточных запросов при вводе телефона
 
 ---
 
@@ -197,17 +187,16 @@ watch(searchQuery, (value) => {
 
 ### Приоритет 1 (Критично - исправить немедленно):
 
-1. **Оптимизировать api.js:**
+1. ✅ **Оптимизировать api.js:**
    - Убрать `_t` для GET-запросов
    - Добавить опцию `skipCacheBust: true` для запросов, которые нужно кэшировать
 
-2. **Оптимизировать PhoneInputView:**
-   - Увеличить интервал polling до 3-5 секунд
-   - Добавить экспоненциальный backoff
-   - Ограничить максимальное время до 15 секунд
-   - Добавить проверку видимости страницы
+2. ✅ **Оптимизировать PhoneInputView:**
+   - ✅ Полностью убран агрессивный polling
+   - ✅ Оставлен только один запрос при загрузке
+   - ✅ Одна попытка получить телефон через 3 секунды после запроса контакта
 
-3. **Оптимизировать App.vue:**
+3. ✅ **Оптимизировать App.vue:**
    - Добавить флаг `isFetching` в authStore
    - Кэшировать результат `fetchCurrentUser` на 10 секунд
    - Избегать параллельных запросов
@@ -264,27 +253,35 @@ api.interceptors.request.use(
 )
 ```
 
-### Исправление 2: Оптимизация PhoneInputView
+### Исправление 2: ✅ ВЫПОЛНЕНО - Полное удаление polling в PhoneInputView
 
 ```javascript
 // frontend/src/views/onboarding/PhoneInputView.vue
 
-// Увеличить интервалы
-async function waitForPhoneFromBackend({ maxWaitMs = 5000, intervalMs = 2000 } = {}) {
-  // intervalMs: 500 -> 2000 (2 секунды)
+// Убраны все функции polling:
+// - waitForPhoneFromBackend() - удалена
+// - startBackgroundPhonePolling() - удалена
+// - cleanupPhonePolling() - удалена
+
+// Оставлена только простая функция запроса:
+async function fetchPhoneFromBackend() {
+  try {
+    await authStore.fetchCurrentUser()
+    return authStore.user?.phone || ''
+  } catch (e) {
+    return ''
+  }
 }
 
-function startBackgroundPhonePolling({ maxWaitMs = 15000, intervalMs = 3000 } = {}) {
-  // maxWaitMs: 30000 -> 15000 (15 секунд)
-  // intervalMs: 1000 -> 3000 (3 секунды)
-  
-  // Добавить проверку видимости страницы
-  if (document.hidden) {
-    cleanupPhonePolling()
-    return
-  }
-  
-  // ... остальной код
+// Одна попытка получить телефон через 3 секунды после запроса контакта:
+async function tryFetchPhoneAfterContact() {
+  retryTimeout = setTimeout(async () => {
+    const phoneFromBackend = await fetchPhoneFromBackend()
+    if (phoneFromBackend) {
+      phone.value = normalizePhoneValue(phoneFromBackend)
+      // Автоматически продолжаем
+    }
+  }, 3000)
 }
 ```
 

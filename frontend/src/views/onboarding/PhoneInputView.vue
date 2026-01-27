@@ -97,38 +97,21 @@ const isInTelegram = ref(false)
 const waitingForContact = ref(false)
 let mainButtonClickHandler = null
 let autoContinueTriggered = false
-let phonePollInterval = null
-let phonePollTimeout = null
-let backgroundPollInterval = null
-let backgroundPollTimeout = null
 let contactRequestedEventHandler = null
+let retryTimeout = null
 
-function cleanupPhonePolling() {
-  if (phonePollInterval) {
-    clearInterval(phonePollInterval)
-    phonePollInterval = null
-  }
-  if (phonePollTimeout) {
-    clearTimeout(phonePollTimeout)
-    phonePollTimeout = null
-  }
-  if (backgroundPollInterval) {
-    clearInterval(backgroundPollInterval)
-    backgroundPollInterval = null
-  }
-  if (backgroundPollTimeout) {
-    clearTimeout(backgroundPollTimeout)
-    backgroundPollTimeout = null
-  }
-}
-
-async function fetchPhoneFromBackendOnce() {
+/**
+ * Запросить телефон из базы данных
+ * Простой запрос без polling
+ */
+async function fetchPhoneFromBackend() {
   try {
     await authStore.fetchCurrentUser()
+    return authStore.user?.phone || ''
   } catch (e) {
-    // игнорируем — может быть временная сеть/401, покажем ручной ввод по таймауту
+    // игнорируем — может быть временная сеть/401
+    return ''
   }
-  return authStore.user?.phone || ''
 }
 
 function normalizePhoneValue(value) {
@@ -141,91 +124,59 @@ function normalizePhoneValue(value) {
   return `+7${digits}`
 }
 
-async function waitForPhoneFromBackend({ maxWaitMs = 5000, intervalMs = 2000 } = {}) {
-  cleanupPhonePolling()
+/**
+ * Попытка получить телефон из базы после запроса контакта
+ * Делаем одну попытку через 3 секунды (время на сохранение в базу)
+ */
+async function tryFetchPhoneAfterContact() {
+  // Очищаем предыдущий таймаут если есть
+  if (retryTimeout) {
+    clearTimeout(retryTimeout)
+    retryTimeout = null
+  }
 
-  // Быстрая попытка сразу
-  const initial = await fetchPhoneFromBackendOnce()
-  if (initial) return initial
-
-  return await new Promise((resolve) => {
-    const startedAt = Date.now()
-    phonePollInterval = setInterval(async () => {
-      // Проверка видимости страницы - не делать запросы если страница скрыта
-      if (document.hidden) {
-        return
-      }
-      
-      const current = await fetchPhoneFromBackendOnce()
-      if (current) {
-        cleanupPhonePolling()
-        resolve(current)
-        return
-      }
-      if (Date.now() - startedAt >= maxWaitMs) {
-        cleanupPhonePolling()
-        resolve('')
-      }
-    }, intervalMs)
-
-    phonePollTimeout = setTimeout(() => {
-      cleanupPhonePolling()
-      resolve('')
-    }, maxWaitMs)
-  })
-}
-
-function startBackgroundPhonePolling({ maxWaitMs = 15000, intervalMs = 3000 } = {}) {
-  cleanupPhonePolling()
-
-  const startedAt = Date.now()
-  let attemptCount = 0
-  const maxAttempts = Math.ceil(maxWaitMs / intervalMs)
-  
-  backgroundPollInterval = setInterval(async () => {
-    // Проверка видимости страницы - не делать запросы если страница скрыта
-    if (document.hidden) {
-      cleanupPhonePolling()
-      return
-    }
-    
+  // Ждем 3 секунды, чтобы сторонний инструмент успел сохранить телефон в базу
+  retryTimeout = setTimeout(async () => {
     // Не перетираем ручной ввод
     if (phone.value) {
-      cleanupPhonePolling()
       return
     }
-    
-    // Экспоненциальный backoff: увеличиваем интервал с каждой попыткой
-    attemptCount++
-    if (attemptCount > maxAttempts) {
-      cleanupPhonePolling()
-      return
-    }
-    
-    const current = await fetchPhoneFromBackendOnce()
-    if (current) {
-      phone.value = normalizePhoneValue(current)
-      error.value = ''
-      cleanupPhonePolling()
-      return
-    }
-    if (Date.now() - startedAt >= maxWaitMs) {
-      cleanupPhonePolling()
-    }
-  }, intervalMs)
 
-  backgroundPollTimeout = setTimeout(() => {
-    cleanupPhonePolling()
-  }, maxWaitMs)
+    const phoneFromBackend = await fetchPhoneFromBackend()
+    if (phoneFromBackend) {
+      phone.value = normalizePhoneValue(phoneFromBackend)
+      error.value = ''
+      waitingForContact.value = false
+      
+      // Автоматически продолжаем если телефон получен
+      if (!autoContinueTriggered && !saving.value) {
+        autoContinueTriggered = true
+        setTimeout(() => {
+          handleContinue()
+        }, 500)
+      }
+    }
+    retryTimeout = null
+  }, 3000)
 }
 
-onMounted(() => {
+onMounted(async () => {
   isInTelegram.value = telegramService.isInTelegram()
+  
+  // При загрузке компонента проверяем, есть ли уже телефон в базе
+  const phoneFromBackend = await fetchPhoneFromBackend()
+  if (phoneFromBackend) {
+    phone.value = normalizePhoneValue(phoneFromBackend)
+  }
 })
 
 onUnmounted(() => {
   // Очистка при размонтировании
-  cleanupPhonePolling()
+  if (retryTimeout) {
+    clearTimeout(retryTimeout)
+    retryTimeout = null
+  }
+  
   if (isInTelegram.value && contactRequestedEventHandler) {
     const webApp = window.Telegram?.WebApp
     if (webApp?.offEvent) {
@@ -248,7 +199,10 @@ watch(phone, (newPhone) => {
     // Если пользователь начал вводить телефон вручную — прекращаем ожидание контакта
     if (waitingForContact.value) {
       waitingForContact.value = false
-      cleanupPhonePolling()
+      if (retryTimeout) {
+        clearTimeout(retryTimeout)
+        retryTimeout = null
+      }
     }
     const webApp = window.Telegram?.WebApp
     if (webApp?.MainButton && mainButtonClickHandler) {
@@ -286,8 +240,9 @@ async function requestContact() {
   const finishManual = (message) => {
     waitingForContact.value = false
     error.value = message
-    // Показываем ручной ввод через 5 секунд, но продолжаем в фоне ждать, вдруг телефон сохранится чуть позже
-    startBackgroundPhonePolling({ maxWaitMs: 30000, intervalMs: 1000 })
+    // Делаем одну попытку получить телефон через 3 секунды
+    // (время на сохранение в базу сторонним инструментом)
+    tryFetchPhoneAfterContact()
   }
 
   // Современный путь: Telegram WebApp.requestContact()
@@ -306,10 +261,8 @@ async function requestContact() {
         return
       }
       if (status === 'sent') {
-        const latest = await fetchPhoneFromBackendOnce()
-        if (latest) {
-          finishSuccess(latest)
-        }
+        // Контакт отправлен, делаем попытку получить телефон через 3 секунды
+        tryFetchPhoneAfterContact()
       }
     }
     webApp.onEvent?.('contactRequested', contactRequestedEventHandler)
@@ -327,11 +280,9 @@ async function requestContact() {
       return
     }
 
-    // Ждём до 5 секунд, пока бот/бекенд сохранят телефон, затем предлагаем ручной ввод
-    const phoneFromBackend = await waitForPhoneFromBackend({ maxWaitMs: 5000, intervalMs: 500 })
-    if (!finishSuccess(phoneFromBackend)) {
-      finishManual('Не удалось получить номер автоматически за 5 секунд. Введите телефон вручную — он нужен для обратной связи оператора или курьера.')
-    }
+    // Делаем попытку получить телефон через 3 секунды
+    // (время на сохранение в базу сторонним инструментом)
+    tryFetchPhoneAfterContact()
     return
   }
 
@@ -350,18 +301,14 @@ async function requestContact() {
     waitingForContact.value = true
     error.value = ''
 
-    const phoneFromBackend = await waitForPhoneFromBackend({ maxWaitMs: 5000, intervalMs: 500 })
-    if (finishSuccess(phoneFromBackend)) {
-      mainButton.hide()
-      mainButton.offClick(mainButtonClickHandler)
-      mainButtonClickHandler = null
-      return
-    }
-
+    // Делаем попытку получить телефон через 3 секунды
+    // (время на сохранение в базу сторонним инструментом)
+    tryFetchPhoneAfterContact()
+    
+    // Скрываем кнопку, так как контакт уже запрошен
     mainButton.hide()
     mainButton.offClick(mainButtonClickHandler)
     mainButtonClickHandler = null
-    finishManual('Не удалось получить номер автоматически за 5 секунд. Введите телефон вручную — он нужен для обратной связи оператора или курьера.')
   }
 
   mainButton.onClick(mainButtonClickHandler)
