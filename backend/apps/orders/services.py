@@ -502,7 +502,8 @@ class OrderService:
                     
                     # Количество модификатора = количество на единицу продукта × количество продукта
                     # Например: 2 пиццы × 3 сыра = 6 сыров всего
-                    modifier_amount = float(mod.quantity * order_item.quantity)
+                    # В рабочем примере amount - целое число
+                    modifier_amount = int(mod.quantity * order_item.quantity)
                     
                     modifiers_list.append({
                         'productId': modifier_code,
@@ -536,12 +537,10 @@ class OrderService:
             'terminalGroupId': str(terminal.terminal_id),
             'order': {
                 'orderServiceType': 'DeliveryByCourier',
-                'status': 'Unconfirmed',
                 'customer': {
                     'name': self._customer_name(order.user),
                     'phone': self._normalize_phone(order.phone)
                 },
-                # Внешний телефон заказа (как в примере от iiko)
                 'phone': self._normalize_phone(order.phone),
                 'deliveryPoint': delivery_point,
                 'items': items
