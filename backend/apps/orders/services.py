@@ -87,6 +87,8 @@ class OrderService:
         payment_type_id = validated_data.get('payment_type_id')
         terminal_id = validated_data.get('terminal_id')
         items_data = validated_data.get('items', [])
+        # Сумма доставки (если фронт её уже посчитал и передал отдельно)
+        delivery_cost = validated_data.get('delivery_cost')
         
         # 1. Determine the terminal to use
         selected_terminal = None
@@ -139,6 +141,7 @@ class OrderService:
         # Собираем комментарий об оплате для передачи в iiko
         kaspi_phone = remote_payment_phone or phone
         payment_comment = None
+        delivery_comment = None
 
         system_type = (payment_type.system_type or '').strip()
 
@@ -155,10 +158,27 @@ class OrderService:
             # Fallback, если системный тип не настроен
             payment_comment = f"Оплата: {payment_type.payment_name}."
 
-        final_comment = payment_comment
+        # Информация о сумме доставки (если есть)
+        if delivery_cost is not None:
+            try:
+                # Нормализуем к Decimal/float, но в комментарий кладём как есть
+                delivery_cost_value = Decimal(str(delivery_cost))
+                delivery_comment = f"Сумма доставки: {delivery_cost_value} ₸."
+            except Exception:
+                # Если не получилось сконвертировать — всё равно добавим «как есть»
+                delivery_comment = f"Сумма доставки: {delivery_cost}."
+
+        # Собираем финальный комментарий в удобочитаемом виде:
+        # 1) строка про оплату
+        # 2) строка про сумму доставки (если есть)
+        # 3) пользовательский комментарий (если есть)
+        comment_parts = [payment_comment]
+        if delivery_comment:
+            comment_parts.append(delivery_comment)
         if comment:
-            # Сохраняем пользовательский комментарий, не теряя информацию об оплате
-            final_comment = f"{payment_comment}\n{comment}"
+            comment_parts.append(comment)
+
+        final_comment = "\n".join(part for part in comment_parts if part)
         
         # Создаем заказ
         order = Order.objects.create(
@@ -297,6 +317,30 @@ class OrderService:
             # Подготавливаем данные для iiko
             iiko_data = self._prepare_iiko_order_data(order)
             
+            # Логируем подготовленные данные для отладки (без чувствительных данных)
+            logger.info(
+                f'Отправка заказа {order.order_id} в iiko: '
+                f'items_count={len(iiko_data.get("order", {}).get("items", []))}, '
+                f'organizationId={iiko_data.get("organizationId")}, '
+                f'terminalGroupId={iiko_data.get("terminalGroupId")}'
+            )
+            
+            # Логируем детали модификаторов
+            for item in iiko_data.get("order", {}).get("items", []):
+                if "modifiers" in item:
+                    logger.info(
+                        f'  Позиция {item.get("productId")}: '
+                        f'{len(item["modifiers"])} модификаторов: '
+                        f'{[m.get("productId") for m in item["modifiers"]]}'
+                    )
+            
+            # Логируем полный JSON запрос (для отладки)
+            import json
+            logger.info(
+                f'Полный JSON запрос для заказа {order.order_id}:\n'
+                f'{json.dumps(iiko_data, ensure_ascii=False, indent=2)}'
+            )
+            
             # Создаем клиент iiko
             client = IikoClient(order.organization.api_key)
             # Отправляем заказ
@@ -414,7 +458,8 @@ class OrderService:
         delivery_point = self._prepare_delivery_point(order)
         
         items = []
-        for order_item in order.items.prefetch_related('modifiers'):
+        # Загружаем модификаторы вместе с связанными объектами Modifier
+        for order_item in order.items.prefetch_related('modifiers__modifier'):
             item_data = {
                 'type': 'Product',
                 'productId': str(order_item.product.product_id),
@@ -424,13 +469,43 @@ class OrderService:
             
             mods = order_item.modifiers.all()
             if mods.exists():
-                item_data['modifiers'] = [
-                    {
-                        'productId': str(mod.modifier.modifier_code),
+                modifiers_list = []
+                for mod in mods:
+                    # Проверяем наличие modifier_code
+                    if not mod.modifier or not mod.modifier.modifier_code:
+                        error_msg = (
+                            f'Модификатор "{mod.modifier_name}" (ID: {mod.id}) '
+                            f'для продукта "{order_item.product_name}" не имеет modifier_code или связанный Modifier отсутствует. '
+                            f'Необходимо пересинхронизировать меню из iiko.'
+                        )
+                        logger.error(error_msg)
+                        raise ValueError(error_msg)
+                    
+                    modifier_code = str(mod.modifier.modifier_code).strip()
+                    if not modifier_code or modifier_code == 'None':
+                        error_msg = (
+                            f'Модификатор "{mod.modifier_name}" (ID: {mod.modifier.modifier_id}) '
+                            f'для продукта "{order_item.product_name}" имеет пустой или невалидный modifier_code: "{modifier_code}". '
+                            f'Необходимо пересинхронизировать меню из iiko.'
+                        )
+                        logger.error(error_msg)
+                        raise ValueError(error_msg)
+                    
+                    modifiers_list.append({
+                        'productId': modifier_code,
                         'amount': float(mod.quantity)
-                    }
-                    for mod in mods
-                ]
+                    })
+                    
+                    logger.debug(
+                        f'Добавлен модификатор для заказа {order.order_id}: '
+                        f'productId={modifier_code}, amount={mod.quantity}, name={mod.modifier_name}'
+                    )
+                
+                item_data['modifiers'] = modifiers_list
+                logger.info(
+                    f'Заказ {order.order_id}, позиция "{order_item.product_name}": '
+                    f'добавлено {len(modifiers_list)} модификаторов'
+                )
             
             items.append(item_data)
         
@@ -452,20 +527,14 @@ class OrderService:
                     'name': self._customer_name(order.user),
                     'phone': self._normalize_phone(order.phone)
                 },
+                # Внешний телефон заказа (как в примере от iiko)
                 'phone': self._normalize_phone(order.phone),
                 'deliveryPoint': delivery_point,
                 'items': items
             }
         }
         
-        # Условно добавляем customerPayments только если тип оплаты активен
-        # Это позволяет масштабировать проект в будущем с отслеживанием оплат
-        if order.payment_type and order.payment_type.is_active:
-            order_data['order']['customerPayments'] = [{
-                'paymentTypeId': str(order.payment_type.payment_id),
-                'sum': float(order.total_amount)
-            }]
-        
+        # Вся информация об оплате и доставке теперь уходит только в текст комментария
         if order.comment:
             order_data['order']['comment'] = order.comment
         
@@ -480,21 +549,35 @@ class OrderService:
         if order.delivery_address:
             address = order.delivery_address
             
-            # Формируем адрес в правильном порядке: город -> улица -> дом -> квартира
-            address_data = {
+            # Формируем адрес в формате, ожидаемом iiko и согласованном с вами:
+            # {
+            #   "phone": "+7777...",
+            #   "deliveryPoint": {
+            #     "address": {
+            #       "city": "Актобе",
+            #       "house": "2/1",
+            #       "street": { "name": "Абай" },
+            #       "flat": "4",
+            #       "entrance": "1",
+            #       "floor": "1"
+            #     }
+            #   }
+            # }
+            address_data: Dict[str, object] = {
                 'city': address.city_name
             }
             
-            # Улица (должна идти после города, но перед домом)
-            if address.iiko_street_id:
-                address_data['street'] = {'id': str(address.iiko_street_id)}
-            elif address.street:
-                address_data['street'] = {'id': str(address.street.street_id)}
-            elif address.street_name:
-                address_data['street'] = {'name': address.street_name}
+            # Улица – только по name, без ID
+            street_name = address.street_name
+            if not street_name and address.street:
+                # Берём человекочитаемое название улицы из справочника
+                street_name = getattr(address.street, 'street_name', None) or getattr(address.street, 'name', None)
+            if street_name:
+                address_data['street'] = {'name': street_name}
             
             # Дом
-            address_data['house'] = address.house
+            if address.house:
+                address_data['house'] = address.house
             
             # Дополнительные поля
             if address.flat:

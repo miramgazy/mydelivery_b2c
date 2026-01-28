@@ -192,6 +192,10 @@ class MenuSyncService:
             
             mod_product_id = mod_data.get('id') or mod_data.get('productId')
             if not mod_product_id:
+                logger.warning(
+                    f'Пропущен модификатор для продукта "{product.product_name}" (ID: {product.product_id}): '
+                    f'отсутствует id или productId в данных: {mod_data}'
+                )
                 return
 
             # Lookup name/price from global map if missing
@@ -200,18 +204,27 @@ class MenuSyncService:
             
             linked_product = products_map.get(mod_product_id)
             if linked_product:
-                if not name: name = linked_product.get('name')
+                if not name: 
+                    name = linked_product.get('name')
                 # Price logic: usually modifier overrides price or adds to it?
                 # If 'currentPrice' is in mod_data (sometimes), use it. Else use linked product price.
                 # In iiko: childModifier might represent "Availability" of a product. Price might be 0 or override.
-                pass
+                if not price and 'price' in linked_product:
+                    price = linked_product.get('price', 0)
             
             if not name:
                 name = f"Modifier {mod_product_id}"
 
             # If create_modifier is just linking, we generate a new ID for the link
             # Конвертируем mod_product_id в строку для сохранения в modifier_code
-            modifier_code_str = str(mod_product_id) if mod_product_id else None
+            modifier_code_str = str(mod_product_id).strip() if mod_product_id else None
+            
+            if not modifier_code_str or modifier_code_str == 'None':
+                logger.error(
+                    f'Не удалось создать модификатор для продукта "{product.product_name}": '
+                    f'modifier_code пустой или None после конвертации mod_product_id={mod_product_id}'
+                )
+                return
             
             Modifier.objects.create(
                 modifier_id=uuid.uuid4(),
@@ -221,7 +234,12 @@ class MenuSyncService:
                 min_amount=int(mod_data.get('minAmount') or 0),
                 max_amount=int(mod_data.get('maxAmount') or 1),
                 is_required=bool(mod_data.get('required')) or bool(group_info and group_info.get('required')),
-                price=0 # simplified for now, as price logic is complex in iiko
+                price=float(price) if price is not None else 0.0
+            )
+            
+            logger.debug(
+                f'Создан модификатор для продукта "{product.product_name}": '
+                f'name="{name}", modifier_code={modifier_code_str}'
             )
 
         # Process Group Modifiers

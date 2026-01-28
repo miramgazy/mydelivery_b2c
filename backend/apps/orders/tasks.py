@@ -17,7 +17,7 @@ def send_order_to_iiko_task(self, order_id: str):
     """
     try:
         order = Order.objects.select_related('organization', 'user', 'payment_type', 'terminal', 'delivery_address') \
-            .prefetch_related('items__modifiers') \
+            .prefetch_related('items__modifiers__modifier', 'items__product') \
             .get(order_id=order_id)
     except Order.DoesNotExist:
         logger.warning(f"send_order_to_iiko_task: order not found: {order_id}")

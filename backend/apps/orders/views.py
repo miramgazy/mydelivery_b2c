@@ -16,7 +16,7 @@ class OrderViewSet(viewsets.ModelViewSet):
     """ViewSet для заказов"""
     queryset = Order.objects.select_related(
         'user', 'organization', 'delivery_address', 'payment_type'
-    ).prefetch_related('items__modifiers')
+    ).prefetch_related('items__modifiers__modifier', 'items__product')
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['status', 'organization']
     ordering_fields = ['created_at', 'total_amount']
