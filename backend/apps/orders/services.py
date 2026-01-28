@@ -144,29 +144,38 @@ class OrderService:
         delivery_comment = None
 
         system_type = (payment_type.system_type or '').strip()
+        payment_name = payment_type.payment_name or 'Не указан'
 
         if system_type == 'remote_payment':
-            # Удалённый счёт (Kaspi)
-            payment_comment = (
-                f"Оплата: Удаленный счет. Выставить на номер: {kaspi_phone or '—'}."
-            )
+            # Удалённый счёт (Kaspi) - с номером телефона
+            if kaspi_phone:
+                payment_comment = f"Оплата: {payment_name}. Номер телефона: {kaspi_phone}."
+            else:
+                payment_comment = f"Оплата: {payment_name}."
         elif system_type == 'cash':
-            payment_comment = "Оплата: Наличными курьеру."
+            # Наличными - без номера телефона
+            payment_comment = f"Оплата: {payment_name}."
         elif system_type == 'card_on_delivery':
-            payment_comment = "Оплата: Картой при получении."
+            # Картой при получении - без номера телефона
+            payment_comment = f"Оплата: {payment_name}."
         else:
-            # Fallback, если системный тип не настроен
-            payment_comment = f"Оплата: {payment_type.payment_name}."
+            # Fallback - используем название типа оплаты
+            payment_comment = f"Оплата: {payment_name}."
 
-        # Информация о сумме доставки (если есть)
+        # Информация о доставке (бесплатная/платная и сумма)
         if delivery_cost is not None:
             try:
-                # Нормализуем к Decimal/float, но в комментарий кладём как есть
                 delivery_cost_value = Decimal(str(delivery_cost))
-                delivery_comment = f"Сумма доставки: {delivery_cost_value} ₸."
+                if delivery_cost_value == 0:
+                    delivery_comment = "Доставка: Бесплатная."
+                else:
+                    delivery_comment = f"Доставка: Платная. Сумма: {delivery_cost_value} ₸."
             except Exception:
                 # Если не получилось сконвертировать — всё равно добавим «как есть»
-                delivery_comment = f"Сумма доставки: {delivery_cost}."
+                if delivery_cost == 0 or str(delivery_cost).strip() == '0':
+                    delivery_comment = "Доставка: Бесплатная."
+                else:
+                    delivery_comment = f"Доставка: Платная. Сумма: {delivery_cost} ₸."
 
         # Собираем финальный комментарий в удобочитаемом виде:
         # 1) строка про оплату
@@ -491,14 +500,19 @@ class OrderService:
                         logger.error(error_msg)
                         raise ValueError(error_msg)
                     
+                    # Количество модификатора = количество на единицу продукта × количество продукта
+                    # Например: 2 пиццы × 3 сыра = 6 сыров всего
+                    modifier_amount = float(mod.quantity * order_item.quantity)
+                    
                     modifiers_list.append({
                         'productId': modifier_code,
-                        'amount': float(mod.quantity)
+                        'amount': modifier_amount
                     })
                     
                     logger.debug(
                         f'Добавлен модификатор для заказа {order.order_id}: '
-                        f'productId={modifier_code}, amount={mod.quantity}, name={mod.modifier_name}'
+                        f'productId={modifier_code}, amount={modifier_amount} '
+                        f'(модификатор: {mod.quantity} × продукт: {order_item.quantity}), name={mod.modifier_name}'
                     )
                 
                 item_data['modifiers'] = modifiers_list
