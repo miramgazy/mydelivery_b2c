@@ -535,6 +535,7 @@ const loadZones = async (forceRefresh = false) => {
             delivery_type: zone.delivery_type || 'free',
             delivery_cost: zone.delivery_type === 'paid' ? (zone.delivery_cost || zone.price || 0) : 0,
             min_order_amount: zone.delivery_type === 'free' ? (zone.min_order_amount || zone.minSum || 0) : 0,
+            formula: zone.formula || null, // Загружаем формулу из базы данных
             coordinates: coords
           }
         })
@@ -1209,6 +1210,7 @@ const saveZones = async () => {
         delivery_type: zone.delivery_type || 'free',
         delivery_cost: zone.delivery_type === 'paid' ? (zone.delivery_cost || 0) : 0,
         min_order_amount: zone.delivery_type === 'free' ? (zone.min_order_amount || 0) : 0,
+        formula: zone.formula || null, // Включаем формулу в данные для сохранения
         coordinates: zone.coordinates || []
       }
     })
