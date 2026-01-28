@@ -2,6 +2,8 @@
 Утилиты для расчета стоимости доставки на основе зон
 """
 import logging
+import re
+from typing import Dict, Any, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -79,6 +81,89 @@ def point_in_polygon(lat, lon, polygon_coords):
     return inside
 
 
+def evaluate_formula(formula: str, order_sum: float, zone: Dict[str, Any]) -> float:
+    """
+    Вычисляет стоимость доставки по формуле.
+    
+    Поддерживаемые переменные:
+    - {{order_sum}} - сумма заказа
+    - {{min_sum}} - минимальная сумма из настроек зоны
+    - {{price}} - базовая стоимость доставки из настроек зоны
+    
+    Args:
+        formula: Строка с формулой (например: "({{order_sum}} < {{min_sum}}) ? {{price}} : 0")
+        order_sum: Сумма заказа
+        zone: Словарь с данными зоны
+    
+    Returns:
+        float: Рассчитанная стоимость доставки
+    
+    Raises:
+        ValueError: Если формула содержит недопустимые символы или не может быть вычислена
+    """
+    if not formula or not isinstance(formula, str):
+        raise ValueError("Formula must be a non-empty string")
+    
+    # Безопасность: проверяем, что формула содержит только разрешенные символы
+    # Разрешаем: числа, операторы, скобки, пробелы, плейсхолдеры
+    allowed_pattern = re.compile(r'^[0-9+\-*/().\s<>=!?:&|{{}}]+$')
+    if not allowed_pattern.match(formula.replace('{{order_sum}}', '').replace('{{min_sum}}', '').replace('{{price}}', '')):
+        raise ValueError("Formula contains invalid characters")
+    
+    # Получаем значения переменных
+    min_sum = zone.get('min_order_amount', 0)
+    price = zone.get('delivery_cost', 0)
+    
+    # Заменяем плейсхолдеры на значения
+    formula_eval = formula.replace('{{order_sum}}', str(order_sum))
+    formula_eval = formula_eval.replace('{{min_sum}}', str(min_sum))
+    formula_eval = formula_eval.replace('{{price}}', str(price))
+    
+    # Безопасное вычисление формулы
+    # Используем eval только с ограниченным набором функций
+    try:
+        # Заменяем тернарный оператор на if-else для Python
+        # Формат: (condition) ? value_if_true : value_if_false
+        # Преобразуем в: value_if_true if condition else value_if_false
+        
+        # Простая замена тернарного оператора
+        if '?' in formula_eval and ':' in formula_eval:
+            # Находим тернарный оператор
+            parts = formula_eval.split('?', 1)
+            if len(parts) == 2:
+                condition = parts[0].strip().strip('()')
+                rest = parts[1].strip()
+                if ':' in rest:
+                    true_part, false_part = rest.split(':', 1)
+                    true_part = true_part.strip()
+                    false_part = false_part.strip()
+                    # Преобразуем в Python if-else
+                    formula_eval = f"({true_part} if ({condition}) else {false_part})"
+        
+        # Безопасное вычисление: только математические операции
+        # Создаем безопасный контекст для eval
+        safe_dict = {
+            "__builtins__": {},
+            "abs": abs,
+            "min": min,
+            "max": max,
+            "round": round,
+        }
+        
+        result = eval(formula_eval, safe_dict)
+        
+        # Проверяем, что результат - число
+        if not isinstance(result, (int, float)):
+            raise ValueError("Formula must return a number")
+        
+        # Округляем до 2 знаков после запятой и возвращаем
+        return round(float(result), 2)
+        
+    except Exception as e:
+        logger.error(f"Error evaluating formula '{formula}': {e}")
+        raise ValueError(f"Invalid formula: {str(e)}")
+
+
 def calculate_delivery_cost(lat, lon, delivery_zones, order_amount=0):
     """
     Рассчитывает стоимость доставки на основе координат и зон доставки.
@@ -125,8 +210,30 @@ def calculate_delivery_cost(lat, lon, delivery_zones, order_amount=0):
         logger.debug(f"Point ({lat}, {lon}) {'INSIDE' if is_inside else 'OUTSIDE'} zone {zone.get('name', 'Unknown')}")
         
         if is_inside:
-            delivery_type = zone.get('delivery_type', 'free')
             zone_name = zone.get('name', 'Неизвестная зона')
+            
+            # Проверяем, есть ли формула для расчета
+            formula = zone.get('formula')
+            
+            if formula:
+                # Используем формулу для расчета
+                try:
+                    cost = evaluate_formula(formula, order_amount, zone)
+                    is_free = cost == 0
+                    return {
+                        'cost': cost,
+                        'zone_name': zone_name,
+                        'is_free': is_free,
+                        'zone_found': True,
+                        'formula_used': True
+                    }
+                except Exception as e:
+                    logger.error(f"Error evaluating formula for zone {zone_name}: {e}")
+                    # Fallback на старую логику при ошибке в формуле
+                    pass
+            
+            # Старая логика (без формул) - для обратной совместимости
+            delivery_type = zone.get('delivery_type', 'free')
             
             if delivery_type == 'free':
                 # Проверяем минимальную сумму заказа для бесплатной доставки

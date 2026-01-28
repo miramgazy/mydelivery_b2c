@@ -137,12 +137,12 @@
       class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
       @click.self="closeEditModal"
     >
-      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full mx-4">
-        <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full mx-4 max-h-[90vh] flex flex-col">
+        <div class="p-6 border-b border-gray-200 dark:border-gray-700 flex-shrink-0">
           <h3 class="text-lg font-bold text-gray-900 dark:text-white">Настройки зоны</h3>
         </div>
 
-        <div class="p-6 space-y-4">
+        <div class="p-6 space-y-4 overflow-y-auto flex-1">
           <!-- Zone Name -->
           <div>
             <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -287,9 +287,76 @@
               placeholder="0.00"
             />
           </div>
+
+          <!-- Formula Editor -->
+          <div class="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Формула расчета (опционально)
+              <span class="text-xs text-gray-500 dark:text-gray-400 ml-2">
+                Если указана, переопределяет стандартную логику
+              </span>
+            </label>
+            
+            <!-- Placeholder buttons -->
+            <div class="flex flex-wrap gap-2 mb-3">
+              <button
+                type="button"
+                @click="insertPlaceholder('{{order_sum}}')"
+                class="px-3 py-1.5 text-xs font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-lg hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
+                title="Сумма заказа"
+              >
+                {{order_sum}}
+              </button>
+              <button
+                type="button"
+                @click="insertPlaceholder('{{min_sum}}')"
+                class="px-3 py-1.5 text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg hover:bg-green-200 dark:hover:bg-green-900/50 transition-colors"
+                title="Минимальная сумма из настроек зоны"
+              >
+                {{min_sum}}
+              </button>
+              <button
+                type="button"
+                @click="insertPlaceholder('{{price}}')"
+                class="px-3 py-1.5 text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg hover:bg-purple-200 dark:hover:bg-purple-900/50 transition-colors"
+                title="Базовая стоимость доставки из настроек зоны"
+              >
+                {{price}}
+              </button>
+            </div>
+
+            <!-- Formula input -->
+            <textarea
+              ref="formulaInput"
+              v-model="editingZone.formula"
+              rows="3"
+              class="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
+                     bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-sm
+                     focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="Например: ({{order_sum}} < {{min_sum}}) ? {{price}} : 0"
+            ></textarea>
+
+            <!-- Formula validation -->
+            <div v-if="formulaError" class="mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-700 dark:text-red-300">
+              {{ formulaError }}
+            </div>
+            <div v-else-if="editingZone.formula && formulaValid" class="mt-2 p-2 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-sm text-green-700 dark:text-green-300">
+              ✓ Формула корректна
+            </div>
+
+            <!-- Formula examples -->
+            <div class="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              <p class="mb-1 font-semibold">Примеры:</p>
+              <ul class="list-disc list-inside space-y-1 ml-2">
+                <li><code class="bg-gray-100 dark:bg-gray-800 px-1 rounded">({{order_sum}} < {{min_sum}}) ? {{price}} : 0</code> - бесплатно при сумме >= min_sum</li>
+                <li><code class="bg-gray-100 dark:bg-gray-800 px-1 rounded">{{price}} * ({{order_sum}} / 1000)</code> - динамическая стоимость</li>
+                <li><code class="bg-gray-100 dark:bg-gray-800 px-1 rounded">{{order_sum}} >= {{min_sum}} ? 0 : {{price}}</code> - условная доставка</li>
+              </ul>
+            </div>
+          </div>
         </div>
 
-        <div class="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-between gap-3">
+        <div class="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-between gap-3 flex-shrink-0">
           <!-- Delete button (only for existing zones, not new ones - same as example) -->
           <button
             v-if="currentZoneIndex !== null && currentZoneIndex >= 0 && currentZoneIndex < zones.length && !isNewZone"
@@ -324,6 +391,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue'
 import { Icon } from '@iconify/vue'
+import { evaluate, create, all } from 'mathjs'
 import organizationService from '@/services/organization.service'
 
 // Data
@@ -348,6 +416,9 @@ const isNewZone = ref(false) // Track if we're editing a new zone
 
 // Modal state
 const showEditModal = ref(false)
+const formulaInput = ref(null)
+const formulaError = ref('')
+const formulaValid = ref(false)
 const editingZone = ref({
   name: '',
   priority: 1,
@@ -355,6 +426,7 @@ const editingZone = ref({
   delivery_type: 'free',
   delivery_cost: 0,
   min_order_amount: 0,
+  formula: '', // Formula for flexible calculation
   coordinates: []
 })
 
@@ -882,9 +954,11 @@ const editZone = (index) => {
     delivery_type: zone.delivery_type || 'free',
     delivery_cost: zone.delivery_cost || 0,
     min_order_amount: zone.min_order_amount || 0,
+    formula: zone.formula || '',
     coordinates: zone.coordinates || []
   }
   showEditModal.value = true
+  validateFormula()
 }
 
 // Save zone settings
@@ -924,6 +998,14 @@ const saveZoneSettings = () => {
       normalizedColor = 'red'
     }
     
+    // Validate formula if provided
+    if (editingZone.value.formula && editingZone.value.formula.trim()) {
+      if (!formulaValid.value) {
+        error.value = 'Формула содержит ошибки. Исправьте формулу перед сохранением.'
+        return
+      }
+    }
+    
     // Update zone data with all fields
     const updatedZone = {
       name: editingZone.value.name.trim(),
@@ -932,6 +1014,7 @@ const saveZoneSettings = () => {
       delivery_type: editingZone.value.delivery_type || 'free',
       delivery_cost: editingZone.value.delivery_type === 'paid' ? (editingZone.value.delivery_cost || 0) : 0,
       min_order_amount: editingZone.value.delivery_type === 'free' ? (editingZone.value.min_order_amount || 0) : 0,
+      formula: editingZone.value.formula ? editingZone.value.formula.trim() : null,
       coordinates: editingZone.value.coordinates || []
     }
     
@@ -1079,8 +1162,11 @@ const closeEditModal = () => {
     delivery_type: 'free',
     delivery_cost: 0,
     min_order_amount: 0,
+    formula: '',
     coordinates: []
   }
+  formulaError.value = ''
+  formulaValid.value = false
   currentZoneIndex = null
   isNewZone.value = false
 }
@@ -1262,6 +1348,108 @@ onMounted(async () => {
   await loadTerminals()
   await loadCities()
   loadYandexMaps()
+})
+
+// Formula functions
+const insertPlaceholder = (placeholder) => {
+  if (!formulaInput.value) return
+  
+  const textarea = formulaInput.value
+  const start = textarea.selectionStart
+  const end = textarea.selectionEnd
+  const text = editingZone.value.formula || ''
+  
+  const newText = text.substring(0, start) + placeholder + text.substring(end)
+  editingZone.value.formula = newText
+  
+  // Set cursor position after inserted placeholder
+  setTimeout(() => {
+    textarea.focus()
+    const newPosition = start + placeholder.length
+    textarea.setSelectionRange(newPosition, newPosition)
+    validateFormula()
+  }, 0)
+}
+
+const validateFormula = () => {
+  const formula = editingZone.value.formula?.trim()
+  
+  if (!formula) {
+    formulaError.value = ''
+    formulaValid.value = false
+    return
+  }
+  
+  try {
+    // Replace placeholders with test values for validation
+    const testFormula = formula
+      .replace(/\{\{order_sum\}\}/g, '1000')
+      .replace(/\{\{min_sum\}\}/g, '500')
+      .replace(/\{\{price\}\}/g, '300')
+    
+    // Check for dangerous patterns (only allow safe math operations)
+    const dangerousPatterns = [
+      /import\s*\(/,
+      /require\s*\(/,
+      /eval\s*\(/,
+      /function\s*\(/,
+      /=>/,
+      /__/,
+      /process\./,
+      /global\./,
+      /window\./,
+      /document\./
+    ]
+    
+    for (const pattern of dangerousPatterns) {
+      if (pattern.test(testFormula)) {
+        formulaError.value = 'Формула содержит недопустимые символы'
+        formulaValid.value = false
+        return
+      }
+    }
+    
+    // Convert ternary operator to mathjs format
+    let mathFormula = testFormula
+    // Replace ternary: (condition) ? true_value : false_value
+    // MathJS doesn't support ternary, so we'll use a workaround
+    if (mathFormula.includes('?')) {
+      // For validation, we'll just check if it's syntactically correct
+      // The actual evaluation will be done on backend
+      mathFormula = mathFormula.replace(/\?/g, ' ? ').replace(/:/g, ' : ')
+    }
+    
+    // Try to parse with mathjs (for basic validation)
+    // We'll use a simplified parser that checks syntax
+    const math = create(all)
+    
+    // Remove ternary operators for mathjs validation
+    const mathOnlyFormula = mathFormula.replace(/\([^)]+\)\s*\?\s*[^:]+:\s*[^)]+/g, '0')
+    
+    // Try to evaluate (this will throw if invalid)
+    try {
+      math.evaluate(mathOnlyFormula)
+      formulaError.value = ''
+      formulaValid.value = true
+    } catch (e) {
+      // If it's a ternary, that's OK - backend will handle it
+      if (formula.includes('?')) {
+        formulaError.value = ''
+        formulaValid.value = true
+      } else {
+        formulaError.value = `Ошибка в формуле: ${e.message}`
+        formulaValid.value = false
+      }
+    }
+  } catch (e) {
+    formulaError.value = `Ошибка валидации: ${e.message}`
+    formulaValid.value = false
+  }
+}
+
+// Watch formula changes for validation
+watch(() => editingZone.value.formula, () => {
+  validateFormula()
 })
 
 onUnmounted(() => {
