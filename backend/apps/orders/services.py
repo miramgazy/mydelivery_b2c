@@ -325,6 +325,8 @@ class OrderService:
         try:
             # Подготавливаем данные для iiko
             iiko_data = self._prepare_iiko_order_data(order)
+            # Сохраняем полный запрос, который отправляем в iiko, для последующей диагностики
+            order.query_to_iiko = iiko_data
             
             # Логируем подготовленные данные для отладки (без чувствительных данных)
             logger.info(
@@ -368,7 +370,7 @@ class OrderService:
             order.error_message = None
             order.save(update_fields=[
                 'iiko_order_id', 'correlation_id', 'status',
-                'sent_to_iiko_at', 'iiko_response', 'error_message'
+                'sent_to_iiko_at', 'iiko_response', 'query_to_iiko', 'error_message'
             ])
             
             logger.info(f'Заказ {order.order_id} отправлен в iiko (correlationId: {correlation_id})')
@@ -380,7 +382,7 @@ class OrderService:
             # Сохраняем ошибку
             order.status = Order.STATUS_ERROR
             order.error_message = str(e)
-            order.save(update_fields=['status', 'error_message'])
+            order.save(update_fields=['status', 'error_message', 'query_to_iiko'])
             
             return False
         
@@ -389,7 +391,7 @@ class OrderService:
             
             order.status = Order.STATUS_ERROR
             order.error_message = f'Системная ошибка: {str(e)}'
-            order.save(update_fields=['status', 'error_message'])
+            order.save(update_fields=['status', 'error_message', 'query_to_iiko'])
             
             return False
 

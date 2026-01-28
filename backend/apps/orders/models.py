@@ -90,6 +90,8 @@ class Order(models.Model):
     
     sent_to_iiko_at = models.DateTimeField('Отправлен в iiko', null=True, blank=True)
     iiko_response = models.JSONField('Ответ от iiko', null=True, blank=True)
+    # Полный payload, отправленный в iiko (для отладки)
+    query_to_iiko = models.JSONField('Запрос в iiko', null=True, blank=True)
     error_message = models.TextField('Текст ошибки', blank=True, null=True)
     
     created_at = models.DateTimeField('Создан', auto_now_add=True)
