@@ -275,6 +275,14 @@ class OrderCreateSerializer(serializers.Serializer):
     house = serializers.CharField(required=False, allow_blank=True, default='')
     flat = serializers.CharField(required=False, allow_blank=True, default='')
     
+    # Сумма доставки (если фронтенд её уже посчитал)
+    delivery_cost = serializers.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+        required=False,
+        allow_null=True
+    )
+    
     def validate_payment_type_id(self, value):
         """Проверка типа оплаты"""
         request = self.context.get('request')
