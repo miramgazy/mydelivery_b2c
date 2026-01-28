@@ -322,6 +322,14 @@ class OrderService:
         """
         Отправка заказа в iiko
         """
+        # Проверяем, не был ли заказ уже отправлен
+        if order.sent_to_iiko_at is not None:
+            logger.warning(
+                f'Заказ {order.order_id} уже был отправлен в iiko в {order.sent_to_iiko_at}. '
+                f'Пропускаем повторную отправку.'
+            )
+            return True
+        
         try:
             # Подготавливаем данные для iiko
             iiko_data = self._prepare_iiko_order_data(order)
@@ -469,8 +477,11 @@ class OrderService:
         delivery_point = self._prepare_delivery_point(order)
         
         items = []
-        # Загружаем модификаторы вместе с связанными объектами Modifier
-        for order_item in order.items.prefetch_related('modifiers__modifier'):
+        # Всегда используем prefetch_related для надежной загрузки модификаторов
+        # Это гарантирует, что модификаторы будут загружены даже если они не были загружены ранее
+        order_items = order.items.prefetch_related('modifiers__modifier', 'product').all()
+        
+        for order_item in order_items:
             item_data = {
                 'type': 'Product',
                 'productId': str(order_item.product.product_id),
@@ -478,15 +489,27 @@ class OrderService:
                 'price': float(order_item.price)
             }
             
-            mods = order_item.modifiers.all()
-            if mods.exists():
+            # Получаем модификаторы - prefetch_related уже загрузил их
+            # Используем list() чтобы гарантировать выполнение запроса
+            mods = list(order_item.modifiers.select_related('modifier').all())
+            
+            if mods:
                 modifiers_list = []
                 for mod in mods:
-                    # Проверяем наличие modifier_code
-                    if not mod.modifier or not mod.modifier.modifier_code:
+                    # Проверяем наличие modifier и modifier_code
+                    if not mod.modifier:
                         error_msg = (
                             f'Модификатор "{mod.modifier_name}" (ID: {mod.id}) '
-                            f'для продукта "{order_item.product_name}" не имеет modifier_code или связанный Modifier отсутствует. '
+                            f'для продукта "{order_item.product_name}" не имеет связанного Modifier. '
+                            f'Необходимо пересинхронизировать меню из iiko.'
+                        )
+                        logger.error(error_msg)
+                        raise ValueError(error_msg)
+                    
+                    if not mod.modifier.modifier_code:
+                        error_msg = (
+                            f'Модификатор "{mod.modifier_name}" (ID: {mod.modifier.modifier_id}) '
+                            f'для продукта "{order_item.product_name}" не имеет modifier_code. '
                             f'Необходимо пересинхронизировать меню из iiko.'
                         )
                         logger.error(error_msg)
@@ -512,8 +535,8 @@ class OrderService:
                         'amount': modifier_amount
                     })
                     
-                    logger.debug(
-                        f'Добавлен модификатор для заказа {order.order_id}: '
+                    logger.info(
+                        f'Добавлен модификатор для заказа {order.order_id}, позиция "{order_item.product_name}": '
                         f'productId={modifier_code}, amount={modifier_amount} '
                         f'(модификатор: {mod.quantity} × продукт: {order_item.quantity}), name={mod.modifier_name}'
                     )
@@ -522,6 +545,11 @@ class OrderService:
                 logger.info(
                     f'Заказ {order.order_id}, позиция "{order_item.product_name}": '
                     f'добавлено {len(modifiers_list)} модификаторов'
+                )
+            else:
+                logger.debug(
+                    f'Заказ {order.order_id}, позиция "{order_item.product_name}": '
+                    f'модификаторы не найдены'
                 )
             
             items.append(item_data)
