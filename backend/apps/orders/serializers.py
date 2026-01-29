@@ -241,10 +241,15 @@ class OrderDetailSerializer(serializers.ModelSerializer):
 
 class OrderCreateSerializer(serializers.Serializer):
     """Сериализатор для создания заказа"""
+    delivery_type = serializers.ChoiceField(
+        choices=[('delivery', 'Доставка'), ('pickup', 'Самовывоз')],
+        required=False,
+        default='delivery'
+    )
     delivery_address_id = serializers.UUIDField(required=False, allow_null=True)
     phone = serializers.CharField(max_length=20, required=False, allow_blank=True, default='')
     comment = serializers.CharField(required=False, allow_blank=True, default='')
-    payment_type_id = serializers.UUIDField()
+    payment_type_id = serializers.UUIDField(required=False, allow_null=True)
     terminal_id = serializers.UUIDField(required=False, allow_null=True)
     items = OrderItemCreateSerializer(many=True)
 
@@ -283,13 +288,15 @@ class OrderCreateSerializer(serializers.Serializer):
     )
     
     def validate_payment_type_id(self, value):
-        """Проверка типа оплаты"""
+        """Проверка типа оплаты (если передан)"""
+        if value is None:
+            return value
         request = self.context.get('request')
         if request and hasattr(request, 'user'):
             org_id = request.user.organization_id
             if org_id:
                 try:
-                    payment_type = PaymentType.objects.get(
+                    PaymentType.objects.get(
                         payment_id=value,
                         organization_id=org_id,
                         is_active=True
@@ -297,8 +304,7 @@ class OrderCreateSerializer(serializers.Serializer):
                     return value
                 except PaymentType.DoesNotExist:
                     raise serializers.ValidationError('Тип оплаты не найден или недоступен')
-        
-        raise serializers.ValidationError('Необходимо указать организацию')
+        return value
     
     def validate_delivery_address_id(self, value):
         """Проверка адреса доставки"""
@@ -394,13 +400,13 @@ class OrderCreateSerializer(serializers.Serializer):
             except PaymentType.DoesNotExist:
                 pass
 
-        # Должен быть указан либо адрес, либо координаты
-        if not delivery_address_id:
-            if not (latitude and longitude):
-                if not (street_id and house):
-                    raise serializers.ValidationError(
-                        'Необходимо указать адрес доставки, координаты или данные улицы и дома'
-                    )
+        # Адрес обязателен только при доставке (при самовывозе не требуем)
+        delivery_type = (attrs.get('delivery_type') or 'delivery').strip().lower()
+        if delivery_type == 'delivery' and not delivery_address_id:
+            if not (latitude and longitude) and not (street_id and house):
+                raise serializers.ValidationError(
+                    {'delivery_address_id': 'Необходимо указать адрес доставки, координаты или данные улицы и дома'}
+                )
         
         # Если terminal_id не указан, но у пользователя есть терминалы, проверяем первый
         request = self.context.get('request')

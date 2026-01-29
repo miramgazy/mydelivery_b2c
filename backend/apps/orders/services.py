@@ -128,29 +128,34 @@ class OrderService:
             except DeliveryAddress.DoesNotExist:
                 raise ValueError('Адрес доставки не найден')
         
-        # Получаем тип оплаты
-        try:
-            payment_type = PaymentType.objects.get(
-                payment_id=payment_type_id,
-                organization=organization,
-                is_active=True
-            )
-        except PaymentType.DoesNotExist:
-            raise ValueError('Тип оплаты не найден')
+        # Тип оплаты (может быть не указан, если не настроен)
+        payment_type = None
+        system_type = ''
+        payment_name = 'Не указан'
+        if payment_type_id:
+            try:
+                payment_type = PaymentType.objects.get(
+                    payment_id=payment_type_id,
+                    organization=organization,
+                    is_active=True
+                )
+                system_type = (payment_type.system_type or '').strip()
+                payment_name = payment_type.payment_name or 'Не указан'
+            except PaymentType.DoesNotExist:
+                raise ValueError('Тип оплаты не найден')
 
         # Конструктор комментария для персонала (блоки: Оплата, Доставка, Клиент)
         kaspi_phone = remote_payment_phone or phone
-        system_type = (payment_type.system_type or '').strip()
-        payment_name = payment_type.payment_name or 'Не указан'
 
         # Блок Оплаты: Оплата: {payment_name}. Если remote_payment — выставить удаленный счет {billing_phone}
         payment_block = f"Оплата: {payment_name}"
         if system_type == 'remote_payment' and kaspi_phone:
             payment_block += f"\nвыставить удаленный счет {kaspi_phone}"
 
-        # Блок Доставки: при доставке всегда указываем — БЕСПЛАТНАЯ или ПЛАТНАЯ с суммой
+        # Блок Доставки: только при доставке (не при самовывозе)
+        delivery_type = (validated_data.get('delivery_type') or 'delivery').strip().lower()
         delivery_block = None
-        if delivery_address_id:
+        if delivery_type == 'delivery' and delivery_address_id:
             if delivery_cost is not None:
                 try:
                     delivery_cost_value = Decimal(str(delivery_cost))

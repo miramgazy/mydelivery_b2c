@@ -148,10 +148,14 @@
                  У вас нет сохраненных адресов. Пожалуйста, добавьте адрес в профиле.
                  <button @click="$router.push('/profile/addresses')" class="block mt-2 font-bold underline text-orange-800 dark:text-orange-200">Добавить адрес</button>
              </div>
+        </div>
 
-             <textarea 
+        <!-- Комментарий к заказу (и для доставки, и для самовывоза) -->
+        <div class="space-y-2">
+            <label class="font-semibold text-gray-700 dark:text-gray-300">Комментарий к заказу</label>
+            <textarea 
                 v-model="form.comment"
-                placeholder="Комментарий к заказу (код домофона и т.д.)"
+                :placeholder="form.deliveryType === 'delivery' ? 'Код домофона, подъезд и т.д.' : 'Пожелания по заказу (например: позвонить за 10 минут)'"
                 rows="2"
                 class="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-primary-500 outline-none"
             ></textarea>
@@ -650,10 +654,11 @@ const submitOrder = async () => {
 
         const orderData = {
             items: cartStore.getOrderData(),
-            phone: normalizedPhone,
-            comment: form.comment,
-            payment_type_id: form.payment_type_id,
-            terminal_id: form.terminal_id,
+            delivery_type: form.deliveryType,
+            phone: normalizedPhone || '',
+            comment: form.comment || '',
+            payment_type_id: form.payment_type_id ?? null,
+            terminal_id: form.terminal_id ?? null,
             delivery_address_id: form.deliveryType === 'delivery' ? form.delivery_address_id : null,
             remote_payment_phone: selectedPaymentSystemType.value === 'remote_payment' ? remotePhone : null,
             save_billing_phone: selectedPaymentSystemType.value === 'remote_payment' ? saveBillingPhone.value : false,
