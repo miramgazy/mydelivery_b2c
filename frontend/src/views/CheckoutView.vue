@@ -646,8 +646,9 @@ const submitOrder = async () => {
 
     loading.value = true
     try {
-        // Normalize phone (remove spaces, parentheses, dashes etc.)
-        const normalizedPhone = String(form.phone).replace(/[^\d+]/g, '')
+        // Нормализуем телефон (при наличных/самовывозе может быть пусто — отправляем пустую строку, не null)
+        const rawPhone = form.phone != null && form.phone !== undefined ? form.phone : ''
+        const normalizedPhone = String(rawPhone).replace(/[^\d+]/g, '')
 
         let remotePhone = remotePaymentPhoneDisplay.value
         remotePhone = String(remotePhone || '').replace(/[^\d+]/g, '')
@@ -656,7 +657,7 @@ const submitOrder = async () => {
             items: cartStore.getOrderData(),
             delivery_type: form.deliveryType,
             phone: normalizedPhone || '',
-            comment: form.comment || '',
+            comment: (form.comment != null && form.comment !== undefined) ? String(form.comment) : '',
             payment_type_id: form.payment_type_id ?? null,
             terminal_id: form.terminal_id ?? null,
             delivery_address_id: form.deliveryType === 'delivery' ? form.delivery_address_id : null,

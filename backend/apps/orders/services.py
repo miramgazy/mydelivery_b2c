@@ -504,17 +504,8 @@ class OrderService:
         order_items = order.items.prefetch_related('modifiers__modifier', 'product', 'product__modifiers').all()
         
         for order_item in order_items:
-            item_data = {
-                'type': 'Product',
-                'productId': str(order_item.product.product_id),
-                'amount': float(order_item.quantity),
-                'price': float(order_item.price)
-            }
-            
-            # Собираем модификаторы для этой позиции
-            modifiers_list = []
-            
-            # 1. Сначала добавляем модификаторы, которые были выбраны пользователем (из OrderItemModifier)
+            # Собираем модификаторы для этой позиции (per-unit amounts для развёрнутого формата iiko)
+            # 1. Модификаторы, выбранные пользователем (из OrderItemModifier) — уже в расчёте на одну единицу продукта
             user_selected_modifiers = {}
             for order_mod in order_item.modifiers.all():
                 if not order_mod.modifier:
@@ -554,6 +545,7 @@ class OrderService:
                     )
                 else:
                     user_selected_modifiers[modifier_code] = {
+                        'type': 'Product',
                         'productId': modifier_code,
                         'amount': modifier_amount
                     }
@@ -564,8 +556,7 @@ class OrderService:
                     f'название="{order_mod.modifier_name}"'
                 )
             
-            # 2. Обязательные модификаторы (is_required или min_amount > 0): добавляем в JSON для iiko
-            # amount = min_amount × quantity основного товара (по ТЗ)
+            # 2. Обязательные модификаторы (is_required или min_amount > 0): добавляем в JSON для iiko (per-unit amount)
             if order_item.product.has_modifiers:
                 modifiers_defined = order_item.product.modifiers.all()
                 for mod_def in modifiers_defined:
@@ -581,34 +572,52 @@ class OrderService:
                     min_amt = float(mod_def.min_amount or 0)
                     if min_amt <= 0:
                         min_amt = 1.0
-                    # amount модификатора = min_amount × quantity основного товара
-                    modifier_amount = min_amt * float(order_item.quantity)
+                    # Для развёрнутого формата (каждая штука отдельно) — amount модификатора на одну единицу = min_amt
                     if modifier_code in user_selected_modifiers:
-                        # Пользователь уже выбрал — доводим до минимума по количеству
                         existing = user_selected_modifiers[modifier_code]['amount']
-                        if existing < modifier_amount:
-                            user_selected_modifiers[modifier_code]['amount'] = modifier_amount
+                        if existing < min_amt:
+                            user_selected_modifiers[modifier_code]['amount'] = min_amt
                         continue
                     user_selected_modifiers[modifier_code] = {
+                        'type': 'Product',
                         'productId': modifier_code,
-                        'amount': modifier_amount
+                        'amount': min_amt
                     }
                     logger.info(
                         f'Добавлен обязательный модификатор для заказа {order.order_id}, позиция "{order_item.product_name}": '
-                        f'productId={modifier_code}, amount={modifier_amount} (min_amount×qty), '
+                        f'productId={modifier_code}, amount={min_amt} (per unit), '
                         f'название="{mod_def.modifier_name}"'
                     )
             
-            # 3. Формируем финальный список модификаторов
-            if user_selected_modifiers:
-                modifiers_list = list(user_selected_modifiers.values())
-                item_data['modifiers'] = modifiers_list
+            # 3. iiko принимает блюда с модификаторами только в развёрнутом виде: каждая штука — отдельный item (amount: 1, modifiers с amount: 1).
+            # Блюда без модификаторов (has_modifiers=False) — одна позиция с amount = quantity.
+            if order_item.product.has_modifiers:
+                modifiers_list = list(user_selected_modifiers.values()) if user_selected_modifiers else []
+                qty = int(order_item.quantity)
+                for _ in range(qty):
+                    single_item = {
+                        'type': 'Product',
+                        'productId': str(order_item.product.product_id),
+                        'amount': 1,
+                        'price': float(order_item.price)
+                    }
+                    if modifiers_list:
+                        single_item['modifiers'] = modifiers_list
+                    items.append(single_item)
                 logger.info(
-                    f'Заказ {order.order_id}, позиция "{order_item.product_name}": '
-                    f'добавлено {len(modifiers_list)} модификаторов'
+                    f'Заказ {order.order_id}, позиция "{order_item.product_name}" (с модификаторами): '
+                    f'развёрнуто в {qty} шт., каждый с amount=1'
                 )
-            
-            items.append(item_data)
+            else:
+                item_data = {
+                    'type': 'Product',
+                    'productId': str(order_item.product.product_id),
+                    'amount': float(order_item.quantity),
+                    'price': float(order_item.price)
+                }
+                if user_selected_modifiers:
+                    item_data['modifiers'] = list(user_selected_modifiers.values())
+                items.append(item_data)
         
         # Итоговый объект заказа
         terminal = order.terminal
