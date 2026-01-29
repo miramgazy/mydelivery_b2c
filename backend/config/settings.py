@@ -210,6 +210,12 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
+# Стоп-лист: глобальное «рабочее» окно (часовой пояс сервера = TIME_ZONE, например Asia/Almaty +5).
+# Вне этого окна запросы на обновление стоп-листа не отправляются.
+# Формат: 'HH:mm'. Если не задано — проверка не выполняется (поведение по умолчанию).
+STOP_LIST_SYNC_WORKING_START = config('STOP_LIST_SYNC_WORKING_START', default='08:00')
+STOP_LIST_SYNC_WORKING_END = config('STOP_LIST_SYNC_WORKING_END', default='23:59')
+
 # CORS Configuration
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOWED_ORIGINS = config('CORS_ALLOWED_ORIGINS', default='http://localhost:5173,http://localhost:3000').split(',')

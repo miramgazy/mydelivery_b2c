@@ -15,6 +15,7 @@ from .serializers import (
 )
 from apps.iiko_integration.client import IikoClient, IikoAPIException
 from apps.iiko_integration.services import MenuSyncService, StopListSyncService
+from apps.products.tasks import is_global_sync_allowed, is_working_time
 from .delivery_utils import calculate_delivery_cost
 
 
@@ -422,8 +423,24 @@ class TerminalViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['post'], url_path='sync-stop-list')
     def sync_stop_list(self, request, pk=None):
-        """Принудительно синхронизировать стоп-лист для терминала"""
+        """Принудительно синхронизировать стоп-лист для терминала (только для активных и в рабочее время)."""
         terminal = self.get_object()
+        
+        if not terminal.is_active:
+            return Response(
+                {'error': 'Синхронизация стоп-листа доступна только для активных терминалов'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not is_global_sync_allowed():
+            return Response(
+                {'error': 'Синхронизация стоп-листа доступна только в рабочее время (часовой пояс сервера)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not is_working_time(terminal):
+            return Response(
+                {'error': 'Сейчас вне рабочего времени терминала'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         if not terminal.organization:
             return Response(

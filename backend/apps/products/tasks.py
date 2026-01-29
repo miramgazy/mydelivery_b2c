@@ -2,6 +2,7 @@ import logging
 from datetime import datetime, timedelta
 from celery import shared_task
 from django.utils import timezone
+from django.conf import settings
 from django.db.models import Q, Max
 
 from apps.organizations.models import Terminal
@@ -10,52 +11,69 @@ from apps.iiko_integration.services import StopListSyncService, IikoAPIException
 logger = logging.getLogger(__name__)
 
 
-def is_working_time(terminal: Terminal) -> bool:
+def _time_to_minutes(time_str: str) -> int:
+    """Преобразует время 'HH:mm' в минуты от полуночи."""
+    parts = time_str.strip().split(':')
+    hours = int(parts[0]) if parts else 0
+    minutes = int(parts[1]) if len(parts) > 1 else 0
+    return hours * 60 + minutes
+
+
+def is_time_in_working_window(start_str: str, end_str: str) -> bool:
     """
-    Проверяет, находится ли текущее время в рабочем времени терминала.
-    
-    Args:
-        terminal: Терминал для проверки
-        
-    Returns:
-        bool: True если текущее время в рабочем времени, False иначе
+    Проверяет, находится ли текущее время сервера (TIME_ZONE) в окне [start_str, end_str].
+    Используется для глобальной проверки «рабочего» времени и для терминалов без своих working_hours.
     """
-    if not terminal.working_hours:
-        # Если рабочее время не настроено, считаем что терминал всегда работает
+    if not start_str or not end_str:
         return True
-    
-    start_time = terminal.working_hours.get('start')
-    end_time = terminal.working_hours.get('end')
-    
-    if not start_time or not end_time:
-        # Если время не настроено полностью, считаем что терминал всегда работает
-        return True
-    
     try:
-        # Получаем текущее время в часовом поясе проекта
         now = timezone.now()
         current_time = now.strftime('%H:%M')
-        
-        # Преобразуем время в минуты для удобства сравнения
-        def time_to_minutes(time_str: str) -> int:
-            hours, minutes = map(int, time_str.split(':'))
-            return hours * 60 + minutes
-        
-        current_minutes = time_to_minutes(current_time)
-        start_minutes = time_to_minutes(start_time)
-        end_minutes = time_to_minutes(end_time)
-        
-        # Проверяем, находится ли текущее время в рабочем диапазоне
+        current_minutes = _time_to_minutes(current_time)
+        start_minutes = _time_to_minutes(start_str)
+        end_minutes = _time_to_minutes(end_str)
         if start_minutes <= end_minutes:
-            # Обычный случай: рабочее время в пределах одного дня (например, 09:00 - 22:00)
-            return start_minutes <= current_minutes < end_minutes
-        else:
-            # Переход через полночь (например, 18:00 - 04:00)
-            # Рабочее время: с 18:00 до 23:59 или с 00:00 до 04:00
-            return current_minutes >= start_minutes or current_minutes < end_minutes
+            return start_minutes <= current_minutes <= end_minutes
+        # через полночь (например 22:00 — 06:00)
+        return current_minutes >= start_minutes or current_minutes <= end_minutes
+    except Exception as e:
+        logger.warning(f"Ошибка проверки рабочего окна [{start_str}-{end_str}]: {e}")
+        return True
+
+
+def is_global_sync_allowed() -> bool:
+    """
+    Разрешена ли сейчас синхронизация стоп-листов по глобальному окну (часовой пояс сервера).
+    Вне рабочего времени запросы не отправляются.
+    """
+    start = getattr(settings, 'STOP_LIST_SYNC_WORKING_START', None)
+    end = getattr(settings, 'STOP_LIST_SYNC_WORKING_END', None)
+    if not start or not end:
+        return True
+    return is_time_in_working_window(start, end)
+
+
+def is_working_time(terminal: Terminal) -> bool:
+    """
+    Проверяет, находится ли текущее время сервера (TIME_ZONE, например +5) в рабочем времени терминала.
+    Если у терминала не задано working_hours — используется глобальное окно из настроек
+    (STOP_LIST_SYNC_WORKING_START / STOP_LIST_SYNC_WORKING_END), чтобы не слать запросы ночью.
+    """
+    start_time = None
+    end_time = None
+    if terminal.working_hours:
+        start_time = terminal.working_hours.get('start')
+        end_time = terminal.working_hours.get('end')
+    if not start_time or not end_time:
+        # Нет своих часов — используем глобальное окно (по умолчанию 08:00–23:59)
+        start_time = getattr(settings, 'STOP_LIST_SYNC_WORKING_START', None)
+        end_time = getattr(settings, 'STOP_LIST_SYNC_WORKING_END', None)
+        if not start_time or not end_time:
+            return True
+    try:
+        return is_time_in_working_window(start_time, end_time)
     except Exception as e:
         logger.error(f"Ошибка при проверке рабочего времени терминала {terminal.terminal_id}: {e}")
-        # В случае ошибки считаем что терминал работает
         return True
 
 
@@ -122,23 +140,29 @@ def sync_all_terminals_stop_lists(self):
     """
     Периодическая задача для автоматической синхронизации стоп-листов всех активных терминалов.
     
-    Оптимизация: один запрос к iiko API на организацию вместо одного на каждый терминал —
-    снижает нагрузку на API и время выполнения задачи.
-    
-    Проверяет каждый терминал:
-    - Активен ли терминал
-    - Находится ли текущее время в рабочем времени терминала
-    - Прошло ли достаточно времени с последнего обновления (по stop_list_interval_min)
+    Запросы отправляются только в рабочее время (часовой пояс сервера = TIME_ZONE, например +5).
+    Вне глобального окна (STOP_LIST_SYNC_WORKING_START/END) задача сразу завершается без запросов.
+    Для каждого терминала дополнительно учитывается working_hours (или то же глобальное окно).
     """
     try:
+        # Глобальная проверка: вне рабочего времени запросы не отправляем
+        if not is_global_sync_allowed():
+            now = timezone.now()
+            logger.debug(
+                f"Синхронизация стоп-листов пропущена: вне рабочего времени "
+                f"(сервер: {now.strftime('%H:%M')} {getattr(settings, 'TIME_ZONE', '')})"
+            )
+            return {'synced': 0, 'skipped': 0, 'errors': 0, 'reason': 'outside_working_hours'}
+
+        # Только активные терминалы и активные организации с API-ключом
         terminals = Terminal.objects.filter(
             is_active=True,
             organization__is_active=True,
             organization__api_key__isnull=False
         ).select_related('organization')
         
-        # Оставляем только терминалы, которым нужна синхронизация
-        to_sync = [t for t in terminals if should_sync_stop_list(t)]
+        # Синхронизация только для активных терминалов, прошедших проверки (время, интервал)
+        to_sync = [t for t in terminals if t.is_active and should_sync_stop_list(t)]
         skipped_count = len(terminals) - len(to_sync)
         synced_count = 0
         error_count = 0

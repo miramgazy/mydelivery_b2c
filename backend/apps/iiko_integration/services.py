@@ -583,16 +583,20 @@ class StopListSyncService:
         """
         Синхронизирует стоп-листы для списка терминалов одной организации.
         Делает один запрос к API на организацию вместо одного на каждый терминал.
+        Обрабатываются только активные терминалы (is_active=True).
         """
         if not terminals:
             return []
-        organization = terminals[0].organization
+        active_only = [t for t in terminals if t.is_active]
+        if not active_only:
+            return []
+        organization = active_only[0].organization
         organization_id = organization.iiko_organization_id
         if not organization_id:
             raise ValueError("У организации должен быть настроен iiko_organization_id")
         api_response = self.client.get_stop_lists([organization_id])
         results = []
-        for terminal in terminals:
+        for terminal in active_only:
             try:
                 result = self.apply_stop_list_response(terminal, api_response)
                 results.append(result)
@@ -605,7 +609,7 @@ class StopListSyncService:
 
     def sync_terminal_stop_list(self, terminal: Terminal) -> Dict[str, Any]:
         """
-        Синхронизирует стоп-лист для конкретного терминала.
+        Синхронизирует стоп-лист для конкретного терминала (только для активного).
         
         Логика:
         1. Запрос к API для получения актуального стоп-листа
@@ -613,13 +617,9 @@ class StopListSyncService:
         3. Smart DELETE для удаления записей, которых больше нет в API
         4. Все операции выполняются в одной транзакции
         5. Если API вернул ошибку, DELETE не выполняется
-        
-        Args:
-            terminal: Терминал для синхронизации
-            
-        Returns:
-            Dict с результатами синхронизации
         """
+        if not terminal.is_active:
+            raise ValueError("Синхронизация стоп-листа доступна только для активных терминалов")
         if not terminal.organization:
             raise ValueError("Терминал должен быть привязан к организации")
         
