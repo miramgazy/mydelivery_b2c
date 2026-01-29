@@ -106,69 +106,71 @@ def should_sync_stop_list(terminal: Terminal) -> bool:
     return True
 
 
+def _group_terminals_by_organization(terminals):
+    """Группирует терминалы по организации (по organization_id). Возвращает dict[org_id, list[Terminal]]."""
+    by_org = {}
+    for t in terminals:
+        org_id = t.organization_id
+        if org_id not in by_org:
+            by_org[org_id] = []
+        by_org[org_id].append(t)
+    return by_org
+
+
 @shared_task(bind=True, max_retries=3, default_retry_delay=60)
 def sync_all_terminals_stop_lists(self):
     """
     Периодическая задача для автоматической синхронизации стоп-листов всех активных терминалов.
     
+    Оптимизация: один запрос к iiko API на организацию вместо одного на каждый терминал —
+    снижает нагрузку на API и время выполнения задачи.
+    
     Проверяет каждый терминал:
     - Активен ли терминал
     - Находится ли текущее время в рабочем времени терминала
     - Прошло ли достаточно времени с последнего обновления (по stop_list_interval_min)
-    
-    Обновляет стоп-лист только для терминалов, которые прошли все проверки.
     """
     try:
-        # Получаем все активные терминалы с настроенной организацией и API ключом
         terminals = Terminal.objects.filter(
             is_active=True,
             organization__is_active=True,
             organization__api_key__isnull=False
         ).select_related('organization')
         
+        # Оставляем только терминалы, которым нужна синхронизация
+        to_sync = [t for t in terminals if should_sync_stop_list(t)]
+        skipped_count = len(terminals) - len(to_sync)
         synced_count = 0
-        skipped_count = 0
         error_count = 0
         
-        for terminal in terminals:
+        # Группируем по организации: один запрос к API на организацию
+        by_org = _group_terminals_by_organization(to_sync)
+        
+        for org_id, org_terminals in by_org.items():
+            if not org_terminals:
+                continue
+            api_key = org_terminals[0].organization.api_key
+            if not api_key:
+                skipped_count += len(org_terminals)
+                continue
             try:
-                # Проверяем, нужно ли синхронизировать стоп-лист для этого терминала
-                if not should_sync_stop_list(terminal):
-                    skipped_count += 1
-                    logger.debug(
-                        f"Пропуск синхронизации стоп-листа для терминала {terminal.terminal_id}: "
-                        f"не в рабочее время или не прошло достаточно времени"
-                    )
-                    continue
-                
-                # Синхронизируем стоп-лист
-                if not terminal.organization.api_key:
-                    logger.warning(
-                        f"Пропуск терминала {terminal.terminal_id}: отсутствует API ключ организации"
-                    )
-                    skipped_count += 1
-                    continue
-                
-                service = StopListSyncService(terminal.organization.api_key)
-                result = service.sync_terminal_stop_list(terminal)
-                
-                synced_count += 1
+                service = StopListSyncService(api_key)
+                results = service.sync_stop_lists_for_terminals(org_terminals)
+                synced_count += len(results)
                 logger.info(
-                    f"Стоп-лист синхронизирован для терминала {terminal.terminal_id}: "
-                    f"создано {result.get('created', 0)}, обновлено {result.get('updated', 0)}, "
-                    f"удалено {result.get('deleted', 0)}"
+                    f"Стоп-листы для организации (терминалов {len(org_terminals)}): "
+                    f"обработано {len(results)}"
                 )
-                
             except IikoAPIException as e:
-                error_count += 1
+                error_count += len(org_terminals)
                 logger.error(
-                    f"Ошибка API iiko при синхронизации стоп-листа для терминала {terminal.terminal_id}: {e}",
+                    f"Ошибка API iiko при синхронизации стоп-листов организации: {e}",
                     exc_info=True
                 )
             except Exception as e:
-                error_count += 1
+                error_count += len(org_terminals)
                 logger.error(
-                    f"Неожиданная ошибка при синхронизации стоп-листа для терминала {terminal.terminal_id}: {e}",
+                    f"Неожиданная ошибка при синхронизации стоп-листов организации: {e}",
                     exc_info=True
                 )
         

@@ -11,6 +11,8 @@ class IikoAPIException(Exception):
 class IikoClient:
     BASE_URL = "https://api-ru.iiko.services/api/1"
     BASE_URL_V2 = "https://api-ru.iiko.services/api/2"
+    # Таймауты для всех запросов (connect, read). Предотвращают зависание воркеров при сбоях iiko.
+    REQUEST_TIMEOUT = (10, 45)  # (connect, read) в секундах
 
     def __init__(self, api_key: str):
         self.api_key = api_key
@@ -20,7 +22,9 @@ class IikoClient:
         """Authenticate and get access token."""
         url = f"{self.BASE_URL}/access_token"
         try:
-            response = requests.post(url, json={"apiLogin": self.api_key})
+            response = requests.post(
+                url, json={"apiLogin": self.api_key}, timeout=self.REQUEST_TIMEOUT
+            )
             response.raise_for_status()
             data = response.json()
             self.token = data.get("token")
@@ -38,7 +42,9 @@ class IikoClient:
     def _post(self, url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
         """Generic POST helper with re-auth logic."""
         try:
-            response = requests.post(url, json=payload, headers=self.get_headers())
+            response = requests.post(
+                url, json=payload, headers=self.get_headers(), timeout=self.REQUEST_TIMEOUT
+            )
             
             if not response.ok:
                 logger.error(f"IIKO API ERROR: {response.status_code} | Response: {response.text}")
@@ -51,7 +57,9 @@ class IikoClient:
                 logger.info("Token expired, re-authenticating...")
                 self.token = None
                 try:
-                    response = requests.post(url, json=payload, headers=self.get_headers())
+                    response = requests.post(
+                        url, json=payload, headers=self.get_headers(), timeout=self.REQUEST_TIMEOUT
+                    )
                     response.raise_for_status()
                     return response.json()
                 except requests.RequestException as retry_e:

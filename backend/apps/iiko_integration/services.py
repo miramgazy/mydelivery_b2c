@@ -470,12 +470,139 @@ class MenuSyncService:
         return synced_types
 
 
+def _extract_stop_list_items_for_terminal(
+    api_response: Dict[str, Any], organization_id: str, terminal_id_str: str
+) -> List[Dict]:
+    """Из ответа get_stop_lists извлекает список items для одного терминала."""
+    terminal_group_stop_lists = api_response.get('terminalGroupStopLists', [])
+    for org_stop_list in terminal_group_stop_lists:
+        if str(org_stop_list.get('organizationId')) != str(organization_id):
+            continue
+        for terminal_item in org_stop_list.get('items', []):
+            tg_id = terminal_item.get('terminalGroupId')
+            if tg_id and str(tg_id) == terminal_id_str:
+                return terminal_item.get('items', [])
+    return []
+
+
 class StopListSyncService:
     """Сервис для синхронизации стоп-листа с iiko API"""
     
     def __init__(self, api_key: str):
         self.client = IikoClient(api_key)
     
+    def apply_stop_list_response(self, terminal: Terminal, api_response: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Применяет уже полученный ответ get_stop_lists к одному терминалу (только БД).
+        Используется для оптимизации: один запрос к API на организацию, затем обновление всех терминалов.
+        """
+        organization = terminal.organization
+        if not organization:
+            raise ValueError("Терминал должен быть привязан к организации")
+        organization_id = organization.iiko_organization_id
+        if not organization_id:
+            raise ValueError("У организации должен быть настроен iiko_organization_id")
+        terminal_id_str = str(terminal.terminal_id)
+        items = _extract_stop_list_items_for_terminal(api_response, organization_id, terminal_id_str)
+        return self._upsert_delete_stop_list_for_terminal(terminal, organization, items)
+
+    def _upsert_delete_stop_list_for_terminal(
+        self, terminal: Terminal, organization, items: List
+    ) -> Dict[str, Any]:
+        """UPSERT и DELETE записей стоп-листа для одного терминала в одной транзакции."""
+        api_product_ids = []
+        created_count = 0
+        updated_count = 0
+        deleted_count = 0
+        with transaction.atomic():
+            for item in items:
+                product_id_str = (
+                    item.get('productId') or item.get('product_id') or item.get('id')
+                )
+                if not product_id_str:
+                    continue
+                try:
+                    product_id = uuid.UUID(str(product_id_str))
+                except (ValueError, TypeError):
+                    continue
+                product_name = (
+                    item.get('productName') or item.get('product_name') or item.get('name') or ''
+                )
+                balance_value = (
+                    item.get('balance') or item.get('quantity') or item.get('amount') or 0.0
+                )
+                try:
+                    balance = float(balance_value)
+                except (ValueError, TypeError):
+                    balance = 0.0
+                try:
+                    product = Product.objects.get(product_id=product_id)
+                except Product.DoesNotExist:
+                    continue
+                api_product_ids.append(product_id)
+                stop_list_obj, created = StopList.objects.update_or_create(
+                    product=product,
+                    terminal=terminal,
+                    defaults={
+                        'product_name': product_name or product.product_name,
+                        'balance': balance,
+                        'organization': organization,
+                        'is_auto_added': True,
+                        'updated_at': timezone.now()
+                    }
+                )
+                if created:
+                    created_count += 1
+                else:
+                    updated_count += 1
+            if api_product_ids:
+                deleted_queryset = StopList.objects.filter(terminal=terminal).exclude(
+                    product__product_id__in=api_product_ids
+                )
+                deleted_count = deleted_queryset.count()
+                deleted_queryset.delete()
+            else:
+                deleted_queryset = StopList.objects.filter(terminal=terminal)
+                deleted_count = deleted_queryset.count()
+                deleted_queryset.delete()
+        logger.info(
+            f"Стоп-лист для терминала {terminal.terminal_id}: "
+            f"создано {created_count}, обновлено {updated_count}, удалено {deleted_count}"
+        )
+        return {
+            'terminal_id': str(terminal.terminal_id),
+            'terminal_name': terminal.terminal_group_name,
+            'created': created_count,
+            'updated': updated_count,
+            'deleted_count': deleted_count,
+            'updated_count': len(api_product_ids),
+            'total_items': len(items)
+        }
+
+    def sync_stop_lists_for_terminals(self, terminals: List[Terminal]) -> List[Dict[str, Any]]:
+        """
+        Синхронизирует стоп-листы для списка терминалов одной организации.
+        Делает один запрос к API на организацию вместо одного на каждый терминал.
+        """
+        if not terminals:
+            return []
+        organization = terminals[0].organization
+        organization_id = organization.iiko_organization_id
+        if not organization_id:
+            raise ValueError("У организации должен быть настроен iiko_organization_id")
+        api_response = self.client.get_stop_lists([organization_id])
+        results = []
+        for terminal in terminals:
+            try:
+                result = self.apply_stop_list_response(terminal, api_response)
+                results.append(result)
+            except Exception as e:
+                logger.error(
+                    f"Ошибка применения стоп-листа для терминала {terminal.terminal_id}: {e}",
+                    exc_info=True
+                )
+        return results
+
     def sync_terminal_stop_list(self, terminal: Terminal) -> Dict[str, Any]:
         """
         Синхронизирует стоп-лист для конкретного терминала.
@@ -505,200 +632,12 @@ class StopListSyncService:
         if not organization_id:
             raise ValueError("У организации должен быть настроен iiko_organization_id")
         
-        # Шаг 1: Запрос к API
+        # Один запрос к API
         try:
-            # API требует organizationIds как массив
             api_response = self.client.get_stop_lists([organization_id])
         except IikoAPIException as e:
             logger.error(f"Ошибка при запросе стоп-листа из iiko для терминала {terminal.terminal_id}: {e}")
             raise
         
-        # Парсим ответ API
-        # Структура ответа iiko API для stop_lists:
-        # {
-        #   "terminalGroupStopLists": [
-        #     {
-        #       "organizationId": "uuid",
-        #       "items": [
-        #         {
-        #           "terminalGroupId": "uuid",
-        #           "items": [
-        #             {
-        #               "productId": "uuid",
-        #               "balance": 0.0,
-        #               "sku": "string",
-        #               "dateAdd": "string"
-        #             }
-        #           ]
-        #         }
-        #       ]
-        #     }
-        #   ]
-        # }
-        
-        # Получаем terminalGroupStopLists из ответа
-        terminal_group_stop_lists = api_response.get('terminalGroupStopLists', [])
-        
-        # Находим данные для текущей организации
-        terminal_id_str = str(terminal.terminal_id)
-        items = []
-        
-        for org_stop_list in terminal_group_stop_lists:
-            org_id = org_stop_list.get('organizationId')
-            
-            # Проверяем, что это наша организация
-            if str(org_id) != str(organization_id):
-                continue
-            
-            # Получаем список терминалов для этой организации
-            terminal_items = org_stop_list.get('items', [])
-            
-            # Ищем нужный терминал
-            for terminal_item in terminal_items:
-                terminal_group_id = terminal_item.get('terminalGroupId')
-                if terminal_group_id:
-                    terminal_group_id_str = str(terminal_group_id)
-                    
-                    if terminal_group_id_str == terminal_id_str:
-                        # Нашли нужный терминал, получаем его items
-                        items = terminal_item.get('items', [])
-                        break
-            
-            if items:
-                break
-        
-        if not items:
-            # Логируем доступные терминалы только при отсутствии данных
-            available_terminals = []
-            for org_stop_list in terminal_group_stop_lists:
-                if str(org_stop_list.get('organizationId')) == str(organization_id):
-                    for terminal_item in org_stop_list.get('items', []):
-                        tg_id = terminal_item.get('terminalGroupId')
-                        if tg_id:
-                            available_terminals.append(str(tg_id))
-            logger.warning(f"Данные для терминала {terminal_id_str} не найдены в ответе API. Доступные терминалы: {available_terminals}")
-        
-        # Инициализируем переменные для результатов
-        api_product_ids = []
-        created_count = 0
-        updated_count = 0
-        deleted_count = 0
-        
-        # Шаг 2 и 3: UPSERT + DELETE в транзакции
-        try:
-            with transaction.atomic():
-                
-                # Шаг 2: UPSERT для каждой позиции
-                for item in items:
-                    # Проверяем разные варианты ключей для productId
-                    product_id_str = (
-                        item.get('productId') or 
-                        item.get('product_id') or
-                        item.get('id')
-                    )
-                    
-                    if not product_id_str:
-                        logger.warning(f"Пропущен элемент стоп-листа без productId: {item}")
-                        continue
-                    
-                    try:
-                        product_id = uuid.UUID(str(product_id_str))
-                    except (ValueError, TypeError) as e:
-                        logger.warning(f"Некорректный productId: {product_id_str}, ошибка: {e}")
-                        continue
-                    
-                    # Проверяем разные варианты ключей для productName
-                    product_name = (
-                        item.get('productName') or 
-                        item.get('product_name') or
-                        item.get('name') or
-                        ''
-                    )
-                    
-                    # Проверяем разные варианты ключей для balance
-                    balance_value = (
-                        item.get('balance') or 
-                        item.get('quantity') or
-                        item.get('amount') or
-                        0.0
-                    )
-                    
-                    try:
-                        balance = float(balance_value)
-                    except (ValueError, TypeError):
-                        logger.warning(f"Некорректный balance: {balance_value}, используем 0.0")
-                        balance = 0.0
-                    
-                    # Проверяем, существует ли продукт
-                    try:
-                        product = Product.objects.get(product_id=product_id)
-                    except Product.DoesNotExist:
-                        logger.warning(f"Продукт с product_id={product_id} не найден в базе. Пропускаем.")
-                        continue
-                    
-                    api_product_ids.append(product_id)
-                    
-                    # UPSERT операция
-                    try:
-                        stop_list_obj, created = StopList.objects.update_or_create(
-                            product=product,
-                            terminal=terminal,
-                            defaults={
-                                'product_name': product_name or product.product_name,
-                                'balance': balance,
-                                'organization': organization,
-                                'is_auto_added': True,
-                                'updated_at': timezone.now()
-                            }
-                        )
-                        
-                        if created:
-                            created_count += 1
-                        else:
-                            updated_count += 1
-                    except Exception as e:
-                        logger.error(f"Ошибка при создании/обновлении записи стоп-листа для продукта {product.product_name}: {e}", exc_info=True)
-                        raise
-            
-                # Шаг 3: Smart DELETE - удаляем записи, которых нет в ответе API
-                # Только для текущего терминала
-                if api_product_ids:
-                    # Удаляем записи, которых нет в списке из API
-                    deleted_queryset = StopList.objects.filter(
-                        terminal=terminal
-                    ).exclude(
-                        product__product_id__in=api_product_ids
-                    )
-                    deleted_count = deleted_queryset.count()
-                    if deleted_count > 0:
-                        logger.info(f"Удаление {deleted_count} устаревших записей стоп-листа для терминала {terminal.terminal_id}")
-                        deleted_queryset.delete()
-                    else:
-                        logger.info("Нет устаревших записей для удаления")
-                else:
-                    # Если API вернул пустой список, удаляем все записи для терминала
-                    deleted_queryset = StopList.objects.filter(terminal=terminal)
-                    deleted_count = deleted_queryset.count()
-                    if deleted_count > 0:
-                        logger.info(f"Удаление всех {deleted_count} записей стоп-листа для терминала {terminal.terminal_id} (API вернул пустой список)")
-                        deleted_queryset.delete()
-                    else:
-                        logger.info("Нет записей для удаления")
-                
-                logger.info(
-                    f"Синхронизация стоп-листа для терминала {terminal.terminal_id} завершена: "
-                    f"создано {created_count}, обновлено {updated_count}, "
-                    f"всего обработано {len(api_product_ids)}, удалено {deleted_count}"
-                )
-                
-        except Exception as e:
-            logger.error(f"Критическая ошибка при синхронизации стоп-листа для терминала {terminal.terminal_id}: {e}", exc_info=True)
-            raise
-        
-        return {
-            'terminal_id': str(terminal.terminal_id),
-            'terminal_name': terminal.terminal_group_name,
-            'updated_count': len(api_product_ids),
-            'deleted_count': deleted_count,
-            'total_items': len(items)
-        }
+        return self.apply_stop_list_response(terminal, api_response)
+
