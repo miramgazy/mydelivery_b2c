@@ -583,33 +583,35 @@ const checkWorkingHours = () => {
     return true
 }
 
-/** Собирает текст ошибки из ответа API (в т.ч. вложенные поля items[].modifiers и т.д.) */
+/** Собирает текст ошибки из ответа API. Для одного поля с одним сообщением — только текст без префикса. */
 function getOrderErrorMessage(data, fallback = 'неизвестная ошибка') {
     if (!data) return fallback
     if (typeof data.error === 'string') return data.error
     if (typeof data.detail === 'string') return data.detail
     if (Array.isArray(data.detail)) return data.detail.join('; ')
-    const collect = (obj, prefix = '') => {
+    const collect = (obj) => {
         const out = []
         if (typeof obj === 'string') return [obj]
         if (Array.isArray(obj)) {
-            obj.forEach((item, i) => {
+            obj.forEach((item) => {
                 if (typeof item === 'string') out.push(item)
-                else if (item && typeof item === 'object') out.push(...collect(item, `${prefix}[${i}].`))
+                else if (item && typeof item === 'object') out.push(...collect(item))
             })
             return out
         }
         if (obj && typeof obj === 'object') {
             for (const [k, v] of Object.entries(obj)) {
-                if (typeof v === 'string') out.push(`${k}: ${v}`)
-                else if (Array.isArray(v) && v.every(x => typeof x === 'string')) out.push(`${k}: ${v.join(', ')}`)
-                else if (v && typeof v === 'object') out.push(...collect(v, `${prefix}${k}.`))
+                if (Array.isArray(v) && v.every(x => typeof x === 'string')) {
+                    v.forEach((s) => out.push(s))
+                } else if (v && typeof v === 'object') out.push(...collect(v))
             }
         }
         return out
     }
     const parts = collect(data)
-    return parts.length ? parts.join('; ') : fallback
+    if (parts.length === 1) return parts[0]
+    if (parts.length > 1) return parts.join('; ')
+    return fallback
 }
 
 const submitOrder = async () => {

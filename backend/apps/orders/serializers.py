@@ -323,12 +323,11 @@ class OrderCreateSerializer(serializers.Serializer):
                 try:
                     terminal = Terminal.objects.get(terminal_id=value)
                     
-                    # Проверяем рабочее время
+                    # Проверяем рабочее время в часовом поясе проекта (TIME_ZONE, напр. Asia/Almaty)
                     working_hours = terminal.working_hours
                     if working_hours and working_hours.get('start') and working_hours.get('end'):
-                        # Используем timezone.now() для получения времени в часовом поясе проекта
-                        now = timezone.now()
-                        current_time_str = now.strftime('%H:%M')
+                        now_local = timezone.localtime(timezone.now())
+                        current_time_str = now_local.strftime('%H:%M')
                         
                         # Преобразуем время в минуты для удобства сравнения
                         def time_to_minutes(time_str: str) -> int:
@@ -396,8 +395,8 @@ class OrderCreateSerializer(serializers.Serializer):
                 if terminal:
                     working_hours = terminal.working_hours
                     if working_hours and working_hours.get('start') and working_hours.get('end'):
-                        now = timezone.now()
-                        current_time_str = now.strftime('%H:%M')
+                        now_local = timezone.localtime(timezone.now())
+                        current_time_str = now_local.strftime('%H:%M')
                         start_str = working_hours['start']
                         end_str = working_hours['end']
 
