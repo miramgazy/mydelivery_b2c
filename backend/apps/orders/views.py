@@ -69,8 +69,13 @@ class OrderViewSet(viewsets.ModelViewSet):
         3. Отправка в iiko
         4. Обновление статуса
         """
+        import logging
+        logger = logging.getLogger(__name__)
         serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
+        if not serializer.is_valid():
+            logger.warning('Order create validation failed: %s', serializer.errors)
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError(serializer.errors)
         
         # Проверяем что у пользователя есть организация
         if not request.user.organization:

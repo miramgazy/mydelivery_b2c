@@ -583,6 +583,35 @@ const checkWorkingHours = () => {
     return true
 }
 
+/** Собирает текст ошибки из ответа API (в т.ч. вложенные поля items[].modifiers и т.д.) */
+function getOrderErrorMessage(data, fallback = 'неизвестная ошибка') {
+    if (!data) return fallback
+    if (typeof data.error === 'string') return data.error
+    if (typeof data.detail === 'string') return data.detail
+    if (Array.isArray(data.detail)) return data.detail.join('; ')
+    const collect = (obj, prefix = '') => {
+        const out = []
+        if (typeof obj === 'string') return [obj]
+        if (Array.isArray(obj)) {
+            obj.forEach((item, i) => {
+                if (typeof item === 'string') out.push(item)
+                else if (item && typeof item === 'object') out.push(...collect(item, `${prefix}[${i}].`))
+            })
+            return out
+        }
+        if (obj && typeof obj === 'object') {
+            for (const [k, v] of Object.entries(obj)) {
+                if (typeof v === 'string') out.push(`${k}: ${v}`)
+                else if (Array.isArray(v) && v.every(x => typeof x === 'string')) out.push(`${k}: ${v.join(', ')}`)
+                else if (v && typeof v === 'object') out.push(...collect(v, `${prefix}${k}.`))
+            }
+        }
+        return out
+    }
+    const parts = collect(data)
+    return parts.length ? parts.join('; ') : fallback
+}
+
 const submitOrder = async () => {
     // Validation
     if (!form.phone || form.phone.length < 10) {
@@ -635,19 +664,11 @@ const submitOrder = async () => {
         router.push('/orders')
     } catch (e) {
         const data = e.response?.data
-        let msg = data?.error || data?.detail || e.message
-        if (data && typeof data === 'object' && !msg) {
-            const parts = []
-            if (Array.isArray(data)) {
-                msg = data.join('; ')
-            } else {
-                for (const [k, v] of Object.entries(data)) {
-                    parts.push(Array.isArray(v) ? `${k}: ${v.join(', ')}` : `${k}: ${v}`)
-                }
-                if (parts.length) msg = parts.join('; ')
-            }
+        if (data && typeof data === 'object') {
+            console.error('Order API 400 response:', JSON.stringify(data, null, 2))
         }
-        telegramService.showAlert('Ошибка при создании заказа: ' + (msg || 'неизвестная ошибка'))
+        const msg = getOrderErrorMessage(data, e.message)
+        telegramService.showAlert('Ошибка при создании заказа: ' + msg)
     } finally {
         loading.value = false
     }
