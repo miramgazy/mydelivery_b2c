@@ -69,7 +69,7 @@ class Order(models.Model):
         db_column='delivery_address_id'
     )
     
-    phone = models.CharField('Телефон', max_length=20)
+    phone = models.CharField('Телефон', max_length=20, blank=True)
     comment = models.TextField('Комментарий', blank=True, null=True)
     
     payment_type = models.ForeignKey(

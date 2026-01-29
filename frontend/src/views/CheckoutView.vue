@@ -615,9 +615,10 @@ function getOrderErrorMessage(data, fallback = 'неизвестная ошиб�
 }
 
 const submitOrder = async () => {
-    // Validation
-    if (!form.phone || form.phone.length < 10) {
-        telegramService.showAlert('Введите корректный номер телефона')
+    // Телефон обязателен только при доставке или при оплате удалённым счётом (Kaspi)
+    const needPhone = form.deliveryType === 'delivery' || selectedPaymentSystemType.value === 'remote_payment'
+    if (needPhone && (!form.phone || form.phone.replace(/\D/g, '').length < 10)) {
+        telegramService.showAlert(form.deliveryType === 'delivery' ? 'Введите номер телефона для связи при доставке' : 'Введите номер телефона для выставления счёта')
         return
     }
     if (form.deliveryType === 'delivery' && !form.delivery_address_id) {
@@ -656,7 +657,7 @@ const submitOrder = async () => {
             delivery_address_id: form.deliveryType === 'delivery' ? form.delivery_address_id : null,
             remote_payment_phone: selectedPaymentSystemType.value === 'remote_payment' ? remotePhone : null,
             save_billing_phone: selectedPaymentSystemType.value === 'remote_payment' ? saveBillingPhone.value : false,
-            delivery_cost: form.deliveryType === 'delivery' && deliveryCost.value !== null ? deliveryCost.value : null
+            delivery_cost: form.deliveryType === 'delivery' ? (deliveryCost.value !== null ? deliveryCost.value : 0) : null
         }
 
         await ordersStore.createOrder(orderData)

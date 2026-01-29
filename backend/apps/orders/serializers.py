@@ -242,7 +242,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
 class OrderCreateSerializer(serializers.Serializer):
     """Сериализатор для создания заказа"""
     delivery_address_id = serializers.UUIDField(required=False, allow_null=True)
-    phone = serializers.CharField(max_length=20)
+    phone = serializers.CharField(max_length=20, required=False, allow_blank=True, default='')
     comment = serializers.CharField(required=False, allow_blank=True, default='')
     payment_type_id = serializers.UUIDField()
     terminal_id = serializers.UUIDField(required=False, allow_null=True)
@@ -377,7 +377,23 @@ class OrderCreateSerializer(serializers.Serializer):
         street_id = attrs.get('street_id')
         house = attrs.get('house')
         terminal_id = attrs.get('terminal_id')
-        
+        phone = (attrs.get('phone') or '').strip()
+        payment_type_id = attrs.get('payment_type_id')
+
+        # Телефон обязателен при доставке или при оплате удалённым счётом (Kaspi)
+        if delivery_address_id and not phone:
+            raise serializers.ValidationError({'phone': 'Укажите номер телефона для связи при доставке'})
+        if payment_type_id:
+            try:
+                payment_type = PaymentType.objects.get(payment_id=payment_type_id, is_active=True)
+                system_type = (payment_type.system_type or '').strip()
+                if system_type == 'remote_payment':
+                    remote_phone = (attrs.get('remote_payment_phone') or '').strip()
+                    if not phone and not remote_phone:
+                        raise serializers.ValidationError({'phone': 'Укажите номер телефона для выставления удалённого счёта'})
+            except PaymentType.DoesNotExist:
+                pass
+
         # Должен быть указан либо адрес, либо координаты
         if not delivery_address_id:
             if not (latitude and longitude):

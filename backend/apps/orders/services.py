@@ -148,20 +148,23 @@ class OrderService:
         if system_type == 'remote_payment' and kaspi_phone:
             payment_block += f"\nвыставить удаленный счет {kaspi_phone}"
 
-        # Блок Доставки: БЕСПЛАТНАЯ или ПЛАТНАЯ с суммой
+        # Блок Доставки: при доставке всегда указываем — БЕСПЛАТНАЯ или ПЛАТНАЯ с суммой
         delivery_block = None
-        if delivery_cost is not None:
-            try:
-                delivery_cost_value = Decimal(str(delivery_cost))
-                if delivery_cost_value == 0:
-                    delivery_block = "Доставка БЕСПЛАТНАЯ"
-                else:
-                    delivery_block = f"Доставка ПЛАТНАЯ - сумма доставки {delivery_cost_value} ₸"
-            except Exception:
-                if delivery_cost == 0 or str(delivery_cost).strip() == '0':
-                    delivery_block = "Доставка БЕСПЛАТНАЯ"
-                else:
-                    delivery_block = f"Доставка ПЛАТНАЯ - сумма доставки {delivery_cost} ₸"
+        if delivery_address_id:
+            if delivery_cost is not None:
+                try:
+                    delivery_cost_value = Decimal(str(delivery_cost))
+                    if delivery_cost_value == 0:
+                        delivery_block = "Доставка БЕСПЛАТНАЯ"
+                    else:
+                        delivery_block = f"Доставка ПЛАТНАЯ - сумма доставки {delivery_cost_value} ₸"
+                except Exception:
+                    if delivery_cost == 0 or str(delivery_cost).strip() == '0':
+                        delivery_block = "Доставка БЕСПЛАТНАЯ"
+                    else:
+                        delivery_block = f"Доставка ПЛАТНАЯ - сумма доставки {delivery_cost} ₸"
+            else:
+                delivery_block = "Доставка БЕСПЛАТНАЯ"
 
         # Блок Клиента: user_comment если заполнен
         comment_parts = [payment_block]
@@ -476,12 +479,19 @@ class OrderService:
             logger.error(f'Ошибка получения деталей заказа {order.order_id}: {e}')
             raise
     
+    def _is_pickup(self, order: Order) -> bool:
+        """Самовывоз: нет адреса доставки и нет разовых координат."""
+        return not order.delivery_address and not (order.latitude and order.longitude)
+
     def _prepare_iiko_order_data(self, order: Order) -> Dict:
         """
-        Подготовка данных заказа для отправки в iiko
+        Подготовка данных заказа для отправки в iiko.
+        При самовывозе: orderServiceType = DeliveryByClient, блок deliveryPoint не отправляется.
+        При доставке: orderServiceType = DeliveryByCourier, передаётся deliveryPoint.
         """
-        delivery_point = self._prepare_delivery_point(order)
-        
+        is_pickup = self._is_pickup(order)
+        delivery_point = None if is_pickup else self._prepare_delivery_point(order)
+
         items = []
         # Всегда используем prefetch_related для надежной загрузки модификаторов
         # Это гарантирует, что модификаторы будут загружены даже если они не были загружены ранее
@@ -603,25 +613,26 @@ class OrderService:
         if not terminal:
             raise ValueError(f"Order {order.order_id} has no terminal assigned")
 
+        order_payload = {
+            'orderServiceType': 'DeliveryByClient' if is_pickup else 'DeliveryByCourier',
+            'customer': {
+                'name': self._customer_name(order.user),
+                'phone': self._normalize_phone(order.phone)
+            },
+            'phone': self._normalize_phone(order.phone),
+            'items': items
+        }
+        if not is_pickup and delivery_point:
+            order_payload['deliveryPoint'] = delivery_point
+
+        if order.comment:
+            order_payload['comment'] = order.comment
+
         order_data = {
             'organizationId': str(order.organization.iiko_organization_id or order.organization.org_id),
             'terminalGroupId': str(terminal.terminal_id),
-            'order': {
-                'orderServiceType': 'DeliveryByCourier',
-                'customer': {
-                    'name': self._customer_name(order.user),
-                    'phone': self._normalize_phone(order.phone)
-                },
-                'phone': self._normalize_phone(order.phone),
-                'deliveryPoint': delivery_point,
-                'items': items
-            }
+            'order': order_payload
         }
-        
-        # Вся информация об оплате и доставке теперь уходит только в текст комментария
-        if order.comment:
-            order_data['order']['comment'] = order.comment
-        
         return order_data
     
     def _prepare_delivery_point(self, order: Order) -> Dict:
