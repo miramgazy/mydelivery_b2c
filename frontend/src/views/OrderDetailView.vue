@@ -85,8 +85,8 @@
                 <span class="font-medium">{{ order.payment_type_name || 'Не указана' }}</span>
             </div>
              <div v-if="order.comment" class="flex flex-col text-sm mt-2">
-                <span class="text-gray-500 mb-1">Комментарий:</span>
-                <span class="font-medium bg-gray-50 p-2 rounded">{{ order.comment }}</span>
+                <span class="text-gray-500 dark:text-gray-400 mb-1">Комментарий:</span>
+                <span class="font-medium bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-gray-100 p-2 rounded">{{ order.comment }}</span>
             </div>
         </div>
 
