@@ -50,9 +50,21 @@
                     </div>
                 </div>
             </div>
-            <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 flex justify-between items-center text-xl font-bold">
-                <span>Итого:</span>
-                <span>{{ formatPrice(order.total_amount) }} ₸</span>
+            <div class="mt-4 pt-4 border-t border-gray-100 dark:border-gray-700 space-y-2">
+                <div class="flex justify-between text-sm text-gray-600 dark:text-gray-400">
+                    <span>Товары:</span>
+                    <span>{{ formatPrice(order.total_amount) }} ₸</span>
+                </div>
+                <div class="flex justify-between text-sm">
+                    <span class="text-gray-600 dark:text-gray-400">Доставка:</span>
+                    <span class="font-medium">
+                        {{ order.delivery_cost != null && Number(order.delivery_cost) > 0 ? formatPrice(order.delivery_cost) + ' ₸' : 'Бесплатно' }}
+                    </span>
+                </div>
+                <div class="flex justify-between items-center text-xl font-bold pt-2 border-t border-gray-100 dark:border-gray-700">
+                    <span>Итого:</span>
+                    <span>{{ formatPrice((Number(order.total_amount) || 0) + (Number(order.delivery_cost) || 0)) }} ₸</span>
+                </div>
             </div>
         </div>
 

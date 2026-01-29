@@ -634,8 +634,20 @@ const submitOrder = async () => {
         notificationStore.show('Заказ успешно создан!')
         router.push('/orders')
     } catch (e) {
-        const msg = e.response?.data?.error || e.response?.data?.detail || e.message
-        telegramService.showAlert('Ошибка при создании заказа: ' + msg)
+        const data = e.response?.data
+        let msg = data?.error || data?.detail || e.message
+        if (data && typeof data === 'object' && !msg) {
+            const parts = []
+            if (Array.isArray(data)) {
+                msg = data.join('; ')
+            } else {
+                for (const [k, v] of Object.entries(data)) {
+                    parts.push(Array.isArray(v) ? `${k}: ${v.join(', ')}` : `${k}: ${v}`)
+                }
+                if (parts.length) msg = parts.join('; ')
+            }
+        }
+        telegramService.showAlert('Ошибка при создании заказа: ' + (msg || 'неизвестная ошибка'))
     } finally {
         loading.value = false
     }

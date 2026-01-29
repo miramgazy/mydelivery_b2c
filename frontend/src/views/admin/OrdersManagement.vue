@@ -272,11 +272,27 @@
                     </tbody>
                     <tfoot class="bg-gray-50 dark:bg-gray-700">
                       <tr>
+                        <td colspan="3" class="px-4 py-2 text-sm text-right text-gray-600 dark:text-gray-400">
+                          Товары:
+                        </td>
+                        <td class="px-4 py-2 text-sm text-right text-gray-900 dark:text-white">
+                          {{ formatPrice(selectedOrder.total_amount) }} ₸
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colspan="3" class="px-4 py-2 text-sm text-right text-gray-600 dark:text-gray-400">
+                          Доставка:
+                        </td>
+                        <td class="px-4 py-2 text-sm text-right text-gray-900 dark:text-white">
+                          {{ selectedOrder.delivery_cost != null && Number(selectedOrder.delivery_cost) > 0 ? formatPrice(selectedOrder.delivery_cost) + ' ₸' : 'Бесплатно' }}
+                        </td>
+                      </tr>
+                      <tr>
                         <td colspan="3" class="px-4 py-3 text-sm font-semibold text-right text-gray-900 dark:text-white">
                           Итого:
                         </td>
                         <td class="px-4 py-3 text-sm font-bold text-right text-gray-900 dark:text-white">
-                          {{ formatPrice(selectedOrder.total_price) }} ₸
+                          {{ formatPrice((Number(selectedOrder.total_amount) || 0) + (Number(selectedOrder.delivery_cost) || 0)) }} ₸
                         </td>
                       </tr>
                     </tfoot>

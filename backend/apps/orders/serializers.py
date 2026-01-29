@@ -147,6 +147,7 @@ class OrderListSerializer(serializers.ModelSerializer):
             'id', 'order_id', 'order_number', 'user', 'user_name',
             'organization', 'organization_name',
             'status', 'status_display', 'total_amount', 'total_price',
+            'delivery_cost',
             'phone', 'items_count',
             'payment_type', 'payment_type_name', 'payment_type_system_type',
             'comment',
@@ -202,6 +203,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             'id', 'order_id', 'iiko_order_id', 'order_number',
             'user', 'user_name', 'organization', 'organization_name',
             'status', 'status_display', 'total_amount', 'total_price',
+            'delivery_cost',
             'delivery_address', 'delivery_address_full',
             'phone', 'comment',
             'payment_type', 'payment_type_name', 'payment_type_system_type',
@@ -390,28 +392,30 @@ class OrderCreateSerializer(serializers.Serializer):
         if not terminal_id and request and hasattr(request, 'user'):
             user = request.user
             if hasattr(user, 'terminals') and user.terminals.exists():
-                # Берем первый активный терминал пользователя
                 terminal = user.terminals.filter(is_active=True).first()
                 if terminal:
                     working_hours = terminal.working_hours
                     if working_hours and working_hours.get('start') and working_hours.get('end'):
-                        now = datetime.now()
-                        current_time = now.time()
-                        
-                        start_parts = working_hours['start'].split(':')
-                        end_parts = working_hours['end'].split(':')
-                        start_time = time(int(start_parts[0]), int(start_parts[1]))
-                        end_time = time(int(end_parts[0]), int(end_parts[1]))
-                        
-                        is_working_time = False
-                        if start_time <= end_time:
-                            is_working_time = start_time <= current_time < end_time
-                        else:
-                            is_working_time = current_time >= start_time or current_time < end_time
-                        
+                        now = timezone.now()
+                        current_time_str = now.strftime('%H:%M')
+                        start_str = working_hours['start']
+                        end_str = working_hours['end']
+
+                        def time_to_minutes(t_str):
+                            parts = t_str.split(':')
+                            return int(parts[0]) * 60 + int(parts[1]) if len(parts) >= 2 else 0
+
+                        current_minutes = time_to_minutes(current_time_str)
+                        start_minutes = time_to_minutes(start_str)
+                        end_minutes = time_to_minutes(end_str)
+
+                        is_working_time = (
+                            current_minutes >= start_minutes and current_minutes < end_minutes
+                            if start_minutes <= end_minutes
+                            else current_minutes >= start_minutes or current_minutes < end_minutes
+                        )
                         if not is_working_time:
                             raise serializers.ValidationError(
-                                f'Извините, мы сейчас не принимаем заказы. Время работы: с {working_hours["start"]} до {working_hours["end"]}'
+                                f'Извините, мы сейчас не принимаем заказы. Время работы: с {start_str} до {end_str}'
                             )
-        
         return attrs

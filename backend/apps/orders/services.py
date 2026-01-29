@@ -172,6 +172,14 @@ class OrderService:
 
         final_comment = "\n".join(comment_parts)
         
+        # Стоимость доставки: из запроса или 0 (бесплатно)
+        delivery_cost_value = Decimal('0')
+        if validated_data.get('delivery_cost') is not None:
+            try:
+                delivery_cost_value = Decimal(str(validated_data['delivery_cost']))
+            except Exception:
+                delivery_cost_value = Decimal('0')
+
         # Создаем заказ
         order = Order.objects.create(
             user=user,
@@ -179,6 +187,7 @@ class OrderService:
             status=Order.STATUS_PENDING,
             order_number=f"#TMP-{random.randint(1000, 9999)}",
             total_amount=Decimal('0'),
+            delivery_cost=delivery_cost_value,
             delivery_address=delivery_address,
             phone=phone,
             comment=final_comment,

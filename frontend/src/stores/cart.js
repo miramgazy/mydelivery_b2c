@@ -110,14 +110,17 @@ export const useCartStore = defineStore('cart', () => {
      * Получить данные для отправки заказа
      */
     function getOrderData() {
-        return items.value.map(item => ({
-            product_id: item.product_id,
-            quantity: item.quantity,
-            modifiers: item.modifiers.length > 0 ? item.modifiers.map(mod => ({
-                modifier_id: mod.modifier_id,
-                quantity: mod.quantity
-            })) : undefined
-        }))
+        return items.value.map(item => {
+            const mods = item.modifiers || []
+            return {
+                product_id: item.product_id,
+                quantity: item.quantity,
+                modifiers: mods.length > 0 ? mods.map(mod => ({
+                    modifier_id: mod.modifier_id,
+                    quantity: mod.quantity
+                })) : []
+            }
+        })
     }
 
     return {

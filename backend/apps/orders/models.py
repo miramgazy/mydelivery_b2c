@@ -51,7 +51,14 @@ class Order(models.Model):
     status = models.CharField('Статус', max_length=50, choices=STATUS_CHOICES, default=STATUS_PENDING)
     order_number = models.CharField('Номер заказа', max_length=100, blank=True, null=True)
     total_amount = models.DecimalField('Сумма', max_digits=10, decimal_places=2)
-    
+    delivery_cost = models.DecimalField(
+        'Стоимость доставки',
+        max_digits=10,
+        decimal_places=2,
+        default=0,
+        help_text='0 — бесплатно'
+    )
+
     delivery_address = models.ForeignKey(
         'users.DeliveryAddress',
         on_delete=models.SET_NULL,
