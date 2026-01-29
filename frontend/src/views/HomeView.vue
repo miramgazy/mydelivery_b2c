@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20">
-    <!-- Header -->
-    <div class="bg-primary-600 pt-8 pb-16 px-4 rounded-b-3xl relative overflow-hidden">
+    <!-- Header (пропорциональные отступы: верх/низ как боковые) -->
+    <div class="bg-primary-600 pt-5 pb-5 px-4 rounded-b-3xl relative overflow-hidden">
         <!-- Decoration -->
         <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
         <div class="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full -ml-12 -mb-12"></div>
@@ -10,7 +10,7 @@
             <p class="text-white mb-1 text-lg font-semibold">
                 Привет, {{ user?.first_name || 'Гость' }}!
             </p>
-            <p class="text-white mb-4 text-sm leading-relaxed opacity-95">
+            <p class="text-white mb-3 text-sm leading-relaxed opacity-95">
                 Ваша любимая еда от {{ companyName || '—' }} уже ждет. Доставка из точки: {{ terminalName || '—' }}.
             </p>
             
@@ -41,7 +41,7 @@
                 :href="currentTerminalInstagramLink"
                 target="_blank"
                 rel="noopener noreferrer"
-                class="inline-flex items-center justify-center w-12 h-12 mt-3 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors"
+                class="inline-flex items-center justify-center w-12 h-12 mt-2 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors"
                 aria-label="Instagram"
             >
                 <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
@@ -52,7 +52,7 @@
     </div>
 
     <!-- Active Orders Preview -->
-    <div class="px-4 -mt-8 relative z-10" v-if="activeOrder">
+    <div class="px-4 -mt-5 relative z-10" v-if="activeOrder">
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-4 border-l-4 border-yellow-400">
             <div class="flex justify-between items-start mb-2">
                 <h3 class="font-bold text-gray-900 dark:text-white">Активный заказ</h3>
