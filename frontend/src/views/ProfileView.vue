@@ -41,10 +41,10 @@
                 <div v-if="currentTerminal" class="flex items-center justify-between">
                     <div class="flex-1">
                         <div class="font-medium text-gray-900 dark:text-white mb-1">
-                            {{ currentTerminal.name || currentTerminal.terminal_group_name }}
+                            {{ terminalDisplayName(currentTerminal) }}
                         </div>
-                        <div v-if="currentTerminal.city" class="text-sm text-gray-500">
-                            {{ currentTerminal.city }}
+                        <div v-if="currentTerminal.city_name || currentTerminal.city" class="text-sm text-gray-500">
+                            {{ currentTerminal.city_name || currentTerminal.city }}
                         </div>
                     </div>
                     <button
@@ -195,10 +195,10 @@
                         </div>
                         <div class="flex-1 text-left">
                             <h3 class="font-semibold text-gray-900 dark:text-white mb-0.5">
-                                {{ terminal.name || terminal.terminal_group_name }}
+                                {{ terminalDisplayName(terminal) }}
                             </h3>
-                            <p v-if="terminal.city" class="text-sm text-gray-500 dark:text-gray-400">
-                                {{ terminal.city }}
+                            <p v-if="terminal.city_name || terminal.city" class="text-sm text-gray-500 dark:text-gray-400">
+                                {{ terminal.city_name || terminal.city }}
                             </p>
                         </div>
                         <div v-if="isCurrentTerminal(terminal)" class="flex items-center gap-2 text-primary-600 dark:text-primary-400">
@@ -261,6 +261,16 @@ const currentTerminal = computed(() => {
     }
     return user.value.terminals[0]
 })
+
+/** Только человекочитаемое название, без UUID */
+function terminalDisplayName(terminal) {
+    if (!terminal) return 'Точка продажи'
+    const name = (terminal.name || terminal.terminal_group_name || '').trim()
+    if (!name) return 'Точка продажи'
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (uuidRegex.test(name)) return 'Точка продажи'
+    return name
+}
 
 const isCurrentTerminal = (terminal) => {
     if (!currentTerminal.value) return false
