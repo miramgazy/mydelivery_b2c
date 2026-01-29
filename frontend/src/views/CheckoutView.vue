@@ -155,7 +155,7 @@
             <label class="font-semibold text-gray-700 dark:text-gray-300">Комментарий к заказу</label>
             <textarea 
                 v-model="form.comment"
-                :placeholder="form.deliveryType === 'delivery' ? 'Код домофона, подъезд и т.д.' : 'Пожелания по заказу (например: позвонить за 10 минут)'"
+                :placeholder="form.deliveryType === 'delivery' ? 'Количество повторов, подъезд, этаж и т.д.' : 'Пожелания по заказу (например: позвонить за 10 минут)'"
                 rows="2"
                 class="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-primary-500 outline-none"
             ></textarea>
@@ -278,7 +278,7 @@
                     :key="terminal.terminal_id" 
                     :value="terminal.terminal_id"
                 >
-                    {{ terminal.terminal_group_name }}
+                    {{ terminal.name || terminal.terminal_group_name }}
                 </option>
             </select>
         </div>

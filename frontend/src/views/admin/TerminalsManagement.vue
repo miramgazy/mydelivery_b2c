@@ -82,6 +82,9 @@
                 Расчет доставки
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                Ссылка на Instagram
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Действия
               </th>
             </tr>
@@ -194,6 +197,17 @@
                     />
                   </button>
                 </div>
+              </td>
+              <td class="px-6 py-4">
+                <input
+                  v-model="terminal.instagram_link"
+                  @blur="updateTerminalInstagram(terminal)"
+                  type="url"
+                  placeholder="https://instagram.com/..."
+                  class="w-full min-w-[180px] px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded 
+                         bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+                         focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                />
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 <button
@@ -399,6 +413,21 @@ const updateTerminalInterval = async (terminal) => {
     }, 2000)
   } catch (err) {
     error.value = err.response?.data?.error || 'Не удалось обновить интервал'
+  }
+}
+
+const updateTerminalInstagram = async (terminal) => {
+  try {
+    error.value = null
+    await organizationService.updateTerminal(terminal.id, {
+      instagram_link: terminal.instagram_link || null
+    })
+    successMessage.value = 'Ссылка на Instagram сохранена'
+    setTimeout(() => {
+      successMessage.value = ''
+    }, 2000)
+  } catch (err) {
+    error.value = err.response?.data?.error || 'Не удалось сохранить ссылку на Instagram'
   }
 }
 

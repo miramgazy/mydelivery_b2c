@@ -53,6 +53,9 @@ class Terminal(models.Model):
     
     is_active = models.BooleanField('Активен', default=True)
     
+    # Ссылка на Instagram терминала (для брендинга в TMA)
+    instagram_link = models.URLField('Ссылка на Instagram', max_length=500, blank=True, null=True)
+    
     # Глобальный переключатель для активации расчета стоимости доставки
     is_delivery_calculation_apply = models.BooleanField(
         'Применять расчет стоимости доставки',
