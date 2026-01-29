@@ -138,54 +138,39 @@ class OrderService:
         except PaymentType.DoesNotExist:
             raise ValueError('Тип оплаты не найден')
 
-        # Собираем комментарий об оплате для передачи в iiko
+        # Конструктор комментария для персонала (блоки: Оплата, Доставка, Клиент)
         kaspi_phone = remote_payment_phone or phone
-        payment_comment = None
-        delivery_comment = None
-
         system_type = (payment_type.system_type or '').strip()
         payment_name = payment_type.payment_name or 'Не указан'
 
-        # Формируем комментарий об оплате
-        if system_type == 'remote_payment':
-            # Удалённый счёт (Kaspi) - с номером телефона для выставления счета
-            if kaspi_phone:
-                payment_comment = f"Оплата: {payment_name}\nвыставить удаленный счет {kaspi_phone}"
-            else:
-                payment_comment = f"Оплата: {payment_name}"
-        elif system_type == 'cash':
-            # Наличными - только название типа оплаты
-            payment_comment = f"Оплата: {payment_name}"
-        else:
-            # Для других типов оплаты (card_on_delivery и т.д.) - только название
-            payment_comment = f"Оплата: {payment_name}"
+        # Блок Оплаты: Оплата: {payment_name}. Если remote_payment — выставить удаленный счет {billing_phone}
+        payment_block = f"Оплата: {payment_name}"
+        if system_type == 'remote_payment' and kaspi_phone:
+            payment_block += f"\nвыставить удаленный счет {kaspi_phone}"
 
-        # Информация о доставке (бесплатная/платная и сумма)
+        # Блок Доставки: БЕСПЛАТНАЯ или ПЛАТНАЯ с суммой
+        delivery_block = None
         if delivery_cost is not None:
             try:
                 delivery_cost_value = Decimal(str(delivery_cost))
                 if delivery_cost_value == 0:
-                    delivery_comment = "Доставка БЕСПЛАТНАЯ"
+                    delivery_block = "Доставка БЕСПЛАТНАЯ"
                 else:
-                    delivery_comment = f"Доставка ПЛАТНАЯ - сумма доставки {delivery_cost_value} ₸"
+                    delivery_block = f"Доставка ПЛАТНАЯ - сумма доставки {delivery_cost_value} ₸"
             except Exception:
-                # Если не получилось сконвертировать — всё равно добавим «как есть»
                 if delivery_cost == 0 or str(delivery_cost).strip() == '0':
-                    delivery_comment = "Доставка БЕСПЛАТНАЯ"
+                    delivery_block = "Доставка БЕСПЛАТНАЯ"
                 else:
-                    delivery_comment = f"Доставка ПЛАТНАЯ - сумма доставки {delivery_cost} ₸"
+                    delivery_block = f"Доставка ПЛАТНАЯ - сумма доставки {delivery_cost} ₸"
 
-        # Собираем финальный комментарий в удобочитаемом виде:
-        # 1) строка про оплату
-        # 2) строка про сумму доставки (если есть)
-        # 3) пользовательский комментарий (если есть)
-        comment_parts = [payment_comment]
-        if delivery_comment:
-            comment_parts.append(delivery_comment)
-        if comment:
-            comment_parts.append(comment)
+        # Блок Клиента: user_comment если заполнен
+        comment_parts = [payment_block]
+        if delivery_block:
+            comment_parts.append(delivery_block)
+        if comment and str(comment).strip():
+            comment_parts.append(str(comment).strip())
 
-        final_comment = "\n".join(part for part in comment_parts if part)
+        final_comment = "\n".join(comment_parts)
         
         # Создаем заказ
         order = Order.objects.create(
@@ -233,41 +218,45 @@ class OrderService:
                     id=bp.id
                 ).update(is_default=False)
         
-        # Создаем позиции заказа
+        # Prefetch продуктов с модификаторами для минимизации запросов к БД
+        product_ids = [item_data['product_id'] for item_data in items_data]
+        products_map = {
+            p.product_id: p
+            for p in Product.objects.prefetch_related('modifiers').filter(
+                product_id__in=product_ids
+            )
+        }
+
         total_amount = Decimal('0')
-        
+
         for item_data in items_data:
             product_id = item_data['product_id']
             quantity = item_data['quantity']
             modifiers_data = item_data.get('modifiers', [])
-            
-            # Получаем продукт
-            try:
-                product = Product.objects.get(product_id=product_id)
-            except Product.DoesNotExist:
+            user_selected_modifier_ids = {m.get('modifier_id') for m in modifiers_data if m.get('modifier_id')}
+
+            product = products_map.get(product_id)
+            if not product:
                 order.delete()
                 raise ValueError(f'Продукт {product_id} не найден')
-            
+
             # Проверяем стоп-лист для выбранного терминала
             stop_list_query = StopList.objects.filter(
                 product=product,
                 organization=organization
             )
-            
             if selected_terminal:
                 stop_list_query = stop_list_query.filter(terminal=selected_terminal)
-            
             if stop_list_query.exists():
                 order.delete()
                 raise ValueError(
                     f'Продукт "{product.product_name}" временно недоступен'
                     + (f' в филиале "{selected_terminal.terminal_group_name}"' if selected_terminal else '')
                 )
-            
-            # Создаем позицию заказа
+
             item_price = product.price
             item_total = item_price * quantity
-            
+
             order_item = OrderItem.objects.create(
                 order=order,
                 product=product,
@@ -276,18 +265,16 @@ class OrderService:
                 price=item_price,
                 total_price=item_total
             )
-            
-            # Добавляем модификаторы
+
+            # Модификаторы, выбранные пользователем (опциональные)
             for mod_data in modifiers_data:
                 modifier_id = mod_data.get('modifier_id')
                 mod_quantity = mod_data.get('quantity', 1)
-                
                 try:
                     modifier = Modifier.objects.get(
                         modifier_id=modifier_id,
                         product=product
                     )
-                    
                     OrderItemModifier.objects.create(
                         order_item=order_item,
                         modifier=modifier,
@@ -295,17 +282,29 @@ class OrderService:
                         quantity=mod_quantity,
                         price=modifier.price
                     )
-                    
-                    # Добавляем стоимость модификатора
                     item_total += modifier.price * mod_quantity * quantity
-                    
                 except Modifier.DoesNotExist:
                     logger.warning(f'Модификатор {modifier_id} не найден')
-            
-            # Обновляем итоговую сумму позиции
+
+            # Обязательные модификаторы (is_required или min_amount > 0): добавляем автоматически
+            if product.has_modifiers:
+                for mod_def in product.modifiers.all():
+                    if not (mod_def.is_required or (mod_def.min_amount or 0) > 0):
+                        continue
+                    if mod_def.modifier_id in user_selected_modifier_ids:
+                        continue
+                    qty = max(1, mod_def.min_amount or 0)
+                    OrderItemModifier.objects.create(
+                        order_item=order_item,
+                        modifier=mod_def,
+                        modifier_name=mod_def.modifier_name,
+                        quantity=qty,
+                        price=mod_def.price
+                    )
+                    item_total += mod_def.price * qty * quantity
+
             order_item.total_price = item_total
             order_item.save(update_fields=['total_price'])
-            
             total_amount += item_total
         
         # Обновляем общую сумму заказа
@@ -541,47 +540,38 @@ class OrderService:
                     f'название="{order_mod.modifier_name}"'
                 )
             
-            # 2. Затем добавляем обязательные модификаторы (min_amount > 0), которые не были выбраны пользователем
+            # 2. Обязательные модификаторы (is_required или min_amount > 0): добавляем в JSON для iiko
+            # amount = min_amount × quantity основного товара (по ТЗ)
             if order_item.product.has_modifiers:
                 modifiers_defined = order_item.product.modifiers.all()
-                
                 for mod_def in modifiers_defined:
-                    # Пропускаем, если min_amount = 0 (необязательный модификатор)
-                    if mod_def.min_amount <= 0:
+                    if not (mod_def.is_required or (mod_def.min_amount or 0) > 0):
                         continue
-                    
                     modifier_code = str(mod_def.modifier_code).strip() if mod_def.modifier_code else None
-                    
                     if not modifier_code or modifier_code == 'None':
                         logger.warning(
                             f'Обязательный модификатор "{mod_def.modifier_name}" (ID: {mod_def.modifier_id}) '
                             f'для продукта "{order_item.product_name}" имеет невалидный modifier_code. Пропускаем.'
                         )
                         continue
-                    
-                    # Если пользователь уже выбрал этот модификатор, пропускаем
+                    min_amt = float(mod_def.min_amount or 0)
+                    if min_amt <= 0:
+                        min_amt = 1.0
+                    # amount модификатора = min_amount × quantity основного товара
+                    modifier_amount = min_amt * float(order_item.quantity)
                     if modifier_code in user_selected_modifiers:
-                        # Проверяем, что количество не меньше минимального
-                        if user_selected_modifiers[modifier_code]['amount'] < mod_def.min_amount:
-                            logger.warning(
-                                f'Количество модификатора {modifier_code} ({user_selected_modifiers[modifier_code]["amount"]}) '
-                                f'меньше минимального ({mod_def.min_amount}). Увеличиваем до минимума.'
-                            )
-                            user_selected_modifiers[modifier_code]['amount'] = float(mod_def.min_amount)
+                        # Пользователь уже выбрал — доводим до минимума по количеству
+                        existing = user_selected_modifiers[modifier_code]['amount']
+                        if existing < modifier_amount:
+                            user_selected_modifiers[modifier_code]['amount'] = modifier_amount
                         continue
-                    
-                    # Добавляем обязательный модификатор с минимальным количеством
-                    # В iiko API amount - это количество на одну единицу продукта
-                    modifier_amount = float(mod_def.min_amount)
-                    
                     user_selected_modifiers[modifier_code] = {
                         'productId': modifier_code,
                         'amount': modifier_amount
                     }
-                    
                     logger.info(
                         f'Добавлен обязательный модификатор для заказа {order.order_id}, позиция "{order_item.product_name}": '
-                        f'productId={modifier_code}, amount={modifier_amount} (min_amount={mod_def.min_amount}), '
+                        f'productId={modifier_code}, amount={modifier_amount} (min_amount×qty), '
                         f'название="{mod_def.modifier_name}"'
                     )
             

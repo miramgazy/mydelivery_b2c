@@ -349,7 +349,15 @@ const remotePaymentPhoneDisplay = computed(() => {
     const selected = billingPhones.value.find(
         (bp) => bp.id === selectedBillingPhoneId.value
     )
+    // По умолчанию — номер профиля (для удалённого счёта)
     return selected?.phone || authStore.user?.phone || ''
+})
+
+// При выборе оплаты «удалённый счёт» подставляем номер профиля в поле ввода, если пусто
+watch(selectedPaymentSystemType, (type) => {
+    if (type === 'remote_payment' && !remotePaymentPhoneInput.value?.trim() && authStore.user?.phone) {
+        remotePaymentPhoneInput.value = authStore.user.phone
+    }
 })
 
 // Validation for system-level data
@@ -616,7 +624,8 @@ const submitOrder = async () => {
             terminal_id: form.terminal_id,
             delivery_address_id: form.deliveryType === 'delivery' ? form.delivery_address_id : null,
             remote_payment_phone: selectedPaymentSystemType.value === 'remote_payment' ? remotePhone : null,
-            save_billing_phone: selectedPaymentSystemType.value === 'remote_payment' ? saveBillingPhone.value : false
+            save_billing_phone: selectedPaymentSystemType.value === 'remote_payment' ? saveBillingPhone.value : false,
+            delivery_cost: form.deliveryType === 'delivery' && deliveryCost.value !== null ? deliveryCost.value : null
         }
 
         await ordersStore.createOrder(orderData)

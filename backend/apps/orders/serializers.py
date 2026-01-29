@@ -99,37 +99,34 @@ class OrderItemCreateSerializer(serializers.Serializer):
                         'product_id': f'Продукт "{product.product_name}" временно недоступен'
                     })
         
-        # Валидация модификаторов
+        # Валидация модификаторов: проверяем только переданные (опциональные).
+        # Обязательные (is_required или min_amount > 0) добавляются автоматически в OrderService.
         modifiers_data = attrs.get('modifiers', [])
         if modifiers_data:
+            product_modifiers = {
+                m.modifier_id: m
+                for m in Modifier.objects.filter(product=product)
+            }
             for mod_data in modifiers_data:
                 modifier_id = mod_data.get('modifier_id')
                 quantity = mod_data.get('quantity', 1)
-                
                 if not modifier_id:
                     raise serializers.ValidationError({
                         'modifiers': 'Не указан modifier_id'
                     })
-                
-                try:
-                    modifier = Modifier.objects.get(modifier_id=modifier_id, product=product)
-                    
-                    # Проверяем количество
-                    if quantity < modifier.min_amount:
-                        raise serializers.ValidationError({
-                            'modifiers': f'Минимальное количество для {modifier.modifier_name}: {modifier.min_amount}'
-                        })
-                    
-                    if quantity > modifier.max_amount:
-                        raise serializers.ValidationError({
-                            'modifiers': f'Максимальное количество для {modifier.modifier_name}: {modifier.max_amount}'
-                        })
-                    
-                except Modifier.DoesNotExist:
+                modifier = product_modifiers.get(modifier_id)
+                if not modifier:
                     raise serializers.ValidationError({
                         'modifiers': f'Модификатор {modifier_id} не найден для этого продукта'
                     })
-        
+                if quantity < modifier.min_amount:
+                    raise serializers.ValidationError({
+                        'modifiers': f'Минимальное количество для {modifier.modifier_name}: {modifier.min_amount}'
+                    })
+                if quantity > modifier.max_amount:
+                    raise serializers.ValidationError({
+                        'modifiers': f'Максимальное количество для {modifier.modifier_name}: {modifier.max_amount}'
+                    })
         return attrs
 
 
