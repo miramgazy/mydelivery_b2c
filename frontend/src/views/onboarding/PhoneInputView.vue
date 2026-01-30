@@ -3,11 +3,11 @@
     <div class="bg-white rounded-3xl shadow-2xl max-w-md w-full p-8">
       <!-- Title -->
       <h1 class="text-2xl font-bold text-gray-900 mb-2 text-center">
-        Укажите номер телефона
+        {{ t('onboarding.phone.title') }}
       </h1>
       
       <p class="text-gray-600 mb-6 text-center text-sm">
-        Номер телефона нужен для обратной связи оператора или курьера
+        {{ t('onboarding.phone.hint') }}
       </p>
 
       <!-- Error message -->
@@ -22,7 +22,7 @@
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
-          <span>Ожидание получения номера телефона...</span>
+          <span>{{ t('onboarding.phone.waitingContact') }}</span>
         </div>
       </div>
 
@@ -38,28 +38,28 @@
             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
             </svg>
-            <span>Поделиться номером телефона</span>
+            <span>{{ t('onboarding.phone.sharePhone') }}</span>
           </button>
           <div class="text-center mb-4">
-            <span class="text-gray-500 text-sm">или</span>
+            <span class="text-gray-500 text-sm">{{ t('common.or') }}</span>
           </div>
         </div>
 
         <!-- Manual input -->
         <div>
           <label class="block text-sm font-semibold text-gray-700 mb-2">
-            Номер телефона <span class="text-red-500">*</span>
+            {{ t('onboarding.phone.phoneLabel') }} <span class="text-red-500">*</span>
           </label>
           <input
             v-model="phone"
             type="tel"
             required
-            placeholder="+7 (700) 123 45 67"
+            :placeholder="t('onboarding.phone.placeholder')"
             class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-primary-500 focus:border-primary-500 text-lg"
             @input="formatPhone"
           />
           <p class="text-xs text-gray-500 mt-1">
-            Формат: +7 (700) 123 45 67
+            {{ t('onboarding.phone.formatHint') }}
           </p>
         </div>
 
@@ -73,7 +73,7 @@
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
-          <span>{{ saving ? 'Сохранение...' : 'Продолжить' }}</span>
+          <span>{{ saving ? t('common.saving') : t('common.continue') }}</span>
         </button>
       </div>
     </div>
@@ -83,10 +83,12 @@
 <script setup>
 import { ref, onMounted, watch, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import telegramService from '@/services/telegram'
 import usersService from '@/services/users.service'
 
+const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 
@@ -163,7 +165,7 @@ function startPhonePolling() {
       // Если номер так и не найден, показываем сообщение о ручном вводе
       if (!phone.value && waitingForContact.value) {
         waitingForContact.value = false
-        error.value = 'Номер телефона не получен автоматически. Пожалуйста, введите номер вручную.'
+        error.value = t('onboarding.phone.phoneNotReceived')
       }
       return
     }

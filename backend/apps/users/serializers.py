@@ -114,7 +114,7 @@ class UserSerializer(serializers.ModelSerializer):
             'role', 'role_name', 'role_display',
             'organization', 'organization_name',
             'terminals', 'addresses', 'billing_phones',
-            'iiko_user_id', 'is_active', 'last_login',
+            'iiko_user_id', 'language_code', 'is_active', 'last_login',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'telegram_id', 'created_at', 'updated_at', 'last_login']
@@ -166,9 +166,15 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             'first_name', 'last_name', 'username',
-            'email', 'phone', 'iiko_user_id', 'organization', 'terminals'
+            'email', 'phone', 'iiko_user_id', 'organization', 'terminals',
+            'language_code'
         ]
     
+    def validate_language_code(self, value):
+        if value and value not in ('kz', 'ru'):
+            raise serializers.ValidationError('Допустимые значения: kz, ru')
+        return value or 'kz'
+
     def update(self, instance, validated_data):
         """Обновление пользователя с поддержкой терминалов"""
         terminals = validated_data.pop('terminals', None)

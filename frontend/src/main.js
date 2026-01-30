@@ -2,6 +2,7 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
+import { i18n } from './i18n'
 import './assets/styles/main.css'
 
 // Глобальный отлов ошибок для отладки в TMA
@@ -62,6 +63,9 @@ if ('serviceWorker' in navigator) {
 }
 
 const app = createApp(App)
+
+// i18n (default locale: kz)
+app.use(i18n)
 
 // Pinia store
 app.use(createPinia())

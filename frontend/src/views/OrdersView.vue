@@ -1,7 +1,7 @@
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20">
     <div class="p-4">
-        <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">Мои заказы</h1>
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-white mb-6">{{ t('orders.title') }}</h1>
 
         <!-- Loading -->
         <div v-if="loading" class="flex justify-center py-10">
@@ -18,8 +18,8 @@
             <svg class="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
             </svg>
-            <p class="text-gray-500 text-lg">У вас пока нет заказов</p>
-            <router-link to="/menu" class="inline-block mt-4 text-primary-600 font-medium">Перейти в меню →</router-link>
+            <p class="text-gray-500 text-lg">{{ t('orders.empty') }}</p>
+            <router-link to="/menu" class="inline-block mt-4 text-primary-600 font-medium">{{ t('orders.goToMenu') }}</router-link>
         </div>
 
         <!-- Orders List -->
@@ -32,7 +32,7 @@
             >
                 <div class="flex justify-between items-start mb-3">
                     <div>
-                         <p class="font-bold text-lg text-gray-900 dark:text-white">Заказ #{{ order.order_number || String(getOrderId(order)).substring(0, 8).toUpperCase() }}</p>
+                         <p class="font-bold text-lg text-gray-900 dark:text-white">{{ t('orders.order') }} #{{ order.order_number || String(getOrderId(order)).substring(0, 8).toUpperCase() }}</p>
                          <p class="text-xs text-gray-500">{{ formatDate(order.created_at) }}</p>
                     </div>
                     <span 
@@ -45,7 +45,7 @@
                 
                 <div class="flex justify-between items-center text-sm">
                     <span class="text-gray-600 dark:text-gray-400">
-                        {{ order.items_count || (order.items ? order.items.length : 0) }} позиций
+                        {{ order.items_count || (order.items ? order.items.length : 0) }} {{ t('orders.positions') }}
                     </span>
                     <span class="font-bold text-gray-900 dark:text-white">
                         {{ formatPrice(order.total_amount) }} ₸
@@ -59,10 +59,12 @@
 
 <script setup>
 import { computed, onMounted } from 'vue'
+import { useI18n } from 'vue-i18n'
 import { useOrdersStore } from '@/stores/orders'
 import { format, parseISO, isValid } from 'date-fns'
 import { ru } from 'date-fns/locale'
 
+const { t } = useI18n()
 const ordersStore = useOrdersStore()
 
 const orders = computed(() => ordersStore.orders)

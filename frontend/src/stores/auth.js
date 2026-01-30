@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
 import authService from '@/services/auth.service'
 import telegramService from '@/services/telegram'
+import { i18n, setStoredLocale } from '@/i18n'
 
 export const useAuthStore = defineStore('auth', () => {
     // State
@@ -151,6 +152,11 @@ export const useAuthStore = defineStore('auth', () => {
             const userData = await authService.getCurrentUser()
             user.value = userData
             lastFetchTime.value = now
+            // Sync locale from backend (e.g. when opening app on another device)
+            if (userData?.language_code === 'kz' || userData?.language_code === 'ru') {
+                setStoredLocale(userData.language_code)
+                i18n.global.locale.value = userData.language_code
+            }
             return userData
         } catch (err) {
             console.error('Fetch current user error:', err)

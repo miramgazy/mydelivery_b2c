@@ -4,10 +4,10 @@
       <!-- Header -->
       <div class="mb-6">
         <h1 class="text-2xl font-bold text-gray-900 mb-2">
-          Адрес доставки
+          {{ t('onboarding.address.title') }}
         </h1>
         <p class="text-gray-600 text-sm">
-          Укажите адрес для доставки заказов
+          {{ t('onboarding.address.hint') }}
         </p>
       </div>
 
@@ -20,16 +20,16 @@
       <form @submit.prevent="handleSubmit" class="space-y-4 bg-white rounded-2xl p-6 shadow-sm">
         <!-- Organization (auto from bot context) -->
         <div class="bg-gray-50 rounded-xl p-4 border border-gray-100">
-          <p class="text-xs text-gray-500 mb-1">Заведение</p>
+          <p class="text-xs text-gray-500 mb-1">{{ t('onboarding.address.venue') }}</p>
           <p class="font-semibold text-gray-900">
-            {{ authStore.user?.organization_name || 'Определяется автоматически' }}
+            {{ authStore.user?.organization_name || t('onboarding.address.venueAuto') }}
           </p>
         </div>
 
         <!-- City -->
         <div>
           <label class="block text-sm font-semibold text-gray-700 mb-2">
-            Город <span class="text-red-500">*</span>
+            {{ t('onboarding.address.city') }} <span class="text-red-500">*</span>
           </label>
           <select
             v-model="form.city_id"
@@ -37,65 +37,65 @@
             class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
             :disabled="loadingCities"
           >
-            <option value="">Выберите город</option>
+            <option value="">{{ t('onboarding.address.citySelect') }}</option>
             <option v-for="city in cities" :key="city.id" :value="city.id">
               {{ city.name }}
             </option>
           </select>
-          <p v-if="loadingCities" class="text-xs text-gray-500 mt-1">Загрузка городов...</p>
+          <p v-if="loadingCities" class="text-xs text-gray-500 mt-1">{{ t('onboarding.address.loadingCities') }}</p>
         </div>
 
         <!-- Street -->
         <div>
           <label class="block text-sm font-semibold text-gray-700 mb-2">
-            Улица <span class="text-red-500">*</span>
+            {{ t('onboarding.address.street') }} <span class="text-red-500">*</span>
           </label>
           <input
             v-model="form.street_name"
             type="text"
             required
             class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            placeholder="Название улицы"
+            :placeholder="t('onboarding.address.streetPlaceholder')"
           />
         </div>
 
         <!-- House -->
         <div>
           <label class="block text-sm font-semibold text-gray-700 mb-2">
-            Дом <span class="text-red-500">*</span>
+            {{ t('onboarding.address.house') }} <span class="text-red-500">*</span>
           </label>
           <input
             v-model="form.house"
             type="text"
             required
             class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            placeholder="Например: 15А"
+            :placeholder="t('onboarding.address.housePlaceholder')"
           />
         </div>
 
         <!-- Flat -->
         <div>
           <label class="block text-sm font-semibold text-gray-700 mb-2">
-            Квартира/Офис
+            {{ t('onboarding.address.flat') }}
           </label>
           <input
             v-model="form.flat"
             type="text"
             class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            placeholder="Необязательно"
+            :placeholder="t('onboarding.address.flatOptional')"
           />
         </div>
 
         <!-- Comment -->
         <div>
           <label class="block text-sm font-semibold text-gray-700 mb-2">
-            Комментарий
+            {{ t('onboarding.address.comment') }}
           </label>
           <textarea
             v-model="form.comment"
             rows="3"
             class="w-full px-4 py-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:ring-2 focus:ring-primary-500 focus:border-primary-500"
-            placeholder="Дополнительная информация для курьера"
+            :placeholder="t('onboarding.address.commentPlaceholder')"
           ></textarea>
         </div>
 
@@ -106,7 +106,7 @@
             @click="handleSkip"
             class="flex-1 px-4 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold rounded-xl transition-colors"
           >
-            Пропустить
+            {{ t('onboarding.address.skip') }}
           </button>
           <button
             type="submit"
@@ -117,7 +117,7 @@
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            <span>{{ saving ? 'Сохранение...' : 'Сохранить' }}</span>
+            <span>{{ saving ? t('common.saving') : t('onboarding.address.submit') }}</span>
           </button>
         </div>
       </form>
@@ -128,10 +128,12 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import deliveryAddressService from '@/services/delivery-address.service'
 import { getCities } from '@/services/organization.service'
 
+const { t } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 
@@ -171,7 +173,7 @@ async function loadCities() {
     cities.value = Array.isArray(response) ? response : []
   } catch (err) {
     console.error('Failed to load cities:', err)
-    error.value = 'Не удалось загрузить список городов'
+    error.value = t('onboarding.address.loadingCitiesError')
   } finally {
     loadingCities.value = false
   }
@@ -180,12 +182,12 @@ async function loadCities() {
 async function handleSubmit() {
   // В текущей архитектуре пользователь должен быть привязан к организации через бота
   if (!authStore.user?.organization) {
-    error.value = 'Не удалось определить заведение. Откройте Mini App через нужного бота.'
+    error.value = t('onboarding.address.venueRequired')
     return
   }
 
   if (!form.city_id || !form.street_name || !form.house) {
-    error.value = 'Заполните обязательные поля: город, улица, дом'
+    error.value = t('onboarding.address.requiredFields')
     return
   }
 
@@ -214,7 +216,7 @@ async function handleSubmit() {
     router.push('/onboarding/terminal')
   } catch (err) {
     console.error('Save address error:', err)
-    error.value = err.response?.data?.detail || 'Не удалось сохранить данные. Попробуйте еще раз.'
+    error.value = err.response?.data?.detail || t('onboarding.address.saveError')
   } finally {
     saving.value = false
   }

@@ -62,7 +62,14 @@ class User(AbstractUser):
     )
     
     iiko_user_id = models.UUIDField('ID в iiko', null=True, blank=True)
-    
+    language_code = models.CharField(
+        'Код языка',
+        max_length=5,
+        default='kz',
+        blank=True,
+        help_text='Предпочитаемый язык интерфейса: kz, ru'
+    )
+
     terminals = models.ManyToManyField(
         Terminal,
         related_name='users',

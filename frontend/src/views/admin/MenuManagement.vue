@@ -5,7 +5,7 @@
       <div class="p-6 border-b border-gray-200 dark:border-gray-700">
         <h2 class="text-xl font-bold text-gray-900 dark:text-white">Управление меню</h2>
         <p class="mt-2 text-sm text-gray-600 dark:text-gray-400">
-          Синхронизация меню по группам (как в админ-панели)
+          Синхронизация меню по группам
         </p>
       </div>
 

@@ -4,10 +4,10 @@
       <!-- Header -->
       <div class="mb-6">
         <h1 class="text-2xl font-bold text-gray-900 mb-2">
-          Выберите точку продажи
+          {{ t('onboarding.terminal.title') }}
         </h1>
         <p class="text-gray-600 text-sm">
-          Выберите точку продажи заведения для заказа
+          {{ t('onboarding.terminal.hint') }}
         </p>
       </div>
 
@@ -59,10 +59,10 @@
           </svg>
         </div>
         <h3 class="text-lg font-semibold text-gray-900 mb-2">
-          Точки продажи не найдены
+          {{ t('onboarding.terminal.noTerminals') }}
         </h3>
         <p class="text-gray-600 text-sm mb-4">
-          В вашем заведении пока нет доступных точек продажи
+          {{ t('onboarding.terminal.noTerminalsHint') }}
         </p>
       </div>
     </div>
@@ -72,9 +72,11 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useI18n } from 'vue-i18n'
 import { useOrganizationStore } from '@/stores/organization'
 import { useAuthStore } from '@/stores/auth'
 
+const { t } = useI18n()
 const router = useRouter()
 const organizationStore = useOrganizationStore()
 const authStore = useAuthStore()
