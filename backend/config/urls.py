@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.urls import path, include
 from django.conf import settings
 from django.conf.urls.static import static
+from django.http import JsonResponse
 from rest_framework_simplejwt.views import TokenRefreshView
 from apps.users.jwt_views import CustomTokenObtainPairView
 from drf_spectacular.views import (
@@ -10,7 +11,15 @@ from drf_spectacular.views import (
     SpectacularRedocView
 )
 
+
+def health_view(request):
+    """Lightweight health check for Docker/Kubernetes (no DB, no auth)."""
+    return JsonResponse({"status": "ok"})
+
+
 urlpatterns = [
+    # Health check (for container orchestration)
+    path('api/health/', health_view),
     # Admin
     path('admin/', admin.site.urls),
     
