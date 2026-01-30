@@ -21,13 +21,14 @@ def _time_to_minutes(time_str: str) -> int:
 
 def is_time_in_working_window(start_str: str, end_str: str) -> bool:
     """
-    Проверяет, находится ли текущее время сервера (TIME_ZONE) в окне [start_str, end_str].
+    Проверяет, находится ли текущее время в часовом поясе проекта (TIME_ZONE) в окне [start_str, end_str].
     Используется для глобальной проверки «рабочего» времени и для терминалов без своих working_hours.
     """
     if not start_str or not end_str:
         return True
     try:
-        now = timezone.now()
+        # Локальное время проекта (TIME_ZONE), не UTC
+        now = timezone.localtime(timezone.now())
         current_time = now.strftime('%H:%M')
         current_minutes = _time_to_minutes(current_time)
         start_minutes = _time_to_minutes(start_str)
@@ -147,10 +148,10 @@ def sync_all_terminals_stop_lists(self):
     try:
         # Глобальная проверка: вне рабочего времени запросы не отправляем
         if not is_global_sync_allowed():
-            now = timezone.now()
+            now_local = timezone.localtime(timezone.now())
             logger.debug(
                 f"Синхронизация стоп-листов пропущена: вне рабочего времени "
-                f"(сервер: {now.strftime('%H:%M')} {getattr(settings, 'TIME_ZONE', '')})"
+                f"(локально: {now_local.strftime('%H:%M')} {getattr(settings, 'TIME_ZONE', '')})"
             )
             return {'synced': 0, 'skipped': 0, 'errors': 0, 'reason': 'outside_working_hours'}
 
