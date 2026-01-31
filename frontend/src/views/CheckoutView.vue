@@ -74,7 +74,7 @@
                     Доставка
                 </button>
                  <button 
-                    @click="form.deliveryType = 'pickup'; deliveryCost = null; deliveryCostMessage = ''"
+                    @click="switchToPickup"
                     class="p-3 rounded-xl border-2 transition-all text-center font-medium"
                     :class="form.deliveryType === 'pickup' ? 'border-primary-600 bg-primary-50 text-primary-700' : 'border-gray-200 bg-white text-gray-600'"
                 >
@@ -120,8 +120,13 @@
                     </div>
                 </div>
                 
+                <!-- Адрес вне зон: доставка не осуществляется, предложить самовывоз -->
+                <div v-if="form.delivery_address_id && deliveryAddressOutsideZones" class="p-3 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                    <p class="text-sm font-medium text-amber-800 dark:text-amber-200">Доставка на указанный адрес не осуществляется.</p>
+                    <p class="text-sm text-amber-700 dark:text-amber-300 mt-1">Пожалуйста, оформите заказ с опцией «Самовывоз».</p>
+                </div>
                 <!-- Информация о стоимости доставки -->
-                <div v-if="form.delivery_address_id && deliveryCostMessage" class="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                <div v-else-if="form.delivery_address_id && deliveryCostMessage && !deliveryAddressOutsideZones" class="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
                     <p class="text-sm text-blue-700 dark:text-blue-300">{{ deliveryCostMessage }}</p>
                 </div>
                 <div v-else-if="form.delivery_address_id && deliveryCost !== null && !deliveryCostLoading" class="p-3 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
@@ -286,7 +291,7 @@
          <!-- Submit -->
          <button 
             @click="submitOrder"
-            :disabled="loading || !!adminWarning"
+            :disabled="loading || !!adminWarning || (form.deliveryType === 'delivery' && deliveryAddressOutsideZones)"
             class="w-full py-4 bg-primary-600 hover:bg-primary-700 disabled:bg-gray-400 text-white font-bold rounded-xl shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2"
         >
             <span v-if="loading" class="animate-spin w-5 h-5 border-2 border-white border-t-transparent rounded-full"></span>
@@ -326,6 +331,8 @@ const showPhoneSelector = ref(false)
 const deliveryCost = ref(null)
 const deliveryCostLoading = ref(false)
 const deliveryCostMessage = ref('')
+// Адрес верифицирован, расчёт доставки включён, но адрес вне всех зон — предлагаем самовывоз
+const deliveryAddressOutsideZones = ref(false)
 
 const form = reactive({
     phone: '',
@@ -447,47 +454,49 @@ const totalWithDelivery = computed(() => {
 async function selectDeliveryAddress(addr) {
   form.delivery_address_id = addr.id
   
+  deliveryAddressOutsideZones.value = false
+
   // Если адрес не верифицирован, показываем сообщение
   if (!addr.is_verified) {
     deliveryCost.value = null
     deliveryCostMessage.value = 'Стоимость доставки для вашего района будет уточнена оператором. Ориентировочная цена — от 600 ₸. Итоговая сумма зависит от удаленности вашего адреса.'
     return
   }
-  
+
   // Если адрес верифицирован, рассчитываем стоимость доставки
   if (!addr.latitude || !addr.longitude) {
     deliveryCost.value = null
     deliveryCostMessage.value = 'Координаты адреса не указаны'
     return
   }
-  
+
   // Получаем терминал
   let terminal = null
   if (form.terminal_id) {
-    terminal = authStore.user?.terminals?.find(t => 
+    terminal = authStore.user?.terminals?.find(t =>
       t.terminal_id === form.terminal_id || t.id === form.terminal_id
     )
   } else if (authStore.user?.terminals?.length === 1) {
     terminal = authStore.user.terminals[0]
   }
-  
+
   if (!terminal) {
     deliveryCost.value = null
     deliveryCostMessage.value = 'Терминал не выбран'
     return
   }
-  
+
   // Проверяем, включен ли расчет стоимости доставки для терминала
   if (!terminal.is_delivery_calculation_apply) {
     deliveryCost.value = null
     deliveryCostMessage.value = 'Расчет стоимости доставки не включен для этого терминала'
     return
   }
-  
+
   // Рассчитываем стоимость доставки
   deliveryCostLoading.value = true
   deliveryCostMessage.value = ''
-  
+
   try {
     const result = await organizationService.calculateDeliveryCost(
       terminal.terminal_id,
@@ -495,25 +504,36 @@ async function selectDeliveryAddress(addr) {
       parseFloat(addr.longitude),
       cartStore.totalPrice
     )
-    
+
     if (result.zone_found) {
       deliveryCost.value = result.cost || 0
+      deliveryAddressOutsideZones.value = false
       if (result.message) {
         deliveryCostMessage.value = result.message
       } else {
         deliveryCostMessage.value = ''
       }
     } else {
+      // Расчёт включён, адрес верифицирован, но адрес вне всех зон
       deliveryCost.value = null
       deliveryCostMessage.value = result.message || 'Адрес не попадает в зоны доставки'
+      deliveryAddressOutsideZones.value = true
     }
   } catch (err) {
     console.error('Failed to calculate delivery cost', err)
     deliveryCost.value = null
     deliveryCostMessage.value = 'Не удалось рассчитать стоимость доставки'
+    deliveryAddressOutsideZones.value = false
   } finally {
     deliveryCostLoading.value = false
   }
+}
+
+function switchToPickup() {
+  form.deliveryType = 'pickup'
+  deliveryCost.value = null
+  deliveryCostMessage.value = ''
+  deliveryAddressOutsideZones.value = false
 }
 
 // Отслеживаем изменение суммы заказа для пересчета стоимости доставки
@@ -627,6 +647,10 @@ const submitOrder = async () => {
     }
     if (form.deliveryType === 'delivery' && !form.delivery_address_id) {
         telegramService.showAlert('Укажите адрес доставки')
+        return
+    }
+    if (form.deliveryType === 'delivery' && deliveryAddressOutsideZones.value) {
+        telegramService.showAlert('Доставка на указанный адрес не осуществляется. Выберите опцию «Самовывоз» для оформления заказа.')
         return
     }
     // Payment type is optional - only validate if payment types are configured
