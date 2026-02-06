@@ -154,8 +154,10 @@ class MenuSyncService:
         simple_modifiers = item.get('modifiers', [])
         has_modifiers = bool(group_modifiers or simple_modifiers)
 
+        # Поиск по (product_id, menu), чтобы продукты разных меню не перезаписывали друг друга
         product, created = Product.objects.update_or_create(
             product_id=product_id,
+            menu=menu,
             defaults={
                 'product_name': item['name'],
                 'product_code': item.get('code'),
@@ -163,7 +165,6 @@ class MenuSyncService:
                 'description': item.get('description', ''),
                 'measure_unit': item.get('measureUnit', 'порц'),
                 'organization': organization,
-                'menu': menu,
                 'category': category,
                 'parent_group': category.subgroup_name if category else None,
                 'order_index': item.get('order', 0),
