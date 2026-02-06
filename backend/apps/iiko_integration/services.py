@@ -504,7 +504,10 @@ class MenuSyncService:
                     if item_sizes:
                         image_url = item_sizes[0].get('buttonImageUrl')
 
-                    Product.objects.update_or_create(
+                    has_modifier_groups = any(
+                        (s.get('itemModifierGroups') or []) for s in item_sizes
+                    )
+                    product, _ = Product.objects.update_or_create(
                         product_id=product_id,
                         menu=menu,
                         defaults={
@@ -520,10 +523,12 @@ class MenuSyncService:
                             'image_url': image_url,
                             'type': 'Dish',
                             'outer_data': item,
-                            'has_modifiers': bool(item.get('modifierSchemaId')),
+                            'has_modifiers': bool(item.get('modifierSchemaId') or has_modifier_groups),
                         }
                     )
                     products_created += 1
+                    if has_modifier_groups:
+                        self._sync_external_menu_modifiers(product, item, organization_id=org_id)
 
             logger.info(
                 "sync_external_menu: menu=%s, categories=%s, products=%s",
@@ -531,6 +536,76 @@ class MenuSyncService:
                 len(item_categories),
                 products_created,
             )
+
+    def _sync_external_menu_modifiers(
+        self, product: Product, item: Dict[str, Any], organization_id: Optional[str] = None
+    ) -> None:
+        """
+        Синхронизация модификаторов из формата внешнего меню (API v2).
+        Модификаторы лежат в item.itemSizes[].itemModifierGroups[].items[].
+        """
+        item_sizes = item.get('itemSizes') or []
+        seen_modifier_ids = set()
+        Modifier.objects.filter(product=product).delete()
+
+        for size in item_sizes:
+            groups = size.get('itemModifierGroups') or []
+            for group in groups:
+                restr = group.get('restrictions') or {}
+                group_min = int(restr.get('minQuantity') or 0)
+                group_max = int(restr.get('maxQuantity') or 1)
+                group_required = group_min > 0
+                mod_items = group.get('items') or []
+                for mod_item in mod_items:
+                    if not isinstance(mod_item, dict):
+                        continue
+                    mod_id = mod_item.get('itemId') or mod_item.get('id') or mod_item.get('productId')
+                    if not mod_id:
+                        continue
+                    mod_id_str = str(mod_id)
+                    if mod_id_str in seen_modifier_ids:
+                        continue
+                    seen_modifier_ids.add(mod_id_str)
+                    name = mod_item.get('name') or mod_item.get('productName') or f'Модификатор {mod_id_str}'
+                    mod_prices = mod_item.get('prices') or []
+                    price_val = 0.0
+                    if mod_prices:
+                        for p in mod_prices:
+                            if organization_id and str(p.get('organizationId')) == str(organization_id):
+                                try:
+                                    price_val = float(p.get('price') or 0)
+                                except (TypeError, ValueError):
+                                    pass
+                                break
+                        if price_val == 0.0 and mod_prices:
+                            try:
+                                price_val = float(mod_prices[0].get('price') or 0)
+                            except (TypeError, ValueError):
+                                pass
+                    mod_restr = mod_item.get('restrictions') or {}
+                    min_amt = int(mod_restr.get('minQuantity') or group_min or 0)
+                    max_amt = int(mod_restr.get('maxQuantity') or group_max or 1)
+                    if max_amt < 1:
+                        max_amt = 1
+                    is_required = group_required or min_amt > 0
+                    try:
+                        Modifier.objects.create(
+                            modifier_id=mod_id if isinstance(mod_id, uuid.UUID) else uuid.UUID(str(mod_id)),
+                            modifier_name=name,
+                            product=product,
+                            modifier_code=mod_id_str,
+                            min_amount=min_amt,
+                            max_amount=max_amt,
+                            price=price_val,
+                            is_required=is_required,
+                        )
+                    except (ValueError, TypeError) as e:
+                        logger.warning(
+                            "Пропущен модификатор %s для продукта %s: %s",
+                            mod_id_str,
+                            product.product_name,
+                            e,
+                        )
 
     def sync_terminal_groups(self, terminal_groups_data: Dict[str, Any], organization: Organization = None):
         """
