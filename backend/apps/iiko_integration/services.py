@@ -396,16 +396,38 @@ class MenuSyncService:
         set_active: bool = True,
     ):
         """
-        Синхронизирует внешнее меню (ответ /api/2/menu/by_id) в БД.
-        Запрос к iiko — только organizationIds и externalMenuId; из полученного
-        меню выгружаем конкретную ценовую категорию: price_category_id задаёт,
-        какую цену брать (priceCategoryPrices[].priceCategoryId или fallback на prices).
+        Синхронизирует внешнее меню (ответ iiko API v2 POST /menu/by_id) в БД.
+
+        Источник: load_menu с external_menu_id -> get_external_menu_by_id() -> этот метод.
+        В БД: создаётся/обновляется запись Menu (source_type=external), для неё свои
+        ProductCategory (subgroup_id + menu) и Product (product_id + menu). Модификаторы
+        для внешнего меню в этой выгрузке не создаются (в ответе menu/by_id их может не быть).
+
+        Ожидаемая структура menu_data: список категорий в itemCategories или
+        productCategories/categoryGroups/groups; внутри категории — items или products.
         """
         if not menu_data:
             logger.warning("No external menu data provided for sync")
             return
 
-        item_categories = menu_data.get('itemCategories', [])
+        # Ответ может быть обёрнут: { "menu": { "itemCategories": [...] } } или сразу { "itemCategories": [...] }
+        payload = menu_data.get('menu') if isinstance(menu_data.get('menu'), dict) else menu_data
+
+        # iiko API v2 может отдавать категории под разными ключами
+        item_categories = (
+            payload.get('itemCategories')
+            or payload.get('productCategories')
+            or payload.get('categoryGroups')
+            or payload.get('groups')
+            or []
+        )
+        if not item_categories:
+            logger.warning(
+                "External menu response has no categories (top-level keys: %s; payload keys: %s). "
+                "Ожидались itemCategories или productCategories.",
+                list(menu_data.keys()),
+                list(payload.keys()) if isinstance(payload, dict) else [],
+            )
 
         with transaction.atomic():
             if not menu_name:
@@ -431,9 +453,15 @@ class MenuSyncService:
             if set_active:
                 Menu.objects.filter(organization=organization).exclude(pk=menu.pk).update(is_active=False)
 
+            org_id = getattr(organization, 'iiko_organization_id', None)
+            products_created = 0
+
             for cat_data in item_categories:
-                category_id = cat_data.get('id')
-                category_name = cat_data.get('name')
+                category_id = cat_data.get('id') or cat_data.get('categoryId') or cat_data.get('groupId')
+                category_name = cat_data.get('name') or cat_data.get('categoryName') or cat_data.get('groupName') or ''
+                if not category_id:
+                    logger.debug("Skip category with no id: %s", list(cat_data.keys()))
+                    continue
 
                 # Для каждого меню — свои категории (unique_together subgroup_id + menu)
                 category, _ = ProductCategory.objects.update_or_create(
@@ -446,15 +474,29 @@ class MenuSyncService:
                     }
                 )
 
-                org_id = getattr(organization, 'iiko_organization_id', None)
-                items = cat_data.get('items', [])
+                # Товары в категории могут быть в items, products и т.д.
+                items = (
+                    cat_data.get('items')
+                    or cat_data.get('products')
+                    or cat_data.get('productIds')
+                    or []
+                )
+                if isinstance(items, dict):
+                    items = list(items.values()) if items else []
                 for item in items:
-                    product_id = item.get('id')
+                    if not isinstance(item, dict):
+                        if item is not None:
+                            product_id = item
+                            item = {'id': product_id, 'name': ''}
+                        else:
+                            continue
+                    # В ответе iiko v2 itemCategories[].items[] id товара в поле itemId (не id)
+                    product_id = item.get('itemId') or item.get('id') or item.get('productId')
                     if not product_id and item.get('itemSizes'):
                         product_id = item['itemSizes'][0].get('itemId')
                     if not product_id:
                         continue
-                    product_name = item.get('name', '')
+                    product_name = item.get('name') or item.get('productName') or ''
                     price = self._price_for_category(item, price_category_id, organization_id=org_id)
 
                     item_sizes = item.get('itemSizes') or []
@@ -481,6 +523,14 @@ class MenuSyncService:
                             'has_modifiers': bool(item.get('modifierSchemaId')),
                         }
                     )
+                    products_created += 1
+
+            logger.info(
+                "sync_external_menu: menu=%s, categories=%s, products=%s",
+                menu.menu_name,
+                len(item_categories),
+                products_created,
+            )
 
     def sync_terminal_groups(self, terminal_groups_data: Dict[str, Any], organization: Organization = None):
         """
