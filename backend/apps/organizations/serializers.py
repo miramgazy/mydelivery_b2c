@@ -94,8 +94,20 @@ class CitySerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'city_id', 'created_at', 'updated_at']
 
 
+class ExternalPriceCategorySerializer(serializers.Serializer):
+    """Ценовая категория из ответа API внешнего меню (id может быть UUID или строка)"""
+    id = serializers.CharField()
+    name = serializers.CharField(required=False, allow_blank=True, default='')
+
+
 class ExternalMenuSerializer(serializers.Serializer):
-    """Сериализатор для внешних меню из iiko"""
-    id = serializers.UUIDField()
-    external_menu_id = serializers.UUIDField()
+    """Сериализатор для внешних меню из iiko (API v2). id меню может быть строкой, напр. "69920"."""
+    id = serializers.CharField()
+    external_menu_id = serializers.CharField()
     name = serializers.CharField()
+    price_categories = serializers.ListField(
+        child=ExternalPriceCategorySerializer(),
+        required=False,
+        allow_empty=True,
+        default=list
+    )

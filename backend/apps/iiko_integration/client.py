@@ -85,11 +85,29 @@ class IikoClient:
         return self._post(url, payload)
 
     def get_external_menus(self, organization_ids: List[str]) -> Dict[str, Any]:
-        """Fetch list of external menus for organizations."""
+        """Fetch list of external menus for organizations (API v2 /menu).
+        Response may include priceCategories per menu."""
         url = f"{self.BASE_URL_V2}/menu"
         payload = {
             "organizationIds": organization_ids
         }
+        return self._post(url, payload)
+
+    def get_external_menu_by_id(
+        self,
+        organization_ids: List[str],
+        external_menu_id: str,
+        price_category_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Запрос внешнего меню по id (API v2 POST /menu/by_id).
+        Тело: organizationIds, externalMenuId; при наличии — priceCategoryId (одна категория)."""
+        url = f"{self.BASE_URL_V2}/menu/by_id"
+        payload = {
+            "organizationIds": list(organization_ids),
+            "externalMenuId": str(external_menu_id),
+        }
+        if price_category_id:
+            payload["priceCategoryId"] = str(price_category_id)
         return self._post(url, payload)
 
     def get_terminal_groups(self, organization_ids: List[str]) -> Dict[str, Any]:

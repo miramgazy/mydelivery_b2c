@@ -59,9 +59,23 @@ export const loadMenuGroups = async (selectedGroups) => {
     return response.data
 }
 
-export const loadMenuFromIiko = async (menuId) => {
-    // If no menuId, it just loads all/default
-    const response = await api.post('/organizations/load-menu/', { external_menu_id: menuId })
+export const loadMenuFromIiko = async (payload) => {
+    // payload: { external_menu_id?, price_category_id?, menu_name?, price_category_name? }
+    const response = await api.post('/organizations/load-menu/', payload)
+    return response.data
+}
+
+// Get menus list (for_management=1 returns all menus for org)
+export const getMenus = async (forManagement = false) => {
+    const params = forManagement ? { for_management: '1' } : {}
+    const response = await api.get('/menus/', { params })
+    return response.data.results ?? response.data
+}
+
+// Update menu (e.g. is_active). menuId — UUID меню (menu_id).
+export const updateMenu = async (menuId, data) => {
+    const id = menuId != null ? String(menuId) : ''
+    const response = await api.patch(`/menus/${id}/`, data)
     return response.data
 }
 
@@ -128,6 +142,8 @@ export default {
     loadPaymentTypesFromIiko,
     getExternalMenus,
     loadMenuFromIiko,
+    getMenus,
+    updateMenu,
     getMenuGroups,
     loadMenuGroups,
     getAllOrganizations,

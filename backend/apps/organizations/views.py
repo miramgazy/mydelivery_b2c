@@ -257,16 +257,22 @@ class OrganizationViewSet(viewsets.ModelViewSet):
             # Получаем список внешних меню
             response = client.get_external_menus([organization.iiko_organization_id])
             
-            # Преобразуем в нужный формат
+            # API v2: priceCategories приходят на верхнем уровне, не внутри каждого меню
+            price_categories = response.get('priceCategories') or []
+            price_cats_list = [
+                {'id': str(pc.get('id')), 'name': pc.get('name', '')}
+                for pc in price_categories
+            ]
             external_menus = []
             if 'externalMenus' in response:
                 for menu in response['externalMenus']:
+                    menu_id = menu.get('id')
                     external_menus.append({
-                        'id': menu.get('id'),
-                        'external_menu_id': menu.get('id'),
-                        'name': menu.get('name', 'Unnamed Menu')
+                        'id': menu_id,
+                        'external_menu_id': menu_id,
+                        'name': menu.get('name', 'Unnamed Menu'),
+                        'price_categories': price_cats_list,
                     })
-            
             serializer = ExternalMenuSerializer(external_menus, many=True)
             return Response(serializer.data)
         except IikoAPIException as e:
@@ -358,55 +364,69 @@ class OrganizationViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='load-menu')
     def load_menu(self, request):
-        """Загрузить меню из iiko (конкретное или общее)"""
+        """Загрузить меню из iiko: внешнее (external_menu_id + price_category_id) или номенклатура."""
         user = request.user
         external_menu_id = request.data.get('external_menu_id')
-        
+        price_category_id = request.data.get('price_category_id')
+        menu_name = request.data.get('menu_name')
+        price_category_name = request.data.get('price_category_name', '')
+
         if hasattr(user, 'organization') and user.organization:
             organization = user.organization
         else:
             organization = Organization.objects.filter(is_active=True).first()
-        
+
         if not organization:
             return Response(
                 {'error': 'Организация не найдена'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        
+
         if not organization.api_key or not organization.iiko_organization_id:
             return Response(
                 {'error': 'Не настроены iiko_organization_id или api_key'},
                 status=status.HTTP_400_BAD_REQUEST
             )
-        
+
         try:
             client = IikoClient(organization.api_key)
-            
-            # Если ID внешнего меню передан - используем его (если метод клиента поддерживает)
-            # Если нет - загружаем основную номенклатуру
-            # Примечание: get_menu обычно загружает nomenclature без аргументов внешнего меню в текущей реализации,
-            # но мы оставим возможность расширения.
-            
-            # В текущей реализации IikoClient.get_menu принимает organization_id
-            # Чтобы загрузить конкретное внешнее меню, возможно понадобится другой метод API,
-            # но пока используем стандартный get_menu который тянет всё дерево.
-            menu_data = client.get_menu(organization.iiko_organization_id)
-            
-            # Синхронизируем меню
-            service = MenuSyncService()
-            service.sync_menu(organization, menu_data)
-            
-            return Response({
-                'message': 'Меню успешно загружено из iiko',
-                'success': True
-            })
+            org_id = organization.iiko_organization_id
+
+            if external_menu_id:
+                menu_data = client.get_external_menu_by_id(
+                    organization_ids=[org_id],
+                    external_menu_id=str(external_menu_id),
+                    price_category_id=str(price_category_id) if price_category_id else None,
+                )
+                service = MenuSyncService()
+                service.sync_external_menu(
+                    organization=organization,
+                    menu_data=menu_data,
+                    menu_name=menu_name or None,
+                    price_category_id=str(price_category_id) if price_category_id else None,
+                    price_category_name=price_category_name or None,
+                    external_menu_id=str(external_menu_id),
+                    set_active=True,
+                )
+                return Response({
+                    'message': 'Внешнее меню успешно загружено',
+                    'success': True,
+                })
+            else:
+                # Номенклатура (API v1)
+                menu_data = client.get_menu(org_id)
+                service = MenuSyncService()
+                service.sync_menu(organization, menu_data)
+                return Response({
+                    'message': 'Меню успешно загружено из iiko',
+                    'success': True,
+                })
         except IikoAPIException as e:
             return Response(
                 {'error': f'Ошибка при загрузке меню из iiko: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except Exception as e:
-            # Логируем полный трейсбек для отладки
             import traceback
             traceback.print_exc()
             return Response(

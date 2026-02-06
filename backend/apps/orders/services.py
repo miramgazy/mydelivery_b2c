@@ -235,12 +235,14 @@ class OrderService:
                     id=bp.id
                 ).update(is_default=False)
         
-        # Prefetch продуктов с модификаторами для минимизации запросов к БД
+        # Продукты только из активного меню организации (product_id не уникален глобально).
         product_ids = [item_data['product_id'] for item_data in items_data]
         products_map = {
             p.product_id: p
             for p in Product.objects.prefetch_related('modifiers').filter(
-                product_id__in=product_ids
+                product_id__in=product_ids,
+                organization=organization,
+                menu__is_active=True,
             )
         }
 

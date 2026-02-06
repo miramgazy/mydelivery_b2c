@@ -45,36 +45,47 @@ class OrderItemCreateSerializer(serializers.Serializer):
     )
     
     def validate_product_id(self, value):
-        """Проверка существования продукта"""
-        try:
-            product = Product.objects.get(product_id=value)
-            if not product.is_available:
-                raise serializers.ValidationError('Продукт недоступен для заказа')
+        """Проверка существования продукта (из активного меню организации)."""
+        request = self.context.get('request')
+        if not request or not getattr(request.user, 'organization', None):
             return value
-        except Product.DoesNotExist:
+        product = Product.objects.filter(
+            product_id=value,
+            organization=request.user.organization,
+            menu__is_active=True,
+        ).first()
+        if not product:
             raise serializers.ValidationError('Продукт не найден')
-    
+        if not product.is_available:
+            raise serializers.ValidationError('Продукт недоступен для заказа')
+        return value
+
     def validate(self, attrs):
         """Валидация позиции заказа"""
         product_id = attrs.get('product_id')
-        
-        # Получаем продукт
-        try:
-            product = Product.objects.get(product_id=product_id)
-        except Product.DoesNotExist:
-            raise serializers.ValidationError({'product_id': 'Продукт не найден'})
-        
-        # Проверяем стоп-лист с учетом terminal_id
         request = self.context.get('request')
-        if request and hasattr(request, 'user') and request.user.organization:
+        organization = getattr(request.user, 'organization', None) if request else None
+        if organization:
+            product = Product.objects.filter(
+                product_id=product_id,
+                organization=organization,
+                menu__is_active=True,
+            ).first()
+        else:
+            product = Product.objects.filter(product_id=product_id).first()
+        if not product:
+            raise serializers.ValidationError({'product_id': 'Продукт не найден'})
+
+        # Проверяем стоп-лист с учетом terminal_id
+        if request and organization:
             # Получаем terminal_id из данных заказа (если есть)
             terminal_id = None
             if hasattr(request, 'data') and isinstance(request.data, dict):
                 terminal_id = request.data.get('terminal_id')
-            
+
             stop_list_query = StopList.objects.filter(
                 product=product,
-                organization=request.user.organization
+                organization=organization
             )
             
             # Если указан terminal_id, проверяем по нему

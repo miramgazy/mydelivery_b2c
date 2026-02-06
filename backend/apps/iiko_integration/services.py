@@ -323,76 +323,163 @@ class MenuSyncService:
 
                 self._sync_products_and_modifiers(menu, organization, products_to_sync, products_map)
 
-    def sync_external_menu(self, organization: Organization, menu_data: Dict[str, Any], menu_name: str = None):
+    def _price_for_category(
+        self,
+        item: Dict[str, Any],
+        price_category_id: Optional[str],
+        organization_id: Optional[str] = None,
+    ) -> float:
+        """Извлекает цену товара из ответа API v2. Универсально: если задана ценовая
+        категория — сначала ищем по ней; если нет или не нашли — берём первую доступную
+        цену (priceCategoryPrices, prices по organizationId/первая, price)."""
+        def to_float(v):
+            if v is None:
+                return None
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return None
+
+        # 1) Предпочтительная ценовая категория (если задана)
+        if price_category_id:
+            price_cat_prices = item.get('priceCategoryPrices') or []
+            for pcp in price_cat_prices:
+                if str(pcp.get('priceCategoryId')) == str(price_category_id):
+                    p = to_float(pcp.get('price'))
+                    if p is not None:
+                        return p
+            for size in item.get('itemSizes') or []:
+                for pcp in size.get('priceCategoryPrices') or []:
+                    if str(pcp.get('priceCategoryId')) == str(price_category_id):
+                        p = to_float(pcp.get('price'))
+                        if p is not None:
+                            return p
+
+        # 2) Явная цена на уровне item
+        p = to_float(item.get('price'))
+        if p is not None:
+            return p
+
+        # 3) Первая доступная цена по ценовым категориям (если категория не подгрузилась)
+        for pcp in item.get('priceCategoryPrices') or []:
+            p = to_float(pcp.get('price'))
+            if p is not None:
+                return p
+        for size in item.get('itemSizes') or []:
+            for pcp in size.get('priceCategoryPrices') or []:
+                p = to_float(pcp.get('price'))
+                if p is not None:
+                    return p
+            # 4) prices: [{ organizationId, price }]
+            size_prices = size.get('prices') or []
+            if size_prices:
+                for sp in size_prices:
+                    if organization_id and str(sp.get('organizationId')) == str(organization_id):
+                        p = to_float(sp.get('price'))
+                        if p is not None:
+                            return p
+                p = to_float(size_prices[0].get('price'))
+                if p is not None:
+                    return p
+            p = to_float(size.get('price'))
+            if p is not None:
+                return p
+        return 0.0
+
+    def sync_external_menu(
+        self,
+        organization: Organization,
+        menu_data: Dict[str, Any],
+        menu_name: str = None,
+        price_category_id: Optional[str] = None,
+        price_category_name: Optional[str] = None,
+        external_menu_id: Optional[str] = None,
+        set_active: bool = True,
+    ):
         """
-        Syncs external menu data (from /api/2/menu/by_id) to local database.
+        Синхронизирует внешнее меню (ответ /api/2/menu/by_id) в БД.
+        Запрос к iiko — только organizationIds и externalMenuId; из полученного
+        меню выгружаем конкретную ценовую категорию: price_category_id задаёт,
+        какую цену брать (priceCategoryPrices[].priceCategoryId или fallback на prices).
         """
         if not menu_data:
             logger.warning("No external menu data provided for sync")
             return
 
         item_categories = menu_data.get('itemCategories', [])
-        
+
         with transaction.atomic():
-            # 1. Ensure Menu exists
             if not menu_name:
-                 menu_name = f"Внешнее меню {organization.org_name}"
-            
+                menu_name = f"Внешнее меню {organization.org_name}"
+
+            menu_metadata = {}
+            if price_category_id:
+                menu_metadata['price_category_id'] = str(price_category_id)
+            if price_category_name:
+                menu_metadata['price_category_name'] = price_category_name
+            if external_menu_id:
+                menu_metadata['external_menu_id'] = str(external_menu_id)
+
             menu, _ = Menu.objects.update_or_create(
                 organization=organization,
                 menu_name=menu_name,
-                defaults={'is_active': True}
+                defaults={
+                    'is_active': set_active,
+                    'source_type': Menu.SOURCE_EXTERNAL,
+                    'metadata': menu_metadata or None,
+                }
             )
+            if set_active:
+                Menu.objects.filter(organization=organization).exclude(pk=menu.pk).update(is_active=False)
 
             for cat_data in item_categories:
                 category_id = cat_data.get('id')
                 category_name = cat_data.get('name')
-                
-                # Sync Category
+
+                # Note: subgroup_id is PK, so same id in another menu would conflict; we update this category's menu
                 category, _ = ProductCategory.objects.update_or_create(
                     subgroup_id=category_id,
                     defaults={
                         'subgroup_name': category_name,
                         'menu': menu,
-                        'order_index': 0, # v2 doesn't always have order here
-                        'outer_data': cat_data
+                        'order_index': 0,
+                        'outer_data': cat_data,
                     }
                 )
 
-                # Sync Products in this category
+                org_id = getattr(organization, 'iiko_organization_id', None)
                 items = cat_data.get('items', [])
                 for item in items:
                     product_id = item.get('id')
-                    product_name = item.get('name')
-                    
-                    price = item.get('price', 0)
-                    # If there are sizes, we might want to pick the first one's price
-                    item_sizes = item.get('itemSizes', [])
-                    if item_sizes and not price:
-                        price = item_sizes[0].get('price', 0)
+                    if not product_id and item.get('itemSizes'):
+                        product_id = item['itemSizes'][0].get('itemId')
+                    if not product_id:
+                        continue
+                    product_name = item.get('name', '')
+                    price = self._price_for_category(item, price_category_id, organization_id=org_id)
 
-                    # v2 sometimes has image in itemSizes or buttonImageUrl
+                    item_sizes = item.get('itemSizes') or []
                     image_url = None
                     if item_sizes:
                         image_url = item_sizes[0].get('buttonImageUrl')
 
                     Product.objects.update_or_create(
                         product_id=product_id,
+                        menu=menu,
                         defaults={
                             'product_name': product_name,
                             'product_code': item.get('sku'),
                             'price': price,
                             'description': item.get('description', ''),
-                            'measure_unit': 'порц', # simplified
+                            'measure_unit': 'порц',
                             'organization': organization,
-                            'menu': menu,
                             'category': category,
                             'parent_group': category_name,
                             'order_index': 0,
                             'image_url': image_url,
-                            'type': 'Dish', # Assume Dish for external menu
+                            'type': 'Dish',
                             'outer_data': item,
-                            'has_modifiers': bool(item.get('modifierSchemaId'))
+                            'has_modifiers': bool(item.get('modifierSchemaId')),
                         }
                     )
 
@@ -510,7 +597,7 @@ class StopListSyncService:
         self, terminal: Terminal, organization, items: List
     ) -> Dict[str, Any]:
         """UPSERT и DELETE записей стоп-листа для одного терминала в одной транзакции."""
-        api_product_ids = []
+        active_menu_product_pks = []  # Product.pk из активного меню (для корректного delete)
         created_count = 0
         updated_count = 0
         deleted_count = 0
@@ -535,11 +622,14 @@ class StopListSyncService:
                     balance = float(balance_value)
                 except (ValueError, TypeError):
                     balance = 0.0
-                try:
-                    product = Product.objects.get(product_id=product_id)
-                except Product.DoesNotExist:
+                product = Product.objects.filter(
+                    product_id=product_id,
+                    organization=organization,
+                    menu__is_active=True,
+                ).first()
+                if not product:
                     continue
-                api_product_ids.append(product_id)
+                active_menu_product_pks.append(product.pk)
                 stop_list_obj, created = StopList.objects.update_or_create(
                     product=product,
                     terminal=terminal,
@@ -555,9 +645,9 @@ class StopListSyncService:
                     created_count += 1
                 else:
                     updated_count += 1
-            if api_product_ids:
+            if active_menu_product_pks:
                 deleted_queryset = StopList.objects.filter(terminal=terminal).exclude(
-                    product__product_id__in=api_product_ids
+                    product_id__in=active_menu_product_pks
                 )
                 deleted_count = deleted_queryset.count()
                 deleted_queryset.delete()
@@ -575,7 +665,7 @@ class StopListSyncService:
             'created': created_count,
             'updated': updated_count,
             'deleted_count': deleted_count,
-            'updated_count': len(api_product_ids),
+            'updated_count': len(active_menu_product_pks),
             'total_items': len(items)
         }
 

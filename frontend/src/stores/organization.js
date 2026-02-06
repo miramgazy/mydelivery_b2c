@@ -175,18 +175,18 @@ export const useOrganizationStore = defineStore('organization', () => {
     }
 
     /**
-     * Load menu from iiko (old method)
+     * Load menu from iiko (nomenclature or external with price category)
+     * payload: { external_menu_id?, price_category_id?, menu_name?, price_category_name? }
      */
-    async function loadMenuFromIiko(menuId) {
+    async function loadMenuFromIiko(payload = {}) {
         loading.value = true
         error.value = null
-
         try {
-            const result = await organizationService.loadMenuFromIiko(menuId)
+            const result = await organizationService.loadMenuFromIiko(payload)
             return result
         } catch (err) {
             console.error('Load menu from iiko error:', err)
-            error.value = err.response?.data?.detail || 'Не удалось загрузить меню из iiko'
+            error.value = err.response?.data?.error || err.response?.data?.detail || 'Не удалось загрузить меню из iiko'
             throw err
         } finally {
             loading.value = false
@@ -231,8 +231,36 @@ export const useOrganizationStore = defineStore('organization', () => {
     }
 
     /**
-     * Clear error
+     * Get menus list (for management: all menus; otherwise only active)
      */
+    async function fetchMenus(forManagement = true) {
+        loading.value = true
+        error.value = null
+        try {
+            const data = await organizationService.getMenus(forManagement)
+            return data
+        } catch (err) {
+            console.error('Fetch menus error:', err)
+            error.value = err.response?.data?.detail || 'Не удалось загрузить список меню'
+            throw err
+        } finally {
+            loading.value = false
+        }
+    }
+
+    /**
+     * Update menu (e.g. toggle is_active)
+     */
+    async function updateMenu(menuId, data) {
+        try {
+            return await organizationService.updateMenu(menuId, data)
+        } catch (err) {
+            console.error('Update menu error:', err)
+            error.value = err.response?.data?.error || err.response?.data?.detail || 'Не удалось обновить меню'
+            throw err
+        }
+    }
+
     function clearError() {
         error.value = null
     }
@@ -262,6 +290,8 @@ export const useOrganizationStore = defineStore('organization', () => {
         loadMenuFromIiko,
         fetchMenuGroups,
         loadMenuGroups,
+        fetchMenus,
+        updateMenu,
         clearError
     }
 })

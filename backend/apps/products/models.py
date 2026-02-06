@@ -4,6 +4,13 @@ from django.db import models
 
 class Menu(models.Model):
     """Меню организации"""
+    SOURCE_NOMENCLATURE = 'nomenclature'
+    SOURCE_EXTERNAL = 'external'
+    SOURCE_CHOICES = [
+        (SOURCE_NOMENCLATURE, 'Номенклатура'),
+        (SOURCE_EXTERNAL, 'Внешнее'),
+    ]
+
     menu_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     menu_name = models.CharField('Название', max_length=255)
     organization = models.ForeignKey(
@@ -12,16 +19,24 @@ class Menu(models.Model):
         related_name='menus',
         verbose_name='Организация'
     )
-    is_active = models.BooleanField('Активно', default=True)
-    
+    is_active = models.BooleanField('Активно', default=False)
+    source_type = models.CharField(
+        'Тип',
+        max_length=20,
+        choices=SOURCE_CHOICES,
+        default=SOURCE_NOMENCLATURE
+    )
+    # Метаданные: external_menu_id, price_category_id, price_category_name для внешнего меню
+    metadata = models.JSONField('Метаданные', blank=True, null=True)
+
     created_at = models.DateTimeField('Создано', auto_now_add=True)
     updated_at = models.DateTimeField('Обновлено', auto_now=True)
-    
+
     class Meta:
         db_table = 'menus'
         verbose_name = 'Меню'
         verbose_name_plural = 'Меню'
-    
+
     def __str__(self):
         return f"{self.menu_name} ({self.organization.org_name})"
 
@@ -66,8 +81,9 @@ class ProductCategory(models.Model):
 
 
 class Product(models.Model):
-    """Продукты (блюда)"""
-    product_id = models.UUIDField(primary_key=True)
+    """Продукты (блюда). Один и тот же product_id из iiko может быть в разных меню (unique_together product_id + menu)."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    product_id = models.UUIDField('ID продукта (iiko)', db_index=True)
     menu = models.ForeignKey(
         Menu,
         on_delete=models.CASCADE,
@@ -120,6 +136,9 @@ class Product(models.Model):
         verbose_name = 'Продукт'
         verbose_name_plural = 'Продукты'
         ordering = ['order_index', 'product_name']
+        constraints = [
+            models.UniqueConstraint(fields=['product_id', 'menu'], name='products_product_id_menu_uniq'),
+        ]
         indexes = [
             models.Index(fields=['menu']),
             models.Index(fields=['organization']),

@@ -5,13 +5,23 @@ from .models import Menu, ProductCategory, Product, Modifier, StopList, FastMenu
 class MenuSerializer(serializers.ModelSerializer):
     """Сериализатор для меню"""
     organization_name = serializers.CharField(source='organization.org_name', read_only=True)
-    
+    source_type_display = serializers.CharField(source='get_source_type_display', read_only=True)
+    price_category_name = serializers.SerializerMethodField()
+
     class Meta:
         model = Menu
         fields = [
-            'menu_id', 'menu_name', 'organization', 
-            'organization_name', 'is_active'
+            'menu_id', 'menu_name', 'organization',
+            'organization_name', 'is_active', 'source_type', 'source_type_display',
+            'metadata', 'price_category_name',
+            'created_at', 'updated_at',
         ]
+        read_only_fields = ['menu_id', 'menu_name', 'organization', 'created_at', 'updated_at']
+
+    def get_price_category_name(self, obj):
+        if obj.metadata and isinstance(obj.metadata, dict):
+            return obj.metadata.get('price_category_name') or ''
+        return ''
 
 
 class ProductCategorySerializer(serializers.ModelSerializer):
@@ -248,14 +258,14 @@ class FastMenuGroupPublicSerializer(serializers.ModelSerializer):
             except (Terminal.DoesNotExist, ValueError):
                 pass
         
-        stop_list_product_ids = set(stop_list_query.values_list('product_id', flat=True))
-        
-        # Формируем список продуктов, исключая те, что в стоп-листе
+        # product_id column in stop_list references Product.pk (Product.id)
+        stop_list_product_pks = set(stop_list_query.values_list('product_id', flat=True))
         products = []
         for item in items:
             product = item.product
-            # Пропускаем продукты, которые в стоп-листе или недоступны
-            if product.product_id in stop_list_product_ids or not product.is_available:
+            if not product.menu.is_active:
+                continue
+            if product.pk in stop_list_product_pks or not product.is_available:
                 continue
             
             # Используем ProductListSerializer для сериализации

@@ -1,6 +1,7 @@
 from rest_framework import viewsets, permissions, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from rest_framework.exceptions import PermissionDenied
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Prefetch
 from django.db import transaction
@@ -14,24 +15,58 @@ from .serializers import (
 from core.permissions import IsSuperAdmin, IsOrgAdmin
 
 
-class MenuViewSet(viewsets.ReadOnlyModelViewSet):
-    """ViewSet для меню"""
-    queryset = Menu.objects.select_related('organization').filter(is_active=True)
+class MenuViewSet(viewsets.ModelViewSet):
+    """ViewSet для меню. Список для управления: ?for_management=1 (все меню). PATCH is_active с единственным активным на организацию."""
+    queryset = Menu.objects.select_related('organization').all()
     serializer_class = MenuSerializer
     permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'menu_id'
+    lookup_url_kwarg = 'menu_id'
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = ['organization', 'is_active']
     search_fields = ['menu_name']
-    
+    http_method_names = ['get', 'post', 'put', 'patch', 'delete', 'head', 'options']
+
     def get_queryset(self):
-        """Фильтрация меню по организации пользователя"""
         user = self.request.user
-        queryset = self.queryset
-        
-        if not user.is_superadmin and user.organization:
-            queryset = queryset.filter(organization=user.organization)
-        
-        return queryset
+        base = Menu.objects.select_related('organization')
+        if not getattr(user, 'is_superadmin', False) and getattr(user, 'organization', None):
+            base = base.filter(organization=user.organization)
+        # Для списка: админ с for_management=1 видит все меню, иначе только активные
+        if self.request.query_params.get('for_management') == '1' and (getattr(user, 'is_superadmin', False) or getattr(user, 'is_org_admin', False)):
+            return base
+        # Для update/partial_update/destroy админ или владелец организации видит все меню
+        if self.action in ('update', 'partial_update', 'destroy'):
+            if getattr(user, 'is_superadmin', False) or getattr(user, 'is_org_admin', False):
+                return base
+            if getattr(user, 'organization', None):
+                return base
+        return base.filter(is_active=True)
+
+    def get_permissions(self):
+        # partial_update (toggle is_active) — только IsAuthenticated; объект проверяется в check_object_permissions
+        if self.action == 'partial_update':
+            return [permissions.IsAuthenticated()]
+        if self.action in ('update', 'destroy', 'create'):
+            return [permissions.IsAuthenticated(), IsSuperAdmin() | IsOrgAdmin()]
+        return [permissions.IsAuthenticated()]
+
+    def check_object_permissions(self, request, obj):
+        """Для PATCH: разрешить только если меню принадлежит организации пользователя или пользователь админ."""
+        if request.method == 'PATCH':
+            user = request.user
+            if getattr(user, 'is_superadmin', False) or getattr(user, 'is_org_admin', False):
+                super().check_object_permissions(request, obj)
+                return
+            if getattr(user, 'organization', None) and getattr(obj, 'organization_id', None) == user.organization_id:
+                return
+            raise PermissionDenied('Меню не принадлежит вашей организации.')
+        super().check_object_permissions(request, obj)
+
+    def perform_update(self, serializer):
+        instance = serializer.save()
+        if getattr(instance, 'is_active', False):
+            Menu.objects.filter(organization=instance.organization).exclude(pk=instance.pk).update(is_active=False)
 
 
 class ProductCategoryViewSet(viewsets.ReadOnlyModelViewSet):
@@ -46,13 +81,13 @@ class ProductCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None
     
     def get_queryset(self):
-        """Фильтрация категорий по организации меню"""
+        """Фильтрация категорий по организации меню; для клиентов — только активное меню"""
         user = self.request.user
         queryset = self.queryset
-        
         if not user.is_superadmin and user.organization:
             queryset = queryset.filter(menu__organization=user.organization)
-        
+        if getattr(user, 'is_customer', False):
+            queryset = queryset.filter(menu__is_active=True)
         return queryset
 
 
@@ -87,7 +122,11 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
         # Фильтрация по организации
         if not user.is_superadmin and user.organization:
             queryset = queryset.filter(organization=user.organization)
-        
+
+        # TMA/клиенты: только продукты из активного меню
+        if user.is_customer:
+            queryset = queryset.filter(menu__is_active=True)
+
         # Клиенты видят только доступные продукты
         if user.is_customer:
             queryset = queryset.filter(is_available=True)
@@ -111,9 +150,9 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
                         # Если terminal не найден, используем все стоп-листы организации
                         pass
                 
-                stop_list_products = stop_list_query.values_list('product_id', flat=True)
-                
-                queryset = queryset.exclude(product_id__in=stop_list_products)
+                # stop_list.product_id references Product.pk (Product.id)
+                stop_list_product_pks = stop_list_query.values_list('product_id', flat=True)
+                queryset = queryset.exclude(pk__in=stop_list_product_pks)
         
         return queryset
 
@@ -299,14 +338,18 @@ class FastMenuGroupViewSet(viewsets.ModelViewSet):
                 # Удаляем все существующие элементы
                 group.items.all().delete()
                 
-                # Создаем новые элементы
-                products = Product.objects.filter(
+                # Товары только из активного меню (product_id не уникален глобально).
+                products_qs = Product.objects.filter(
                     product_id__in=product_ids,
-                    organization=group.organization
+                    organization=group.organization,
+                    menu__is_active=True,
                 )
-                
+                products_by_id = {p.product_id: p for p in products_qs}
                 items = []
-                for order, product in enumerate(products):
+                for order, pid in enumerate(product_ids):
+                    product = products_by_id.get(pid)
+                    if not product:
+                        continue
                     items.append(
                         FastMenuItem(
                             group=group,
