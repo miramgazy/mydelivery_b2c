@@ -545,7 +545,7 @@ class MenuSyncService:
         Модификаторы лежат в item.itemSizes[].itemModifierGroups[].items[].
         """
         item_sizes = item.get('itemSizes') or []
-        seen_modifier_ids = set()
+        seen_in_product = set()
         Modifier.objects.filter(product=product).delete()
 
         for size in item_sizes:
@@ -559,14 +559,14 @@ class MenuSyncService:
                 for mod_item in mod_items:
                     if not isinstance(mod_item, dict):
                         continue
-                    mod_id = mod_item.get('itemId') or mod_item.get('id') or mod_item.get('productId')
-                    if not mod_id:
+                    iiko_item_id = mod_item.get('itemId') or mod_item.get('id') or mod_item.get('productId')
+                    if not iiko_item_id:
                         continue
-                    mod_id_str = str(mod_id)
-                    if mod_id_str in seen_modifier_ids:
+                    iiko_id_str = str(iiko_item_id)
+                    if iiko_id_str in seen_in_product:
                         continue
-                    seen_modifier_ids.add(mod_id_str)
-                    name = mod_item.get('name') or mod_item.get('productName') or f'Модификатор {mod_id_str}'
+                    seen_in_product.add(iiko_id_str)
+                    name = mod_item.get('name') or mod_item.get('productName') or f'Модификатор {iiko_id_str}'
                     mod_prices = mod_item.get('prices') or []
                     price_val = 0.0
                     if mod_prices:
@@ -590,10 +590,10 @@ class MenuSyncService:
                     is_required = group_required or min_amt > 0
                     try:
                         Modifier.objects.create(
-                            modifier_id=mod_id if isinstance(mod_id, uuid.UUID) else uuid.UUID(str(mod_id)),
+                            modifier_id=uuid.uuid4(),
                             modifier_name=name,
                             product=product,
-                            modifier_code=mod_id_str,
+                            modifier_code=iiko_id_str,
                             min_amount=min_amt,
                             max_amount=max_amt,
                             price=price_val,
@@ -602,7 +602,7 @@ class MenuSyncService:
                     except (ValueError, TypeError) as e:
                         logger.warning(
                             "Пропущен модификатор %s для продукта %s: %s",
-                            mod_id_str,
+                            iiko_id_str,
                             product.product_name,
                             e,
                         )
