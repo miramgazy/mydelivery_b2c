@@ -42,16 +42,15 @@ class Menu(models.Model):
 
 
 class ProductCategory(models.Model):
-    """Категории продуктов (подгруппы)"""
-    subgroup_id = models.UUIDField(primary_key=True)
+    """Категории продуктов (подгруппы). Одна и та же subgroup_id из iiko может быть в разных меню (unique_together subgroup_id + menu)."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    subgroup_id = models.UUIDField('ID подгруппы (iiko)', db_index=True)
     subgroup_name = models.CharField('Название', max_length=255)
     menu = models.ForeignKey(
         Menu,
         on_delete=models.CASCADE,
         related_name='categories',
-        verbose_name='Меню',
-        blank=True,
-        null=True
+        verbose_name='Меню'
     )
     parent = models.ForeignKey(
         'self',
@@ -74,7 +73,10 @@ class ProductCategory(models.Model):
         verbose_name = 'Категория продуктов'
         verbose_name_plural = 'Категории продуктов'
         ordering = ['order_index', 'subgroup_name']
-    
+        constraints = [
+            models.UniqueConstraint(fields=['subgroup_id', 'menu'], name='product_categories_subgroup_menu_uniq'),
+        ]
+
     def __str__(self):
         parent_name = f"{self.parent.subgroup_name} -> " if self.parent else ""
         return f"{parent_name}{self.subgroup_name}"

@@ -79,9 +79,9 @@ class MenuSyncService:
             Category_id = group['id']
             ProductCategory.objects.update_or_create(
                 subgroup_id=Category_id,
+                menu=menu,
                 defaults={
                     'subgroup_name': group['name'],
-                    'menu': menu,
                     'order_index': group.get('order', 0),
                     'outer_data': group
                 }
@@ -100,8 +100,8 @@ class MenuSyncService:
             parent_id = group.get('parentGroup')
             if parent_id:
                 try:
-                    category = ProductCategory.objects.get(subgroup_id=group['id'])
-                    parent = ProductCategory.objects.get(subgroup_id=parent_id)
+                    category = ProductCategory.objects.get(subgroup_id=group['id'], menu=menu)
+                    parent = ProductCategory.objects.get(subgroup_id=parent_id, menu=menu)
                     # Проверяем, что родитель тоже является категорией (не группой модификаторов)
                     parent_id_str = str(parent_id)
                     if parent_id_str in used_group_ids:
@@ -135,12 +135,10 @@ class MenuSyncService:
         parent_group_id = item.get('parentGroup')
         
         category = None
-        # Try finding category by groupId first, then by parentGroup
         if category_id:
-            category = ProductCategory.objects.filter(subgroup_id=category_id).first()
-        
+            category = ProductCategory.objects.filter(subgroup_id=category_id, menu=menu).first()
         if not category and parent_group_id:
-            category = ProductCategory.objects.filter(subgroup_id=parent_group_id).first()
+            category = ProductCategory.objects.filter(subgroup_id=parent_group_id, menu=menu).first()
 
         if not category:
             logger.warning(f"Category not found (groupId={category_id}, parentGroup={parent_group_id}) for product {item['name']}")
@@ -436,12 +434,12 @@ class MenuSyncService:
                 category_id = cat_data.get('id')
                 category_name = cat_data.get('name')
 
-                # Note: subgroup_id is PK, so same id in another menu would conflict; we update this category's menu
+                # Для каждого меню — свои категории (unique_together subgroup_id + menu)
                 category, _ = ProductCategory.objects.update_or_create(
                     subgroup_id=category_id,
+                    menu=menu,
                     defaults={
                         'subgroup_name': category_name,
-                        'menu': menu,
                         'order_index': 0,
                         'outer_data': cat_data,
                     }

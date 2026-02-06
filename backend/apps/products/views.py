@@ -1,11 +1,16 @@
 from rest_framework import viewsets, permissions, filters, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, ValidationError
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Prefetch
 from django.db import transaction
+import logging
+from django.db.models.deletion import ProtectedError
+from django.db import IntegrityError
 from .models import Menu, ProductCategory, Product, Modifier, StopList, FastMenuGroup, FastMenuItem
+
+logger = logging.getLogger(__name__)
 from .serializers import (
     MenuSerializer, ProductCategorySerializer,
     ProductListSerializer, ProductDetailSerializer,
@@ -52,8 +57,8 @@ class MenuViewSet(viewsets.ModelViewSet):
         return [permissions.IsAuthenticated()]
 
     def check_object_permissions(self, request, obj):
-        """Для PATCH: разрешить только если меню принадлежит организации пользователя или пользователь админ."""
-        if request.method == 'PATCH':
+        """Для PATCH и DELETE: разрешить, если меню принадлежит организации пользователя или пользователь админ."""
+        if request.method in ('PATCH', 'DELETE'):
             user = request.user
             if getattr(user, 'is_superadmin', False) or getattr(user, 'is_org_admin', False):
                 super().check_object_permissions(request, obj)
@@ -62,6 +67,26 @@ class MenuViewSet(viewsets.ModelViewSet):
                 return
             raise PermissionDenied('Меню не принадлежит вашей организации.')
         super().check_object_permissions(request, obj)
+
+    def perform_destroy(self, instance):
+        """Удаление меню каскадно (категории, продукты, модификаторы). Запрет при наличии заказов с блюдами из меню."""
+        try:
+            instance.delete()
+        except ProtectedError:
+            raise ValidationError(
+                'Невозможно удалить меню: есть заказы, в которых есть блюда из этого меню. '
+                'Удалите или измените такие заказы.'
+            )
+        except IntegrityError as e:
+            logger.warning('Menu delete IntegrityError: %s', e)
+            raise ValidationError(
+                'Невозможно удалить меню: на него есть ссылки (например, в заказах).'
+            )
+        except Exception as e:
+            logger.exception('Menu delete failed: %s', e)
+            raise ValidationError(
+                'Не удалось удалить меню. Обратитесь к администратору.'
+            )
 
     def perform_update(self, serializer):
         instance = serializer.save()
@@ -81,12 +106,15 @@ class ProductCategoryViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = None
     
     def get_queryset(self):
-        """Фильтрация категорий по организации меню; для клиентов — только активное меню"""
+        """По умолчанию — только активное меню; с for_management=1 админ видит все меню."""
         user = self.request.user
         queryset = self.queryset
         if not user.is_superadmin and user.organization:
             queryset = queryset.filter(menu__organization=user.organization)
-        if getattr(user, 'is_customer', False):
+        # Всегда только активное меню, кроме явного запроса для управления
+        if self.request.query_params.get('for_management') != '1':
+            queryset = queryset.filter(menu__is_active=True)
+        elif not (getattr(user, 'is_superadmin', False) or getattr(user, 'is_org_admin', False)):
             queryset = queryset.filter(menu__is_active=True)
         return queryset
 
@@ -111,23 +139,22 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     
     def get_queryset(self):
         """
-        Фильтрация продуктов:
-        - Только доступные продукты для клиентов
-        - Исключаем продукты из стоп-листа (с учетом terminal_id если указан)
-        - Фильтруем по организации
+        По умолчанию — только активное меню (TMA и админка видят одно и то же).
+        С for_management=1 админ видит продукты всех меню. Клиенты — только доступные и не в стоп-листе.
         """
         user = self.request.user
         queryset = self.queryset
         
-        # Фильтрация по организации
         if not user.is_superadmin and user.organization:
             queryset = queryset.filter(organization=user.organization)
 
-        # TMA/клиенты: только продукты из активного меню
-        if user.is_customer:
+        # По умолчанию только активное меню (чтобы TMA и админка не показывали старые меню)
+        if self.request.query_params.get('for_management') != '1':
+            queryset = queryset.filter(menu__is_active=True)
+        elif not (getattr(user, 'is_superadmin', False) or getattr(user, 'is_org_admin', False)):
             queryset = queryset.filter(menu__is_active=True)
 
-        # Клиенты видят только доступные продукты
+        # Клиенты: только доступные и не в стоп-листе
         if user.is_customer:
             queryset = queryset.filter(is_available=True)
             
@@ -167,13 +194,15 @@ class ModifierViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ['modifier_name', 'price']
 
     def get_queryset(self):
-        """Фильтрация модификаторов по организации пользователя через продукт"""
+        """По организации; по умолчанию только модификаторы продуктов из активного меню."""
         user = self.request.user
         queryset = self.queryset
-        
         if not user.is_superadmin and getattr(user, 'organization', None):
             queryset = queryset.filter(product__organization=user.organization)
-            
+        if self.request.query_params.get('for_management') != '1':
+            queryset = queryset.filter(product__menu__is_active=True)
+        elif not (getattr(user, 'is_superadmin', False) or getattr(user, 'is_org_admin', False)):
+            queryset = queryset.filter(product__menu__is_active=True)
         return queryset
 
 

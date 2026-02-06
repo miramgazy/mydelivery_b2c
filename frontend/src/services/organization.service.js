@@ -79,6 +79,12 @@ export const updateMenu = async (menuId, data) => {
     return response.data
 }
 
+// Delete menu (cascade: categories, products, modifiers). Fails if there are orders with items from this menu.
+export const deleteMenu = async (menuId) => {
+    const id = menuId != null ? String(menuId) : ''
+    await api.delete(`/menus/${id}/`)
+}
+
 // Get all active organizations
 export const getAllOrganizations = async () => {
     const response = await api.get('/organizations/', {
@@ -144,6 +150,7 @@ export default {
     loadMenuFromIiko,
     getMenus,
     updateMenu,
+    deleteMenu,
     getMenuGroups,
     loadMenuGroups,
     getAllOrganizations,

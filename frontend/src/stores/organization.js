@@ -261,6 +261,35 @@ export const useOrganizationStore = defineStore('organization', () => {
         }
     }
 
+    /**
+     * Delete menu (cascade: categories, products, modifiers)
+     */
+    async function deleteMenu(menuId) {
+        try {
+            await organizationService.deleteMenu(menuId)
+        } catch (err) {
+            console.error('Delete menu error:', err)
+            error.value = getDeleteMenuErrorMessage(err)
+            throw err
+        }
+    }
+
+    function getDeleteMenuErrorMessage(err) {
+        if (!err) return 'Не удалось удалить меню'
+        const data = err.response?.data
+        const status = err.response?.status
+        if (status === 404) return 'Меню не найдено'
+        if (status === 403) return data?.detail || 'Нет прав на удаление меню'
+        if (data?.detail) {
+            const d = data.detail
+            if (typeof d === 'string') return d
+            if (Array.isArray(d)) return d.map(x => x?.msg ?? x).filter(Boolean).join(', ') || 'Не удалось удалить меню'
+        }
+        if (data?.error) return typeof data.error === 'string' ? data.error : 'Не удалось удалить меню'
+        if (!err.response) return 'Ошибка сети или сервера. Проверьте подключение.'
+        return err.message || 'Не удалось удалить меню'
+    }
+
     function clearError() {
         error.value = null
     }
@@ -292,6 +321,7 @@ export const useOrganizationStore = defineStore('organization', () => {
         loadMenuGroups,
         fetchMenus,
         updateMenu,
+        deleteMenu,
         clearError
     }
 })

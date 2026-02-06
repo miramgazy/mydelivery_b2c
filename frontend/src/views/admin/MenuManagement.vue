@@ -16,11 +16,12 @@
               <th class="py-3 px-2 font-medium">Тип</th>
               <th class="py-3 px-2 font-medium">Ценовая категория</th>
               <th class="py-3 px-2 font-medium">Статус</th>
+              <th class="py-3 px-2 font-medium w-24">Действия</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="menusLoading" class="border-b border-gray-200 dark:border-gray-700">
-              <td colspan="4" class="py-8 text-center text-gray-500">
+              <td colspan="5" class="py-8 text-center text-gray-500">
                 <Icon icon="mdi:loading" class="w-6 h-6 animate-spin inline" /> Загрузка…
               </td>
             </tr>
@@ -28,7 +29,7 @@
               v-else-if="!menusList.length"
               class="border-b border-gray-200 dark:border-gray-700"
             >
-              <td colspan="4" class="py-8 text-center text-gray-500">Нет меню</td>
+              <td colspan="5" class="py-8 text-center text-gray-500">Нет меню</td>
             </tr>
             <tr
               v-for="menu in menusList"
@@ -58,6 +59,17 @@
                     class="pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition"
                     :class="menu.is_active ? 'translate-x-5' : 'translate-x-1'"
                   />
+                </button>
+              </td>
+              <td class="py-3 px-2">
+                <button
+                  type="button"
+                  :disabled="deleteMenuId === menu.menu_id"
+                  @click="confirmDeleteMenu(menu)"
+                  class="p-2 rounded-lg text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20 disabled:opacity-50"
+                  title="Удалить меню"
+                >
+                  <Icon icon="mdi:delete-outline" class="w-5 h-5" />
                 </button>
               </td>
             </tr>
@@ -246,6 +258,7 @@ const organizationStore = useOrganizationStore()
 const menusList = ref([])
 const menusLoading = ref(false)
 const menuToggleId = ref(null)
+const deleteMenuId = ref(null)
 const showExternalModal = ref(false)
 const externalMenus = computed(() => organizationStore.externalMenus || [])
 const currentExternalMenuPriceCategories = computed(() => {
@@ -303,6 +316,23 @@ async function toggleMenuActive(menu) {
   } finally {
     menuToggleId.value = null
   }
+}
+
+function confirmDeleteMenu(menu) {
+  const name = menu.menu_name || 'меню'
+  if (!confirm(`Удалить меню «${name}»? Будут удалены все категории, блюда и модификаторы этого меню. Это действие нельзя отменить.`)) return
+  const id = menu.menu_id != null ? String(menu.menu_id) : null
+  if (!id) return
+  deleteMenuId.value = id
+  error.value = null
+  organizationStore.deleteMenu(id).then(() => {
+    setSuccess('Меню удалено')
+    return loadMenusList()
+  }).catch(() => {
+    setError(organizationStore.error || 'Не удалось удалить меню')
+  }).finally(() => {
+    deleteMenuId.value = null
+  })
 }
 
 async function openExternalModal() {

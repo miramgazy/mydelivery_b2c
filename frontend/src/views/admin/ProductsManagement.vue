@@ -4,7 +4,10 @@
       <!-- Header -->
       <div class="p-6 border-b border-gray-200 dark:border-gray-700">
         <div class="flex items-center justify-between mb-4">
-          <h2 class="text-xl font-bold text-gray-900 dark:text-white">Продукты</h2>
+          <div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Продукты</h2>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mt-0.5">Активное меню организации (то же, что в TMA)</p>
+          </div>
         </div>
 
         <!-- Filters -->

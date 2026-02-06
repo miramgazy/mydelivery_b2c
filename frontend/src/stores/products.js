@@ -33,9 +33,10 @@ export const useProductsStore = defineStore('products', () => {
     })
 
     // Actions
-    async function fetchCategories() {
+    async function fetchCategories(forManagement = false) {
         try {
-            const response = await api.get('/categories/')
+            const params = forManagement ? { for_management: '1' } : {}
+            const response = await api.get('/categories/', { params })
             categories.value = response.data.results || response.data
             return categories.value
         } catch (err) {
@@ -44,27 +45,27 @@ export const useProductsStore = defineStore('products', () => {
         }
     }
 
-    async function fetchProducts(terminalId = null) {
+    async function fetchProducts(terminalId = null, forManagement = false) {
         try {
             const params = {}
-            
+            if (forManagement) params.for_management = '1'
+
             // Если terminal_id не передан, пытаемся определить из auth store
             if (!terminalId) {
                 const { useAuthStore } = await import('@/stores/auth')
                 const authStore = useAuthStore()
                 const user = authStore.user
-                
+
                 if (user?.terminals && user.terminals.length > 0) {
                     // Используем первый терминал, если их несколько
-                    // При оформлении заказа будет выбран конкретный терминал
                     terminalId = user.terminals[0].terminal_id || user.terminals[0].id
                 }
             }
-            
+
             if (terminalId) {
                 params.terminal_id = terminalId
             }
-            
+
             const response = await api.get('/products/', { params })
             products.value = response.data.results || response.data
 
