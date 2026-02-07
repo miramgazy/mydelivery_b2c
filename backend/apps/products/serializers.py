@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from .models import Menu, ProductCategory, Product, Modifier, StopList, FastMenuGroup, FastMenuItem
+from apps.organizations.models import Organization
 
 
 class MenuSerializer(serializers.ModelSerializer):
@@ -202,7 +203,12 @@ class FastMenuGroupSerializer(serializers.ModelSerializer):
     items = FastMenuItemSerializer(many=True, read_only=True)
     organization_name = serializers.CharField(source='organization.org_name', read_only=True)
     items_count = serializers.SerializerMethodField()
-    
+    organization = serializers.PrimaryKeyRelatedField(
+        queryset=Organization.objects.all(),
+        required=False,
+        allow_null=True
+    )
+
     class Meta:
         model = FastMenuGroup
         fields = [

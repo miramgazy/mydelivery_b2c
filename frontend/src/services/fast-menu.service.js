@@ -3,7 +3,8 @@ import api from './api'
 class FastMenuService {
     async getGroups() {
         const response = await api.get('/fast-menu-groups/')
-        return response.data?.results ?? response.data
+        const raw = response.data?.results ?? response.data
+        return Array.isArray(raw) ? raw : []
     }
 
     async getGroup(id) {

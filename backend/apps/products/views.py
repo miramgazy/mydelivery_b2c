@@ -6,6 +6,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Prefetch
 from django.db import transaction
 import logging
+import uuid
 from django.db.models.deletion import ProtectedError
 from django.db import IntegrityError
 from .models import Menu, ProductCategory, Product, Modifier, StopList, FastMenuGroup, FastMenuItem
@@ -283,6 +284,7 @@ class FastMenuGroupViewSet(viewsets.ModelViewSet):
     search_fields = ['name']
     ordering_fields = ['order', 'name', 'created_at']
     ordering = ['order', 'name']
+    pagination_class = None  # список групп без пагинации для админки
     
     def get_queryset(self):
         """Фильтрация групп по организации пользователя"""
@@ -352,33 +354,44 @@ class FastMenuGroupViewSet(viewsets.ModelViewSet):
     
     @action(detail=True, methods=['put', 'patch'], url_path='items')
     def update_items(self, request, pk=None):
-        """Обновление списка товаров в группе"""
+        """Обновление списка товаров в группе. product_ids — массив UUID (product_id или id продукта)."""
         group = self.get_object()
-        product_ids = request.data.get('product_ids', [])
+        raw_ids = request.data.get('product_ids', [])
         
-        if not isinstance(product_ids, list):
+        if not isinstance(raw_ids, list):
             return Response(
                 {'error': 'product_ids должен быть массивом'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Нормализуем к UUID (с фронта могут прийти строки)
+        product_ids = []
+        for pid in raw_ids:
+            if pid is None:
+                continue
+            try:
+                product_ids.append(pid if isinstance(pid, uuid.UUID) else uuid.UUID(str(pid)))
+            except (ValueError, TypeError):
+                continue
+        
         try:
             with transaction.atomic():
-                # Удаляем все существующие элементы
                 group.items.all().delete()
                 
-                # Товары только из активного меню (product_id не уникален глобально).
+                # Товары организации из активного меню; ищем по product_id и по pk (id)
                 products_qs = Product.objects.filter(
-                    product_id__in=product_ids,
                     organization=group.organization,
                     menu__is_active=True,
-                )
-                products_by_id = {p.product_id: p for p in products_qs}
+                ).filter(Q(product_id__in=product_ids) | Q(pk__in=product_ids))
+                by_product_id = {p.product_id: p for p in products_qs}
+                by_pk = {p.pk: p for p in products_qs}
                 items = []
+                seen_pks = set()
                 for order, pid in enumerate(product_ids):
-                    product = products_by_id.get(pid)
-                    if not product:
+                    product = by_product_id.get(pid) or by_pk.get(pid)
+                    if not product or product.pk in seen_pks:
                         continue
+                    seen_pks.add(product.pk)
                     items.append(
                         FastMenuItem(
                             group=group,
@@ -386,13 +399,11 @@ class FastMenuGroupViewSet(viewsets.ModelViewSet):
                             order=order
                         )
                     )
-                
                 FastMenuItem.objects.bulk_create(items)
-                
-                # Возвращаем обновленную группу
                 serializer = self.get_serializer(group)
                 return Response(serializer.data)
         except Exception as e:
+            logger.exception('Fast menu update_items failed')
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST

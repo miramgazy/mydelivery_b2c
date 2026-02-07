@@ -335,9 +335,10 @@ const fetchGroups = async () => {
 const fetchProducts = async () => {
   loadingProducts.value = true
   try {
-    // В админке получаем все продукты без фильтрации по terminal_id
-    const response = await api.get('/products/')
-    products.value = response.data?.results || response.data || []
+    // Для админки быстрого меню — продукты для управления (все меню организации)
+    const response = await api.get('/products/', { params: { for_management: '1' } })
+    const raw = response.data?.results ?? response.data
+    products.value = Array.isArray(raw) ? raw : []
   } catch (err) {
     console.error('Failed to fetch products:', err)
     products.value = []
