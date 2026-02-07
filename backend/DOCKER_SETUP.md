@@ -115,7 +115,7 @@ docker-compose ps
 | API | http://localhost:8000/api/ | REST API |
 | Swagger | http://localhost:8000/api/schema/swagger-ui/ | Интерактивная документация API |
 | ReDoc | http://localhost:8000/api/schema/redoc/ | Альтернативная документация |
-| Admin | http://localhost:8000/admin/ | Django Admin панель |
+| Admin (бэкенд) | http://localhost:8000/administrator/ | Django Admin панель |
 | PostgreSQL | localhost:5432 | База данных (для внешних клиентов) |
 
 ### 6. Создание тестовых данных

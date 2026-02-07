@@ -48,7 +48,7 @@ docker-compose exec backend python manage.py createsuperuser
 Откройте в браузере:
 - ✅ http://localhost:8000/api/
 - ✅ http://localhost:8000/api/schema/swagger-ui/
-- ✅ http://localhost:8000/admin/
+- ✅ http://localhost:8000/administrator/  (Django Admin; офис фронта — /admin)
 
 ## 🎉 Готово!
 

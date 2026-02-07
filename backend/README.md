@@ -101,7 +101,7 @@ docker-compose exec backend python manage.py createsuperuser
 - API: http://localhost:8000/api/
 - Swagger UI: http://localhost:8000/api/schema/swagger-ui/
 - ReDoc: http://localhost:8000/api/schema/redoc/
-- Admin: http://localhost:8000/admin/
+- Django Admin: http://localhost:8000/administrator/ (офис фронта — /admin)
 
 ### Управление контейнерами
 

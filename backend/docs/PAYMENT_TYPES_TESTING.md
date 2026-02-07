@@ -15,7 +15,7 @@
 
 ```bash
 # Откройте в браузере
-http://localhost:8000/admin/
+http://localhost:8000/administrator/
 ```
 
 Войдите с учетными данными администратора.
