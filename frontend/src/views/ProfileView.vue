@@ -315,12 +315,8 @@ async function selectTerminal(terminal) {
             terminalError.value = 'Не удалось определить выбранную точку продажи'
             return
         }
-        const toId = (t) => (t && typeof t === 'object' ? (t.id ?? t.terminal_id) : t)
-        const currentTerminals = user.value?.terminals || []
-        const terminalIds = currentTerminals.map(toId).filter(Boolean)
-        const filteredIds = terminalIds.filter(id => String(id) !== String(terminalId))
-        const newTerminalIds = [terminalId, ...filteredIds].map(id => typeof id === 'string' ? id : String(id))
-
+        // Фиксируем в базе только выбранный терминал (последний выбор пользователя)
+        const newTerminalIds = [typeof terminalId === 'string' ? terminalId : String(terminalId)]
         await usersService.updateProfile({ terminals: newTerminalIds })
         await authStore.fetchCurrentUser(true)
         

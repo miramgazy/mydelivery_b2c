@@ -51,6 +51,25 @@
             </div>
         </div>
 
+        <!-- Выберите филиал — сразу после информации о заказе -->
+        <div v-if="authStore.user?.terminals?.length > 1" class="space-y-2">
+            <label class="font-semibold text-gray-700 dark:text-gray-300">Выберите филиал</label>
+            <select 
+                v-model="form.terminal_id"
+                class="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
+                required
+            >
+                <option :value="null" disabled>Выберите терминал</option>
+                <option 
+                    v-for="terminal in authStore.user.terminals" 
+                    :key="terminal.terminal_id" 
+                    :value="terminal.terminal_id"
+                >
+                    {{ terminal.name || terminal.terminal_group_name }}
+                </option>
+            </select>
+        </div>
+
         <!-- Phone -->
         <div class="space-y-2">
             <label class="font-semibold text-gray-700 dark:text-gray-300">Номер телефона для связи</label>
@@ -267,25 +286,6 @@
                 </label>
               </div>
             </div>
-        </div>
-
-        <!-- Terminal Selection (if multiple) -->
-        <div v-if="authStore.user?.terminals?.length > 1" class="space-y-2">
-            <label class="font-semibold text-gray-700 dark:text-gray-300">Выберите филиал</label>
-            <select 
-                v-model="form.terminal_id"
-                class="w-full p-3 rounded-xl border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-primary-500 outline-none"
-                required
-            >
-                <option :value="null" disabled>Выберите терминал</option>
-                <option 
-                    v-for="terminal in authStore.user.terminals" 
-                    :key="terminal.terminal_id" 
-                    :value="terminal.terminal_id"
-                >
-                    {{ terminal.name || terminal.terminal_group_name }}
-                </option>
-            </select>
         </div>
 
          <!-- Submit -->
@@ -543,6 +543,19 @@ watch(() => cartStore.totalPrice, () => {
     if (selectedAddr && selectedAddr.is_verified) {
       selectDeliveryAddress(selectedAddr)
     }
+  }
+})
+
+// При смене филиала пересчитываем стоимость доставки
+watch(() => form.terminal_id, () => {
+  if (form.deliveryType === 'delivery' && form.delivery_address_id) {
+    const selectedAddr = authStore.user?.addresses?.find(a => a.id === form.delivery_address_id)
+    if (selectedAddr) {
+      selectDeliveryAddress(selectedAddr)
+    }
+  } else if (form.deliveryType === 'pickup') {
+    deliveryCost.value = null
+    deliveryCostMessage.value = ''
   }
 })
 
