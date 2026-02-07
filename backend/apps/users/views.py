@@ -10,6 +10,7 @@ from django.db import transaction
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
 import re
+import uuid
 from .models import User, Role, DeliveryAddress, BillingPhone
 from .serializers import (
     UserSerializer, UserCreateSerializer, UserUpdateSerializer,
@@ -318,19 +319,28 @@ class UserViewSet(viewsets.ModelViewSet):
             serializer = UserUpdateSerializer(user, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
             serializer.save()
-            # Явно сохраняем терминалы из запроса (M2M может не обновиться через сериализатор в частичном PATCH)
+            # Всегда явно сохраняем терминалы из запроса (M2M по request.data, по свежему user из БД)
             if 'terminals' in request.data:
                 from apps.organizations.models import Terminal
-                terminal_ids = request.data['terminals']
-                if isinstance(terminal_ids, list) and terminal_ids:
-                    # Сохраняем порядок: первый — выбранный терминал
-                    order = {str(tid): i for i, tid in enumerate(terminal_ids)}
-                    terminals = list(
-                        Terminal.objects.filter(terminal_id__in=terminal_ids)
-                    )
-                    terminals.sort(key=lambda t: order.get(str(t.terminal_id), 999))
-                    user.terminals.set(terminals)
-            # После обновления загружаем полные данные с терминалами
+                raw_ids = request.data['terminals']
+                if isinstance(raw_ids, list) and raw_ids:
+                    try:
+                        terminal_ids = [
+                            tid if isinstance(tid, uuid.UUID) else uuid.UUID(str(tid))
+                            for tid in raw_ids
+                            if tid is not None
+                        ]
+                    except (ValueError, TypeError):
+                        terminal_ids = []
+                    if terminal_ids:
+                        order = {str(tid): i for i, tid in enumerate(terminal_ids)}
+                        terminals = list(
+                            Terminal.objects.filter(terminal_id__in=terminal_ids)
+                        )
+                        terminals.sort(key=lambda t: order.get(str(t.terminal_id), 999))
+                        user_refreshed = User.objects.get(id=user.id)
+                        user_refreshed.terminals.set(terminals)
+            # Ответ — всегда свежие данные пользователя с терминалами
             user = User.objects.select_related('role', 'organization').prefetch_related(
                 'addresses', 'billing_phones', 'terminals'
             ).get(id=user.id)

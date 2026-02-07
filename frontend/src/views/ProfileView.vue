@@ -310,24 +310,18 @@ async function selectTerminal(terminal) {
     terminalError.value = null
 
     try {
-        const terminalId = terminal.id || terminal.terminal_id
-        
-        // Обновляем терминалы пользователя - ставим выбранный терминал первым
+        const terminalId = terminal.id ?? terminal.terminal_id
+        if (!terminalId) {
+            terminalError.value = 'Не удалось определить выбранную точку продажи'
+            return
+        }
+        const toId = (t) => (t && typeof t === 'object' ? (t.id ?? t.terminal_id) : t)
         const currentTerminals = user.value?.terminals || []
-        const terminalIds = currentTerminals.map(t => typeof t === 'object' ? t.id || t.terminal_id : t)
-        
-        // Удаляем выбранный терминал из списка, если он там есть
-        const filteredIds = terminalIds.filter(id => id !== terminalId)
-        
-        // Ставим выбранный терминал первым
-        const newTerminalIds = [terminalId, ...filteredIds]
-        
-        // Обновляем пользователя через API
-        await usersService.updateProfile({ 
-            terminals: newTerminalIds 
-        })
-        
-        // Перезагружаем данные пользователя
+        const terminalIds = currentTerminals.map(toId).filter(Boolean)
+        const filteredIds = terminalIds.filter(id => String(id) !== String(terminalId))
+        const newTerminalIds = [terminalId, ...filteredIds].map(id => typeof id === 'string' ? id : String(id))
+
+        await usersService.updateProfile({ terminals: newTerminalIds })
         await authStore.fetchCurrentUser(true)
         
         notificationStore.show('Точка продажи успешно изменена')
