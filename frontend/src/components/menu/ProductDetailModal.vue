@@ -19,8 +19,8 @@
         </svg>
       </button>
 
-      <!-- Image: вытянутая рамка, чтобы помещалось загруженное фото -->
-      <div class="relative w-full aspect-[3/2] min-h-[220px] max-h-[50vh] bg-gray-200 dark:bg-gray-700 shrink-0">
+      <!-- Image: высокая рамка под загруженное фото -->
+      <div class="relative w-full aspect-[4/3] min-h-[280px] max-h-[58vh] bg-gray-200 dark:bg-gray-700 shrink-0">
         <img 
           v-if="product.image_url" 
           :src="product.image_url" 
