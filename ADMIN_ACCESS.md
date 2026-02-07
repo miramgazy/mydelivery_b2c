@@ -4,7 +4,7 @@
 
 После настройки внешнего nginx, админка доступна по адресу:
 
-**https://b2c-delivery.mevent.kz/admin/**
+**https://b2c-delivery.mevent.kz/administrator/** (офис фронта — /admin)
 
 ## Требования
 
@@ -18,7 +18,7 @@
 
 Перейдите по адресу:
 ```
-https://b2c-delivery.mevent.kz/admin/
+https://b2c-delivery.mevent.kz/administrator/
 ```
 
 ### Шаг 2: Введите учетные данные
@@ -51,14 +51,14 @@ https://b2c-delivery.mevent.kz/admin/
 
 ```bash
 # Проверка доступности админки
-curl -I https://b2c-delivery.mevent.kz/admin/
+curl -I https://b2c-delivery.mevent.kz/administrator/
 
 # Должен вернуть HTTP 302 (редирект на страницу входа) или 200
 ```
 
 ### Проверка через браузер
 
-1. Откройте `https://b2c-delivery.mevent.kz/admin/`
+1. Откройте `https://b2c-delivery.mevent.kz/administrator/`
 2. Должна открыться страница входа Django Admin
 3. Если видите ошибку - проверьте настройки ниже
 
@@ -66,12 +66,12 @@ curl -I https://b2c-delivery.mevent.kz/admin/
 
 ### Проблема: "404 Not Found"
 
-**Причина:** Nginx не проксирует запросы на `/admin/`
+**Причина:** Nginx не проксирует запросы на `/administrator/`
 
 **Решение:**
 1. Проверьте конфигурацию внешнего nginx
 2. Убедитесь, что `location /` проксирует на порт 3090
-3. Проверьте, что внутренний nginx контейнера проксирует `/admin/` на backend
+3. Проверьте, что внутренний nginx контейнера проксирует `/administrator/` на backend
 
 ### Проблема: "502 Bad Gateway"
 
@@ -132,7 +132,7 @@ docker volume ls | grep django-static
 docker ps | grep backend
 
 # Если порт открыт, можно использовать:
-# http://your-server-ip:PORT/admin/
+# http://your-server-ip:PORT/administrator/
 ```
 
 ### Через SSH туннель
@@ -142,7 +142,7 @@ docker ps | grep backend
 ssh -L 8000:localhost:8000 user@your-server
 
 # Затем откройте в браузере:
-# http://localhost:8000/admin/
+# http://localhost:8000/administrator/
 ```
 
 ## Безопасность

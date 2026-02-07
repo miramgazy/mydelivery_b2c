@@ -83,8 +83,8 @@ User.objects.create_superuser(
 
 После создания суперпользователя вы можете войти в Django Admin:
 
-- **URL**: `https://b2c-delivery.mevent.kz/admin/`
-- **Или через API**: `https://b2c-delivery.mevent.kz/api/admin/`
+- **URL**: `https://b2c-delivery.mevent.kz/administrator/` (Django Admin; офис — /admin)
+- **Или через API**: `https://b2c-delivery.mevent.kz/api/` (API не содержит админки)
 
 ## Проверка создания
 

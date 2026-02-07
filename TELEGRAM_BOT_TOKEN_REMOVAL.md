@@ -28,7 +28,7 @@
 
 ## Как настроить бота для организации:
 
-1. Войдите в Django Admin: `https://b2c-delivery.mevent.kz/admin/`
+1. Войдите в Django Admin: `https://b2c-delivery.mevent.kz/administrator/`
 2. Перейдите в раздел "Organizations"
 3. Выберите нужную организацию
 4. Заполните поля:
