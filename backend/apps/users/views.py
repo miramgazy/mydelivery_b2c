@@ -308,16 +308,32 @@ class UserViewSet(viewsets.ModelViewSet):
         user = request.user
         
         if request.method == 'GET':
-            # Загружаем пользователя с адресами и связанными данными
-            user = User.objects.select_related('role', 'organization').prefetch_related('addresses', 'billing_phones').get(id=user.id)
+            # Загружаем пользователя с адресами, терминалами и связанными данными
+            user = User.objects.select_related('role', 'organization').prefetch_related(
+                'addresses', 'billing_phones', 'terminals'
+            ).get(id=user.id)
             serializer = UserSerializer(user)
             return Response(serializer.data)
         else:
             serializer = UserUpdateSerializer(user, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
             serializer.save()
-            # После обновления загружаем полные данные
-            user = User.objects.select_related('role', 'organization').prefetch_related('addresses', 'billing_phones').get(id=user.id)
+            # Явно сохраняем терминалы из запроса (M2M может не обновиться через сериализатор в частичном PATCH)
+            if 'terminals' in request.data:
+                from apps.organizations.models import Terminal
+                terminal_ids = request.data['terminals']
+                if isinstance(terminal_ids, list) and terminal_ids:
+                    # Сохраняем порядок: первый — выбранный терминал
+                    order = {str(tid): i for i, tid in enumerate(terminal_ids)}
+                    terminals = list(
+                        Terminal.objects.filter(terminal_id__in=terminal_ids)
+                    )
+                    terminals.sort(key=lambda t: order.get(str(t.terminal_id), 999))
+                    user.terminals.set(terminals)
+            # После обновления загружаем полные данные с терминалами
+            user = User.objects.select_related('role', 'organization').prefetch_related(
+                'addresses', 'billing_phones', 'terminals'
+            ).get(id=user.id)
             return Response(UserSerializer(user).data)
 
     @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny], url_path='telegram-contact')
