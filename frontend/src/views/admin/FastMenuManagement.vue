@@ -335,8 +335,8 @@ const fetchGroups = async () => {
 const fetchProducts = async () => {
   loadingProducts.value = true
   try {
-    // Для админки быстрого меню — продукты для управления (все меню организации)
-    const response = await api.get('/products/', { params: { for_management: '1' } })
+    // Только блюда из активного меню (в быстрое меню добавляем только их)
+    const response = await api.get('/products/')
     const raw = response.data?.results ?? response.data
     products.value = Array.isArray(raw) ? raw : []
   } catch (err) {
