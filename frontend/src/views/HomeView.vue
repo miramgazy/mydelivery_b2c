@@ -92,7 +92,7 @@
         </div>
     </div>
 
-    <!-- Fast Menu Groups (tiles, 2 columns) -->
+    <!-- Fast Menu Groups (tiles with image, 2 columns) -->
     <div class="px-4 mt-4" v-if="fastMenuGroups.length > 0">
         <h3 class="text-lg font-bold text-gray-900 dark:text-white mb-3">{{ t('home.fastMenu') }}</h3>
         <div class="grid grid-cols-2 gap-3 pb-2">
@@ -100,12 +100,27 @@
                 v-for="group in fastMenuGroups"
                 :key="group.id"
                 @click="openFastMenuGroup(group)"
-                class="px-3 py-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-100 dark:border-gray-700 text-center"
+                class="flex flex-col bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-shadow border border-gray-100 dark:border-gray-700 overflow-hidden text-left h-[9.5rem]"
             >
-                <div class="flex flex-col items-center gap-2">
-                    <svg class="w-6 h-6 text-yellow-500 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
+                <!-- Верхняя часть: картинка -->
+                <div class="flex-1 min-h-0 w-full bg-gray-200 dark:bg-gray-700">
+                    <img
+                        v-if="group.image_url"
+                        :src="normalizeMediaUrl(group.image_url)"
+                        :alt="group.name"
+                        class="w-full h-full object-cover"
+                    />
+                    <div
+                        v-else
+                        class="w-full h-full flex items-center justify-center text-gray-400 dark:text-gray-500"
+                    >
+                        <svg class="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14" />
+                        </svg>
+                    </div>
+                </div>
+                <!-- Нижняя часть: название -->
+                <div class="flex-shrink-0 px-3 py-2 border-t border-gray-100 dark:border-gray-700">
                     <span class="font-semibold text-gray-900 dark:text-white text-sm line-clamp-2">{{ group.name }}</span>
                 </div>
             </button>
@@ -166,6 +181,7 @@ import { useOrdersStore } from '@/stores/orders'
 import fastMenuService from '@/services/fast-menu.service'
 import { setStoredLocale } from '@/i18n'
 import authService from '@/services/auth.service'
+import { normalizeMediaUrl } from '@/utils/mediaUrl'
 
 const { t, locale } = useI18n()
 const router = useRouter()

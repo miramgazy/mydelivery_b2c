@@ -203,6 +203,7 @@ class FastMenuGroupSerializer(serializers.ModelSerializer):
     items = FastMenuItemSerializer(many=True, read_only=True)
     organization_name = serializers.CharField(source='organization.org_name', read_only=True)
     items_count = serializers.SerializerMethodField()
+    image_url = serializers.SerializerMethodField(read_only=True)
     organization = serializers.PrimaryKeyRelatedField(
         queryset=Organization.objects.all(),
         required=False,
@@ -213,7 +214,8 @@ class FastMenuGroupSerializer(serializers.ModelSerializer):
         model = FastMenuGroup
         fields = [
             'id', 'name', 'organization', 'organization_name',
-            'is_active', 'order', 'items', 'items_count',
+            'is_active', 'order', 'image', 'image_url',
+            'items', 'items_count',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
@@ -221,15 +223,34 @@ class FastMenuGroupSerializer(serializers.ModelSerializer):
     def get_items_count(self, obj):
         """Возвращает количество элементов в группе"""
         return obj.items.count()
+    
+    def get_image_url(self, obj):
+        """Полный URL изображения для отображения"""
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return obj.image.url
+        return None
 
 
 class FastMenuGroupPublicSerializer(serializers.ModelSerializer):
     """Сериализатор для группы быстрого меню (для TMA)"""
     products = serializers.SerializerMethodField()
+    image_url = serializers.SerializerMethodField()
     
     class Meta:
         model = FastMenuGroup
-        fields = ['id', 'name', 'products', 'order']
+        fields = ['id', 'name', 'image_url', 'products', 'order']
+    
+    def get_image_url(self, obj):
+        """Полный URL изображения для плитки в TMA"""
+        if obj.image:
+            request = self.context.get('request')
+            if request:
+                return request.build_absolute_uri(obj.image.url)
+            return obj.image.url
+        return None
     
     def get_products(self, obj):
         """Возвращает список продуктов группы, исключая те, что в стоп-листе"""

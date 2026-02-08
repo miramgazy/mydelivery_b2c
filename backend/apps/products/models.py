@@ -263,7 +263,13 @@ class FastMenuGroup(models.Model):
     )
     is_active = models.BooleanField('Активна', default=True)
     order = models.PositiveIntegerField('Порядок сортировки', default=0)
-    
+    image = models.ImageField(
+        'Изображение',
+        upload_to='fast_menu/',
+        blank=True,
+        null=True
+    )
+
     created_at = models.DateTimeField('Создана', auto_now_add=True)
     updated_at = models.DateTimeField('Обновлена', auto_now=True)
     

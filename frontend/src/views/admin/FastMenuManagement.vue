@@ -132,9 +132,9 @@
           </button>
         </div>
 
-        <!-- Modal Body -->
-        <div class="p-6 overflow-y-auto flex-1">
-          <form @submit.prevent="saveGroup" class="space-y-6">
+        <!-- Modal Body (скроллится) -->
+        <div class="p-6 overflow-y-auto flex-1 min-h-0">
+          <form id="fast-menu-group-form" @submit.prevent="saveGroup" class="space-y-6">
             <!-- Group Name -->
             <div>
               <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -178,6 +178,38 @@
               <label for="is_active" class="text-sm font-medium text-gray-700 dark:text-gray-300">
                 Группа активна
               </label>
+            </div>
+
+            <!-- Image for tile -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Изображение для плитки (отображается в быстром меню в приложении)
+              </label>
+              <div class="flex flex-col sm:flex-row gap-4 items-start">
+                <div class="w-32 h-24 rounded-lg bg-gray-200 dark:bg-gray-700 overflow-hidden flex-shrink-0 border border-gray-300 dark:border-gray-600">
+                  <img
+                    v-if="imagePreviewUrl"
+                    :src="displayImageUrl"
+                    alt="Превью"
+                    class="w-full h-full object-cover"
+                  />
+                  <div v-else class="w-full h-full flex items-center justify-center text-gray-400">
+                    <Icon icon="mdi:image-plus" class="w-10 h-10" />
+                  </div>
+                </div>
+                <div class="flex flex-col gap-1">
+                  <input
+                    ref="imageFileRef"
+                    type="file"
+                    accept="image/*"
+                    class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 dark:file:bg-blue-900/30 dark:file:text-blue-300"
+                    @change="onImageChange"
+                  />
+                  <p class="text-xs text-gray-500 dark:text-gray-400">
+                    Рекомендуется изображение в пропорции примерно 1:1 или горизонтальное
+                  </p>
+                </div>
+              </div>
             </div>
 
             <!-- Products Selection -->
@@ -249,30 +281,31 @@
                 Выбрано товаров: {{ form.product_ids.length }}
               </p>
             </div>
-
-            <!-- Error Message -->
-            <div v-if="error" class="p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm">
-              {{ error }}
-            </div>
-
-            <!-- Actions -->
-            <div class="flex items-center justify-end gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
-              <button
-                type="button"
-                @click="closeModal"
-                class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-              >
-                Отмена
-              </button>
-              <button
-                type="submit"
-                :disabled="saving"
-                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-              >
-                {{ saving ? 'Сохранение...' : 'Сохранить' }}
-              </button>
-            </div>
           </form>
+        </div>
+
+        <!-- Modal Footer (закреплён, не скроллится) -->
+        <div class="flex-shrink-0 p-6 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 rounded-b-xl">
+          <div v-if="error" class="mb-4 p-3 bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded-lg text-sm">
+            {{ error }}
+          </div>
+          <div class="flex items-center justify-end gap-3">
+            <button
+              type="button"
+              @click="closeModal"
+              class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              Отмена
+            </button>
+            <button
+              type="submit"
+              form="fast-menu-group-form"
+              :disabled="saving"
+              class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
+            >
+              {{ saving ? 'Сохранение...' : 'Сохранить' }}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -285,6 +318,7 @@ import { Icon } from '@iconify/vue'
 import fastMenuService from '@/services/fast-menu.service'
 import { useAuthStore } from '@/stores/auth'
 import api from '@/services/api'
+import { normalizeMediaUrl } from '@/utils/mediaUrl'
 
 const authStore = useAuthStore()
 
@@ -297,6 +331,8 @@ const error = ref(null)
 const showModal = ref(false)
 const editingGroup = ref(null)
 const productSearch = ref('')
+const imageFileRef = ref(null)
+const imagePreviewUrl = ref(null)
 
 const form = reactive({
   name: '',
@@ -313,6 +349,12 @@ const filteredProducts = computed(() => {
   return products.value.filter(
     p => (p.name || p.product_name || '').toLowerCase().includes(search)
   )
+})
+
+const displayImageUrl = computed(() => {
+  const url = imagePreviewUrl.value
+  if (!url) return ''
+  return url.startsWith('blob:') ? url : (normalizeMediaUrl(url) || url)
 })
 
 onMounted(async () => {
@@ -347,6 +389,28 @@ const fetchProducts = async () => {
   }
 }
 
+function clearImagePreview() {
+  if (imagePreviewUrl.value && imagePreviewUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(imagePreviewUrl.value)
+  }
+  imagePreviewUrl.value = null
+  if (imageFileRef.value) imageFileRef.value.value = ''
+}
+
+function onImageChange(event) {
+  const file = event.target?.files?.[0]
+  // Сначала отзываем старый blob-URL, чтобы не утекала память
+  if (imagePreviewUrl.value && imagePreviewUrl.value.startsWith('blob:')) {
+    URL.revokeObjectURL(imagePreviewUrl.value)
+  }
+  imagePreviewUrl.value = null
+  if (file) {
+    imagePreviewUrl.value = URL.createObjectURL(file)
+  } else {
+    if (imageFileRef.value) imageFileRef.value.value = ''
+  }
+}
+
 const openCreateModal = () => {
   editingGroup.value = null
   form.name = ''
@@ -354,7 +418,14 @@ const openCreateModal = () => {
   form.is_active = true
   form.product_ids = []
   productSearch.value = ''
+  clearImagePreview()
   showModal.value = true
+}
+
+function getGroupImageUrl(group) {
+  if (!group) return null
+  const url = group.image_url ?? group.image
+  return normalizeMediaUrl(url) || null
 }
 
 const openEditModal = async (group) => {
@@ -362,21 +433,28 @@ const openEditModal = async (group) => {
   form.name = group.name
   form.order = group.order
   form.is_active = group.is_active
-  
-  // Загружаем детали группы для получения списка товаров
+  clearImagePreview()
+  imagePreviewUrl.value = getGroupImageUrl(group)
+
+  // Загружаем детали группы для получения списка товаров и актуального image_url
   try {
     const groupDetails = await fastMenuService.getGroup(group.id)
     form.product_ids = groupDetails.items.map(item => item.product.id || item.product.product_id)
+    const detailsImageUrl = getGroupImageUrl(groupDetails)
+    if (detailsImageUrl) {
+      imagePreviewUrl.value = detailsImageUrl
+    }
   } catch (err) {
     console.error('Failed to fetch group details:', err)
     form.product_ids = []
   }
-  
+
   productSearch.value = ''
   showModal.value = true
 }
 
 const closeModal = () => {
+  clearImagePreview()
   showModal.value = false
   editingGroup.value = null
   error.value = null
@@ -385,32 +463,64 @@ const closeModal = () => {
 const saveGroup = async () => {
   saving.value = true
   error.value = null
-  
+  const imageFile = imageFileRef.value?.files?.[0]
+
   try {
-    const groupData = {
-      name: form.name,
-      order: form.order,
-      is_active: form.is_active,
-      organization: authStore.user?.organization || null
-    }
-    
-    if (editingGroup.value) {
-      // Обновляем группу
-      await fastMenuService.updateGroup(editingGroup.value.id, groupData)
-      // Обновляем список товаров
-      await fastMenuService.updateGroupItems(editingGroup.value.id, form.product_ids)
+    if (imageFile) {
+      const formData = new FormData()
+      formData.append('name', form.name)
+      formData.append('order', String(form.order))
+      formData.append('is_active', form.is_active ? 'true' : 'false')
+      const org = authStore.user?.organization
+      const orgId = org != null && typeof org === 'object' ? (org.id ?? org.org_id) : org
+      if (orgId) {
+        formData.append('organization', String(orgId))
+      }
+      formData.append('image', imageFile)
+
+      if (editingGroup.value) {
+        await api.patch(`/fast-menu-groups/${editingGroup.value.id}/`, formData)
+        await fastMenuService.updateGroupItems(editingGroup.value.id, form.product_ids)
+      } else {
+        const response = await api.post('/fast-menu-groups/', formData)
+        const newGroup = response.data
+        await fastMenuService.updateGroupItems(newGroup.id, form.product_ids)
+      }
     } else {
-      // Создаем новую группу
-      const newGroup = await fastMenuService.createGroup(groupData)
-      // Добавляем товары
-      await fastMenuService.updateGroupItems(newGroup.id, form.product_ids)
+      const groupData = {
+        name: form.name,
+        order: form.order,
+        is_active: form.is_active,
+        organization: authStore.user?.organization || null
+      }
+      if (editingGroup.value) {
+        await fastMenuService.updateGroup(editingGroup.value.id, groupData)
+        await fastMenuService.updateGroupItems(editingGroup.value.id, form.product_ids)
+      } else {
+        const newGroup = await fastMenuService.createGroup(groupData)
+        await fastMenuService.updateGroupItems(newGroup.id, form.product_ids)
+      }
     }
-    
+
     await fetchGroups()
     closeModal()
   } catch (err) {
-    error.value = err.response?.data?.detail || err.message || 'Ошибка при сохранении группы'
-    console.error('Failed to save group:', err)
+    const data = err.response?.data
+    if (data && typeof data === 'object') {
+      if (data.detail) {
+        error.value = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)
+      } else {
+        const parts = []
+        for (const [key, val] of Object.entries(data)) {
+          const msg = Array.isArray(val) ? val.join(' ') : String(val)
+          if (msg) parts.push(`${key}: ${msg}`)
+        }
+        error.value = parts.length ? parts.join('; ') : (err.message || 'Ошибка при сохранении группы')
+      }
+    } else {
+      error.value = err.message || 'Ошибка при сохранении группы'
+    }
+    console.error('Failed to save group:', err, data)
   } finally {
     saving.value = false
   }

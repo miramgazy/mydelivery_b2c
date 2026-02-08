@@ -22,6 +22,11 @@ api.interceptors.request.use(
             config.headers.Authorization = `Bearer ${token}`
         }
 
+        // При FormData не задаём Content-Type — axios подставит multipart/form-data с boundary
+        if (config.data && typeof FormData !== 'undefined' && config.data instanceof FormData) {
+            delete config.headers['Content-Type']
+        }
+
         // Анти-кэш только для POST/PUT/DELETE или если явно указано skipCacheBust: false
         // Для GET запросов не добавляем _t, чтобы использовать кэш браузера/прокси
         const method = config.method?.toLowerCase() || 'get'

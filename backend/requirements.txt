@@ -7,6 +7,9 @@ django-filter==23.5
 # Database
 psycopg2-binary==2.9.9
 
+# Images (for FastMenuGroup and similar)
+Pillow==10.2.0
+
 # Environment
 python-decouple==3.8
 
