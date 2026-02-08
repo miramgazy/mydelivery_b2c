@@ -179,6 +179,68 @@
           </p>
         </div>
 
+        <!-- Цвет оформления (шапка TMA) -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Цвет оформления (шапка TMA)
+          </label>
+          <div v-if="!showColorPicker" class="flex items-center gap-3 flex-wrap">
+            <div
+              class="w-12 h-12 rounded-lg border-2 border-gray-300 dark:border-gray-600 flex-shrink-0"
+              :style="{ backgroundColor: displayPrimaryColor }"
+            />
+            <span class="font-mono text-sm text-gray-700 dark:text-gray-300">{{ displayPrimaryColor }}</span>
+            <button
+              type="button"
+              @click="openColorPicker"
+              class="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg transition-colors"
+            >
+              <Icon icon="mdi:pencil" class="w-5 h-5" />
+              Редактировать
+            </button>
+          </div>
+          <div v-else class="p-4 rounded-xl border border-gray-200 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50 space-y-4">
+            <div class="flex flex-wrap items-end gap-4">
+              <div class="flex flex-col gap-1">
+                <span class="text-xs text-gray-500 dark:text-gray-400">Палитра</span>
+                <input
+                  v-model="colorPickerValue"
+                  type="color"
+                  class="w-14 h-14 rounded-lg border-2 border-gray-300 dark:border-gray-600 cursor-pointer bg-transparent"
+                />
+              </div>
+              <div class="flex flex-col gap-1 flex-1 min-w-[120px]">
+                <span class="text-xs text-gray-500 dark:text-gray-400">Код цвета (например #0284c7)</span>
+                <input
+                  v-model="colorPickerValue"
+                  type="text"
+                  maxlength="7"
+                  class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-sm"
+                  placeholder="#0284c7"
+                />
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <button
+                type="button"
+                @click="savePrimaryColor"
+                :disabled="savingColor || !isValidHex(colorPickerValue)"
+                class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg transition-colors"
+              >
+                <Icon :icon="savingColor ? 'mdi:loading' : 'mdi:content-save'" :class="{ 'animate-spin': savingColor }" class="w-5 h-5" />
+                {{ savingColor ? 'Сохранение...' : 'Сохранить' }}
+              </button>
+              <button
+                type="button"
+                @click="showColorPicker = false"
+                class="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors"
+              >
+                Отмена
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- Submit Button -->
         <div class="flex gap-4 pt-4">
           <button
@@ -201,11 +263,45 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useOrganizationStore } from '@/stores/organization'
 
 const organizationStore = useOrganizationStore()
+
+const displayPrimaryColor = computed(() => {
+  const c = form.value.primary_color || ''
+  return (c.startsWith('#') ? c : c ? '#' + c : '#0284c7').slice(0, 7)
+})
+
+function isValidHex(s) {
+  if (!s || typeof s !== 'string') return false
+  const t = s.startsWith('#') ? s.slice(1) : s
+  return /^[0-9A-Fa-f]{6}$/.test(t)
+}
+
+function openColorPicker() {
+  colorPickerValue.value = displayPrimaryColor.value
+  showColorPicker.value = true
+}
+
+async function savePrimaryColor() {
+  let hex = colorPickerValue.value.trim()
+  if (!hex) return
+  const normalized = hex.startsWith('#') ? hex.slice(0, 7) : '#' + hex.slice(0, 6)
+  if (!/^#[0-9A-Fa-f]{6}$/.test(normalized)) return
+  savingColor.value = true
+  try {
+    await organizationStore.updateOrganization({ primary_color: normalized })
+    form.value.primary_color = normalized
+    showColorPicker.value = false
+    await loadOrganization()
+  } catch (err) {
+    error.value = organizationStore.error || 'Не удалось сохранить цвет'
+  } finally {
+    savingColor.value = false
+  }
+}
 
 const form = ref({
   iiko_organization_id: '',
@@ -214,11 +310,15 @@ const form = ref({
   phone: '',
   address: '',
   bot_token: '',
-  bot_username: ''
+  bot_username: '',
+  primary_color: ''
 })
 
 const showApiKey = ref(false)
 const showBotToken = ref(false)
+const showColorPicker = ref(false)
+const colorPickerValue = ref('#0284c7')
+const savingColor = ref(false)
 const saving = ref(false)
 const successMessage = ref('')
 const loading = ref(false)
@@ -242,7 +342,8 @@ const loadOrganization = async () => {
         phone: org.phone || '',
         address: org.address || '',
         bot_token: org.bot_token || '',
-        bot_username: org.bot_username || ''
+        bot_username: org.bot_username || '',
+        primary_color: org.primary_color || '#0284c7'
       }
     }
   } catch (err) {

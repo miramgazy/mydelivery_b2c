@@ -89,6 +89,15 @@ class Organization(models.Model):
     bot_token = models.CharField('Токен Telegram бота', max_length=255, blank=True, null=True, unique=True)
     bot_username = models.CharField('Юзернейм Telegram бота', max_length=255, blank=True, null=True)
     
+    # Цвет оформления шапки и акцентов в TMA (hex, по умолчанию голубой как в TMA)
+    primary_color = models.CharField(
+        'Цвет оформления (шапка TMA)',
+        max_length=7,
+        blank=True,
+        null=True,
+        default='#0284c7'
+    )
+    
     is_active = models.BooleanField('Активна', default=True)
     
     created_at = models.DateTimeField('Создана', auto_now_add=True)

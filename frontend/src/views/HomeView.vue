@@ -1,7 +1,10 @@
 <template>
   <div class="min-h-screen bg-gray-50 dark:bg-gray-900 pb-20">
-    <!-- Header (пропорциональные отступы: верх/низ как боковые) -->
-    <div class="bg-primary-600 pt-5 pb-5 px-4 rounded-b-3xl relative overflow-hidden">
+    <!-- Header (цвет из настроек организации или голубой по умолчанию) -->
+    <div
+      class="pt-5 pb-5 px-4 rounded-b-3xl relative overflow-hidden"
+      :style="{ backgroundColor: headerColor }"
+    >
         <!-- Decoration -->
         <div class="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
         <div class="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full -ml-12 -mb-12"></div>
@@ -37,11 +40,12 @@
             <!-- Quick Actions -->
             <router-link 
                 to="/menu"
-                class="block w-full bg-white text-primary-600 rounded-xl p-4 shadow-lg active:scale-95 transition-transform flex items-center justify-between group"
+                class="block w-full bg-white rounded-xl p-4 shadow-lg active:scale-95 transition-transform flex items-center justify-between group"
+                :style="{ color: headerColor }"
             >
                 <div class="flex items-center gap-4">
-                    <div class="p-3 bg-primary-100 rounded-full">
-                        <svg class="w-6 h-6 text-primary-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <div class="p-3 rounded-full opacity-90" :style="{ backgroundColor: headerColor + '20' }">
+                        <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
                         </svg>
                     </div>
@@ -85,7 +89,8 @@
             </p>
             <router-link 
                 :to="'/orders/' + activeOrder.order_id"
-                class="text-primary-600 text-sm font-semibold hover:underline"
+                class="text-sm font-semibold hover:underline"
+                :style="{ color: headerColor }"
             >
                 {{ t('home.trackStatus') }}
             </router-link>
@@ -178,6 +183,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import { useOrdersStore } from '@/stores/orders'
+import { useOrganizationStore } from '@/stores/organization'
 import fastMenuService from '@/services/fast-menu.service'
 import { setStoredLocale } from '@/i18n'
 import authService from '@/services/auth.service'
@@ -187,6 +193,12 @@ const { t, locale } = useI18n()
 const router = useRouter()
 const authStore = useAuthStore()
 const ordersStore = useOrdersStore()
+const organizationStore = useOrganizationStore()
+
+const headerColor = computed(() => {
+  const c = organizationStore.organization?.primary_color
+  return (c && /^#[0-9A-Fa-f]{6}$/.test(c)) ? c : '#0284c7'
+})
 
 function setLocale(code) {
   locale.value = code
@@ -207,7 +219,8 @@ const terminalName = computed(() => currentTerminal.value?.name || currentTermin
 const currentTerminalInstagramLink = computed(() => currentTerminal.value?.instagram_link || null)
 
 onMounted(async () => {
-    // Refresh orders to check active one
+    // Цвет шапки из настроек организации
+    organizationStore.fetchOrganization().catch(console.error)
     ordersStore.fetchMyOrders().catch(console.error)
     
     // Load fast menu groups

@@ -41,6 +41,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             'iiko_organization_id', 'api_key',
             'phone', 'address',
             'bot_token', 'bot_username',
+            'primary_color',
             'terminals', 'is_active', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'org_id', 'created_at', 'updated_at']
