@@ -145,8 +145,8 @@
                     <p class="text-sm text-amber-700 dark:text-amber-300 mt-1">Пожалуйста, оформите заказ с опцией «Самовывоз».</p>
                 </div>
                 <!-- Информация о стоимости доставки -->
-                <div v-else-if="form.delivery_address_id && deliveryCostMessage && !deliveryAddressOutsideZones" class="p-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                    <p class="text-sm text-blue-700 dark:text-blue-300">{{ deliveryCostMessage }}</p>
+                <div v-else-if="form.delivery_address_id && deliveryCostMessage && !deliveryAddressOutsideZones" class="p-3 rounded-xl bg-primary-50 dark:bg-primary-900/20 border border-primary-200 dark:border-primary-800">
+                    <p class="text-sm text-primary-700 dark:text-primary-300">{{ deliveryCostMessage }}</p>
                 </div>
                 <div v-else-if="form.delivery_address_id && deliveryCost !== null && !deliveryCostLoading" class="p-3 rounded-xl bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
                     <p class="text-sm font-semibold text-green-700 dark:text-green-300">

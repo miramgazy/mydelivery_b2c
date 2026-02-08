@@ -7,17 +7,18 @@ export default {
     theme: {
         extend: {
             colors: {
+                // Primary palette from organization.primary_color; set via CSS vars in App.vue (default: sky blue)
                 primary: {
-                    50: '#fef2f2',
-                    100: '#fee2e2',
-                    200: '#fecaca',
-                    300: '#fca5a5',
-                    400: '#f87171',
-                    500: '#ef4444',
-                    600: '#fc2329',
-                    700: '#dc2626',
-                    800: '#b91c1c',
-                    900: '#991b1b',
+                    50: 'var(--color-primary-50, #f0f9ff)',
+                    100: 'var(--color-primary-100, #e0f2fe)',
+                    200: 'var(--color-primary-200, #bae6fd)',
+                    300: 'var(--color-primary-300, #7dd3fc)',
+                    400: 'var(--color-primary-400, #38bdf8)',
+                    500: 'var(--color-primary-500, #0ea5e9)',
+                    600: 'var(--color-primary-600, #0284c7)',
+                    700: 'var(--color-primary-700, #0369a1)',
+                    800: 'var(--color-primary-800, #075985)',
+                    900: 'var(--color-primary-900, #0c4a6e)',
                 },
                 telegram: {
                     bg: '#17212b',

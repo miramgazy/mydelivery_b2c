@@ -16,7 +16,7 @@
       </div>
 
       <!-- Waiting for contact message -->
-      <div v-if="waitingForContact" class="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded-lg mb-4 text-sm text-center">
+      <div v-if="waitingForContact" class="bg-primary-50 border border-primary-200 text-primary-700 px-4 py-3 rounded-lg mb-4 text-sm text-center">
         <div class="flex items-center justify-center gap-2">
           <svg class="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>

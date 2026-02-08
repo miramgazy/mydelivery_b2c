@@ -2,14 +2,36 @@
 import { onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { useOrganizationStore } from '@/stores/organization'
 import telegramService from '@/services/telegram'
 import authService from '@/services/auth.service'
 import BottomNav from '@/components/common/BottomNav.vue'
 import ToastNotification from '@/components/common/ToastNotification.vue'
+import { paletteFromHex, normalizePrimaryHex } from '@/utils/primaryColor'
 
 const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
+const organizationStore = useOrganizationStore()
+
+// Primary palette from organization.primary_color — применяется ко всем primary-* в TMA
+const primaryPaletteStyle = computed(() => {
+  const hex = organizationStore.organization?.primary_color
+  const normalized = normalizePrimaryHex(hex || null)
+  const palette = paletteFromHex(normalized)
+  return {
+    '--color-primary-50': palette[50],
+    '--color-primary-100': palette[100],
+    '--color-primary-200': palette[200],
+    '--color-primary-300': palette[300],
+    '--color-primary-400': palette[400],
+    '--color-primary-500': palette[500],
+    '--color-primary-600': palette[600],
+    '--color-primary-700': palette[700],
+    '--color-primary-800': palette[800],
+    '--color-primary-900': palette[900],
+  }
+})
 
 // Скрывать навигацию на странице логина, в админке и onboarding
 const showBottomNav = computed(() => {
@@ -23,7 +45,12 @@ onMounted(async () => {
   try {
     // Инициализация Telegram
     telegramService.init()
-    
+
+    // Загрузить организацию для цвета бренда (primary) — чтобы primary-* везде использовали цвет организации
+    if (authStore.isAuthenticated) {
+      organizationStore.fetchOrganization().catch(() => {})
+    }
+
     // Если запущено в Telegram
     if (telegramService.isInTelegram()) {
       const tgUser = telegramService.getUser()
@@ -40,6 +67,10 @@ onMounted(async () => {
         let loginResult = { success: true }
         if (!authStore.isAuthenticated) {
           loginResult = await authStore.login()
+        }
+
+        if (authStore.isAuthenticated) {
+          organizationStore.fetchOrganization().catch(() => {})
         }
 
         if (!loginResult.success) {
@@ -126,7 +157,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="app-container">
+  <div class="app-container" :style="primaryPaletteStyle">
     <router-view></router-view>
     <BottomNav v-if="showBottomNav" />
     <ToastNotification />

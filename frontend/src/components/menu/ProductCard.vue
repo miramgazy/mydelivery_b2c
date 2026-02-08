@@ -21,7 +21,7 @@
 
         <!-- Badges on image -->
         <div class="absolute top-1 right-1 flex flex-col gap-1">
-          <div v-if="product.has_modifiers" class="w-2 h-2 bg-blue-500 rounded-full shadow-sm" title="С выбором"></div>
+          <div v-if="product.has_modifiers" class="w-2 h-2 bg-primary-500 rounded-full shadow-sm" title="С выбором"></div>
           <div v-if="!product.is_available || product.is_in_stop_list" class="w-2 h-2 bg-red-500 rounded-full shadow-sm" title="Недоступно"></div>
         </div>
       </div>
@@ -69,7 +69,7 @@
       <span class="text-[10px] uppercase tracking-wider font-bold text-gray-400 dark:text-gray-500">
         {{ categoryName }}
       </span>
-      <span v-if="product.has_modifiers" class="text-[9px] text-blue-500 font-medium bg-blue-50 dark:bg-blue-900/20 px-1.5 rounded-sm">
+      <span v-if="product.has_modifiers" class="text-[9px] text-primary-500 font-medium bg-primary-50 dark:bg-primary-900/20 px-1.5 rounded-sm">
         С выбором
       </span>
     </div>
