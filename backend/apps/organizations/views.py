@@ -59,51 +59,30 @@ class OrganizationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-    @action(detail=False, methods=['get'], url_path='me')
-    def get_current_organization(self, request):
-        """Получить организацию текущего пользователя"""
-        # Предполагаем, что у пользователя есть связанная организация
-        # Можно адаптировать логику в зависимости от вашей модели User
+    @action(detail=False, methods=['get', 'patch', 'put'], url_path='me')
+    def current_organization(self, request):
+        """Получить или обновить организацию текущего пользователя (GET / PATCH / PUT)."""
         user = request.user
-        
-        # Если у вас есть поле organization в модели User
         if hasattr(user, 'organization') and user.organization:
             organization = user.organization
         else:
-            # Иначе берем первую активную организацию или создаем
             organization = Organization.objects.filter(is_active=True).first()
             if not organization:
                 return Response(
                     {'error': 'Организация не найдена'},
                     status=status.HTTP_404_NOT_FOUND
                 )
-        
-        serializer = self.get_serializer(organization)
-        return Response(serializer.data)
 
-    @action(detail=False, methods=['patch'], url_path='me')
-    def update_current_organization(self, request):
-        """Обновить организацию текущего пользователя"""
-        user = request.user
-        
-        if hasattr(user, 'organization') and user.organization:
-            organization = user.organization
-        else:
-            organization = Organization.objects.filter(is_active=True).first()
-            if not organization:
-                return Response(
-                    {'error': 'Организация не найдена'},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-        
-        serializer = self.get_serializer(
-            organization, 
-            data=request.data, 
-            partial=True
-        )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        
+        if request.method in ('PATCH', 'PUT'):
+            serializer = self.get_serializer(
+                organization,
+                data=request.data,
+                partial=True
+            )
+            serializer.is_valid(raise_exception=True)
+            serializer.save()
+            return Response(serializer.data)
+        serializer = self.get_serializer(organization)
         return Response(serializer.data)
 
     @action(detail=False, methods=['get'], url_path='terminals')

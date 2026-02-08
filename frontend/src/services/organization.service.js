@@ -11,9 +11,9 @@ export const getOrganization = async () => {
     return response.data
 }
 
-// Update organization settings
+// Update organization settings (PUT обходится с прокси/брандмауэрами, где PATCH даёт 405)
 export const updateOrganization = async (data) => {
-    const response = await api.patch('/organizations/me/', data)
+    const response = await api.put('/organizations/me/', data)
     return response.data
 }
 
