@@ -120,6 +120,29 @@ class Order(models.Model):
         return f"Заказ {self.order_number or self.order_id} ({self.get_status_display()})"
 
 
+class IikoRequestLog(models.Model):
+    """Лог итогового JSON запроса к iikoCloud (результат слияния кода и api_custom_params)"""
+    order = models.ForeignKey(
+        Order,
+        on_delete=models.CASCADE,
+        related_name='iiko_request_logs',
+        verbose_name='Заказ',
+        db_column='order_id'
+    )
+    payload = models.JSONField('Итоговый JSON запроса', help_text='Склеенный JSON перед отправкой')
+    success = models.BooleanField('Успешно отправлен', default=False)
+    created_at = models.DateTimeField('Создан', auto_now_add=True)
+
+    class Meta:
+        db_table = 'iiko_request_logs'
+        verbose_name = 'Лог запроса iiko'
+        verbose_name_plural = 'Логи запросов iiko'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"Лог {self.order_id} ({self.created_at})"
+
+
 class OrderItem(models.Model):
     """Позиция заказа"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

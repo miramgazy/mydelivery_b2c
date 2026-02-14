@@ -98,6 +98,18 @@ class Organization(models.Model):
         default='#0284c7'
     )
     
+    # Кастомные параметры для iikoCloud API (глубокое слияние с запросом)
+    api_custom_params = models.JSONField(
+        'Дополнительные параметры (Редактируемый)',
+        default=dict,
+        blank=True,
+        null=True,
+        help_text=(
+            'Доступные блоки для масштабирования: order, customer, createOrderSettings, address. '
+            'Пример: {"order": {"comment": "Срочно"}, "createOrderSettings": {"servicePrint": true}}'
+        )
+    )
+    
     is_active = models.BooleanField('Активна', default=True)
     
     created_at = models.DateTimeField('Создана', auto_now_add=True)

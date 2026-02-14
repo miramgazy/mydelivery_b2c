@@ -1,8 +1,30 @@
+import json
 import logging
 from django.contrib import admin
+from django.utils.safestring import mark_safe
 from .models import Organization, Terminal, PaymentType, Street, City
 
 logger = logging.getLogger(__name__)
+
+# Шаблон базовой структуры запроса iikoCloud (генерируется кодом)
+IIKO_BASE_STRUCTURE_TEMPLATE = {
+    "organizationId": "<uuid организации>",
+    "terminalGroupId": "<uuid терминала>",
+    "order": {
+        "orderServiceType": "DeliveryByCourier | DeliveryByClient",
+        "status": "Unconfirmed",
+        "customer": {"name": "...", "phone": "+7..."},
+        "phone": "+7...",
+        "deliveryPoint": {
+            "address": {"city": "...", "street": {"name": "..."}, "house": "...", "flat": "..."},
+            "или type": "coordinates",
+            "coordinates": {"latitude": 0, "longitude": 0}
+        },
+        "items": [{"type": "Product", "productId": "...", "amount": 1, "price": 0, "modifiers": [...]}],
+        "customerPayments": [{"paymentTypeId": "...", "sum": 0}],
+        "comment": "..."
+    }
+}
 
 
 class BaseAdmin(admin.ModelAdmin):
@@ -69,6 +91,45 @@ class OrganizationAdmin(BaseAdmin):
     list_display = ('org_name', 'iiko_organization_id', 'city', 'get_terminals_count', 'is_active', 'created_at')
     list_filter = ('is_active', 'city')
     change_form_template = 'admin/organizations/organization/change_form.html'
+    fieldsets = (
+        (None, {
+            'fields': ('org_name', 'api_key', 'iiko_organization_id', 'city', 'phone', 'address')
+        }),
+        ('Telegram Bot', {
+            'fields': ('bot_token', 'bot_username'),
+            'classes': ('collapse',)
+        }),
+        ('iiko API — конструктор запроса', {
+            'fields': ('iiko_base_structure_display', 'api_custom_params'),
+            'description': (
+                'Конструктор запроса iikoCloud: базовая структура (генерируется кодом) '
+                'дополняется параметрами из блока ниже. Поле items защищено — блюда формируются системой.'
+            )
+        }),
+        ('Оформление', {
+            'fields': ('primary_color',)
+        }),
+        (None, {
+            'fields': ('is_active', 'created_at', 'updated_at')
+        }),
+    )
+    readonly_fields = ('created_at', 'updated_at', 'iiko_base_structure_display')
+
+    def iiko_base_structure_display(self, obj):
+        """Блок «Базовая структура (Только чтение)» — шаблон JSON, генерируемого кодом."""
+        if obj is None:
+            return "(Сохранение организации для просмотра)"
+        text = json.dumps(IIKO_BASE_STRUCTURE_TEMPLATE, ensure_ascii=False, indent=2)
+        return mark_safe(f'<pre style="background:#f8f9fa;padding:12px;border-radius:4px;overflow:auto;">{text}</pre>')
+    iiko_base_structure_display.short_description = 'Базовая структура (Только чтение)'
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name == 'api_custom_params':
+            kwargs['widget'] = admin.widgets.AdminTextareaWidget(attrs={
+                'placeholder': '{"order": {"comment": "Срочно"}, "createOrderSettings": {"servicePrint": true}}',
+                'rows': 10,
+            })
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
 
     def get_terminals_count(self, obj):
         return obj.terminals.count()

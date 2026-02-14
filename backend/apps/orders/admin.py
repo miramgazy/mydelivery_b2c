@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Order, OrderItem, OrderItemModifier
+from .models import Order, OrderItem, OrderItemModifier, IikoRequestLog
 from apps.organizations.models import Organization
 
 class OrderBaseAdmin(admin.ModelAdmin):
@@ -53,12 +53,25 @@ class OrderItemInline(admin.TabularInline):
     extra = 0
     readonly_fields = ('product', 'product_name', 'quantity', 'price', 'total_price')
 
+
+class IikoRequestLogInline(admin.TabularInline):
+    model = IikoRequestLog
+    extra = 0
+    readonly_fields = ('payload', 'success', 'created_at')
+    can_delete = False
+    max_num = 10
+    show_change_link = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
 @admin.register(Order)
 class OrderAdmin(OrderBaseAdmin):
     list_display = ('order_number', 'organization', 'user', 'total_amount', 'delivery_cost', 'status', 'created_at')
     list_filter = ('status', 'organization', 'created_at')
     search_fields = ('order_number', 'phone', 'user__username')
-    inlines = [OrderItemInline]
+    inlines = [OrderItemInline, IikoRequestLogInline]
     readonly_fields = ('order_id', 'iiko_order_id', 'iiko_response', 'error_message', 'sent_to_iiko_at')
 
 @admin.register(OrderItem)
@@ -69,3 +82,11 @@ class OrderItemAdmin(OrderBaseAdmin):
 @admin.register(OrderItemModifier)
 class OrderItemModifierAdmin(OrderBaseAdmin):
     list_display = ('order_item', 'modifier_name', 'quantity', 'price')
+
+
+@admin.register(IikoRequestLog)
+class IikoRequestLogAdmin(OrderBaseAdmin):
+    list_display = ('order', 'success', 'created_at')
+    list_filter = ('success', 'created_at')
+    readonly_fields = ('order', 'payload', 'success', 'created_at')
+    search_fields = ('order__order_number',)

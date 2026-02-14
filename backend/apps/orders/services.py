@@ -1,14 +1,16 @@
 """
 Бизнес-логика для работы с заказами
 """
+import json
 import logging
+from copy import deepcopy
 from decimal import Decimal
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Any
 import random
 import re
 from django.db import transaction
 from django.utils import timezone
-from .models import Order, OrderItem, OrderItemModifier
+from .models import Order, OrderItem, OrderItemModifier, IikoRequestLog
 from apps.products.models import Product, Modifier, StopList
 from apps.users.models import User, DeliveryAddress, BillingPhone
 from apps.organizations.models import Organization, PaymentType, Terminal
@@ -16,6 +18,44 @@ from apps.iiko_integration.client import IikoClient, IikoAPIException
 
 
 logger = logging.getLogger(__name__)
+
+# Ключи, которые НЕ перезаписываются из api_custom_params (целостность заказа)
+PROTECTED_ORDER_KEYS = frozenset({'items'})
+
+
+def deep_merge_iiko(
+    base: Dict[str, Any],
+    override: Dict[str, Any],
+    protected_keys: Optional[frozenset] = None,
+) -> Dict[str, Any]:
+    """
+    Глубокое слияние: накладывает override на base.
+    Существующие ключи перезаписываются, новые добавляются.
+    Для вложенного блока "order" ключи из protected_keys не перезаписываются
+    (items, modifiers — формируются системой).
+    """
+    if not override:
+        return deepcopy(base)
+    result = deepcopy(base)
+    _protected = protected_keys or frozenset()
+
+    for key, override_val in override.items():
+        if key in _protected:
+            continue
+        if key not in result:
+            result[key] = deepcopy(override_val)
+        elif isinstance(result[key], dict) and isinstance(override_val, dict):
+            # Рекурсивное слияние для вложенных dict
+            if key == 'order':
+                # В блоке order защищаем items
+                result[key] = deep_merge_iiko(
+                    result[key], override_val, protected_keys=PROTECTED_ORDER_KEYS
+                )
+            else:
+                result[key] = deep_merge_iiko(result[key], override_val)
+        else:
+            result[key] = deepcopy(override_val)
+    return result
 
 
 class OrderService:
@@ -336,7 +376,9 @@ class OrderService:
     
     def send_to_iiko(self, order: Order) -> bool:
         """
-        Отправка заказа в iiko
+        Отправка заказа в iiko.
+        Использует transaction.atomic для предотвращения отправки некорректно собранных данных.
+        Итоговый склеенный JSON логируется в таблицу IikoRequestLog.
         """
         # Проверяем, не был ли заказ уже отправлен
         if order.sent_to_iiko_at is not None:
@@ -345,79 +387,75 @@ class OrderService:
                 f'Пропускаем повторную отправку.'
             )
             return True
-        
-        try:
-            # Подготавливаем данные для iiko
-            iiko_data = self._prepare_iiko_order_data(order)
-            # Сохраняем полный запрос, который отправляем в iiko, для последующей диагностики
-            order.query_to_iiko = iiko_data
-            
-            # Логируем подготовленные данные для отладки (без чувствительных данных)
-            logger.info(
-                f'Отправка заказа {order.order_id} в iiko: '
-                f'items_count={len(iiko_data.get("order", {}).get("items", []))}, '
-                f'organizationId={iiko_data.get("organizationId")}, '
-                f'terminalGroupId={iiko_data.get("terminalGroupId")}'
-            )
-            
-            # Логируем детали модификаторов
-            for item in iiko_data.get("order", {}).get("items", []):
-                if "modifiers" in item:
-                    logger.info(
-                        f'  Позиция {item.get("productId")}: '
-                        f'{len(item["modifiers"])} модификаторов: '
-                        f'{[m.get("productId") for m in item["modifiers"]]}'
-                    )
-            
-            # Логируем полный JSON запрос (для отладки)
-            import json
-            logger.info(
-                f'Полный JSON запрос для заказа {order.order_id}:\n'
-                f'{json.dumps(iiko_data, ensure_ascii=False, indent=2)}'
-            )
-            
-            # Создаем клиент iiko
-            client = IikoClient(order.organization.api_key)
-            # Отправляем заказ
-            response = client.create_delivery_order(iiko_data)
-            
-            # iiko returns order status info
-            order_info = response.get('orderInfo', {})
-            correlation_id = response.get('correlationId')
-            
-            # Обновляем заказ
-            order.iiko_order_id = order_info.get('id')
-            order.correlation_id = correlation_id
-            order.status = order_info.get('creationStatus') or Order.STATUS_IN_PROGRESS
-            order.sent_to_iiko_at = timezone.now()
-            order.iiko_response = response
-            order.error_message = None
-            order.save(update_fields=[
-                'iiko_order_id', 'correlation_id', 'status',
-                'sent_to_iiko_at', 'iiko_response', 'query_to_iiko', 'error_message'
-            ])
-            
-            logger.info(f'Заказ {order.order_id} отправлен в iiko (correlationId: {correlation_id})')
-            return True
-                
-        except IikoAPIException as e:
-            logger.error(f'Ошибка отправки заказа {order.order_id} в iiko: {e}')
-            
-            # Сохраняем ошибку
-            order.status = Order.STATUS_ERROR
-            order.error_message = str(e)
-            order.save(update_fields=['status', 'error_message', 'query_to_iiko'])
-            
-            return False
-        
-        except Exception as e:
-            logger.error(f'Неожиданная ошибка при отправке заказа {order.order_id}: {e}', exc_info=True)
-            
-            order.status = Order.STATUS_ERROR
-            order.error_message = f'Системная ошибка: {str(e)}'
-            order.save(update_fields=['status', 'error_message', 'query_to_iiko'])
-            
-            return False
+
+        with transaction.atomic():
+            try:
+                # Подготавливаем данные (код + api_custom_params)
+                iiko_data = self._prepare_iiko_order_data(order)
+                order.query_to_iiko = iiko_data
+
+                # Логируем в таблицу логов до отправки (итоговый склеенный JSON)
+                request_log = IikoRequestLog.objects.create(
+                    order=order,
+                    payload=iiko_data,
+                    success=False,
+                )
+
+                # Логируем в application log
+                logger.info(
+                    f'Отправка заказа {order.order_id} в iiko: '
+                    f'items_count={len(iiko_data.get("order", {}).get("items", []))}, '
+                    f'organizationId={iiko_data.get("organizationId")}, '
+                    f'terminalGroupId={iiko_data.get("terminalGroupId")}'
+                )
+                for item in iiko_data.get("order", {}).get("items", []):
+                    if "modifiers" in item:
+                        logger.info(
+                            f'  Позиция {item.get("productId")}: '
+                            f'{len(item["modifiers"])} модификаторов'
+                        )
+                logger.info(
+                    f'Итоговый JSON запрос к iiko для заказа {order.order_id} (перед отправкой):\n'
+                    f'{json.dumps(iiko_data, ensure_ascii=False, indent=2)}'
+                )
+
+                # Отправка
+                client = IikoClient(order.organization.api_key)
+                response = client.create_delivery_order(iiko_data)
+
+                order_info = response.get('orderInfo', {})
+                correlation_id = response.get('correlationId')
+
+                order.iiko_order_id = order_info.get('id')
+                order.correlation_id = correlation_id
+                order.status = order_info.get('creationStatus') or Order.STATUS_IN_PROGRESS
+                order.sent_to_iiko_at = timezone.now()
+                order.iiko_response = response
+                order.error_message = None
+                order.save(update_fields=[
+                    'iiko_order_id', 'correlation_id', 'status',
+                    'sent_to_iiko_at', 'iiko_response', 'query_to_iiko', 'error_message'
+                ])
+
+                request_log.success = True
+                request_log.save(update_fields=['success'])
+
+                logger.info(f'Заказ {order.order_id} отправлен в iiko (correlationId: {correlation_id})')
+                return True
+
+            except IikoAPIException as e:
+                logger.error(f'Ошибка отправки заказа {order.order_id} в iiko: {e}')
+                order.status = Order.STATUS_ERROR
+                order.error_message = str(e)
+                order.save(update_fields=['status', 'error_message', 'query_to_iiko'])
+                return False
+
+            except Exception as e:
+                logger.error(f'Неожиданная ошибка при отправке заказа {order.order_id}: {e}', exc_info=True)
+                order.status = Order.STATUS_ERROR
+                order.error_message = f'Системная ошибка: {str(e)}'
+                order.save(update_fields=['status', 'error_message', 'query_to_iiko'])
+                return False
 
     def update_order_creation_status(self, order: Order) -> Dict:
         """
@@ -649,6 +687,15 @@ class OrderService:
             'terminalGroupId': str(terminal.terminal_id),
             'order': order_payload
         }
+
+        # Наложение кастомных параметров из админки (Deep Merge)
+        custom_params = getattr(order.organization, 'api_custom_params', None)
+        if custom_params and isinstance(custom_params, dict):
+            order_data = deep_merge_iiko(order_data, custom_params)
+            logger.debug(
+                f'Применены api_custom_params для организации {order.organization.org_name}'
+            )
+
         return order_data
     
     def _prepare_delivery_point(self, order: Order) -> Dict:
