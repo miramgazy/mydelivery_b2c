@@ -20,7 +20,7 @@ IIKO_BASE_STRUCTURE_TEMPLATE = {
             "или type": "coordinates",
             "coordinates": {"latitude": 0, "longitude": 0}
         },
-        "items": [{"type": "Product", "productId": "...", "amount": 1, "price": 0, "modifiers": [...]}],
+        "items": [{"type": "Product", "productId": "...", "amount": 1, "price": 0, "modifiers": [{"productId": "...", "amount": 1}]}],
         "customerPayments": [{"paymentTypeId": "...", "sum": 0}],
         "comment": "..."
     }
