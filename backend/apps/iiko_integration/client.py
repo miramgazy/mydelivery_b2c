@@ -157,3 +157,11 @@ class IikoClient:
             "organizationIds": organization_ids
         }
         return self._post(url, payload)
+
+    def get_discounts(self, organization_ids: List[str]) -> Dict[str, Any]:
+        """Fetch discounts for the specified organizations."""
+        url = f"{self.BASE_URL}/discounts"
+        payload = {
+            "organizationIds": [str(oid) for oid in organization_ids]
+        }
+        return self._post(url, payload)

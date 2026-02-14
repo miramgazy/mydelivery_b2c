@@ -71,6 +71,14 @@
             <span v-if="sidebarOpen">Типы оплат</span>
           </router-link>
           <router-link
+            to="/admin/organization/discounts"
+            class="nav-item"
+            active-class="nav-item-active"
+          >
+            <Icon icon="mdi:percent" class="w-5 h-5" />
+            <span v-if="sidebarOpen">Скидки</span>
+          </router-link>
+          <router-link
             to="/admin/organization/menu"
             class="nav-item"
             active-class="nav-item-active"
@@ -226,6 +234,7 @@ const pageTitle = computed(() => {
     '/admin/organization/terminals': 'Терминалы',
     '/admin/organization/stop-list': 'Стоп-лист',
     '/admin/organization/payment-types': 'Типы оплат',
+    '/admin/organization/discounts': 'Скидки',
     '/admin/organization/menu': 'Управление меню',
     '/admin/organization/delivery-zones': 'Зоны доставки',
     '/admin/orders': 'Заказы',

@@ -191,6 +191,46 @@ class Street(models.Model):
         return f"{self.street_name} ({self.organization.org_name})"
 
 
+class Discount(models.Model):
+    """Скидка из iikoCloud API"""
+    external_id = models.UUIDField('ID в iiko', unique=True, db_index=True)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='discounts',
+        verbose_name='Организация'
+    )
+    name = models.CharField('Название', max_length=255)
+    percent = models.DecimalField(
+        'Процент',
+        max_digits=10,
+        decimal_places=2,
+        default=0
+    )
+    mode = models.CharField('Режим', max_length=50, default='Percent')
+    is_manual = models.BooleanField('Ручная', default=False)
+    is_active = models.BooleanField(
+        'Активна',
+        default=True,
+        help_text='True, если скидка пришла в последнем ответе API'
+    )
+    is_deleted_in_iiko = models.BooleanField(
+        'Удалена в iiko',
+        default=False,
+        help_text='Значение поля isDeleted из API'
+    )
+    updated_at = models.DateTimeField('Обновлена', auto_now=True)
+
+    class Meta:
+        db_table = 'discounts'
+        verbose_name = 'Скидка'
+        verbose_name_plural = 'Скидки'
+        ordering = ['-is_active', 'name']
+
+    def __str__(self):
+        return f"{self.name} ({self.organization.org_name})"
+
+
 class PaymentType(models.Model):
     """Типы оплаты"""
     payment_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

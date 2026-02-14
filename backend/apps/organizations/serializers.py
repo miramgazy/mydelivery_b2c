@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Organization, Terminal, Street, PaymentType, City
+from .models import Organization, Terminal, Street, PaymentType, City, Discount
 
 
 class TerminalSerializer(serializers.ModelSerializer):
@@ -99,6 +99,21 @@ class ExternalPriceCategorySerializer(serializers.Serializer):
     """Ценовая категория из ответа API внешнего меню (id может быть UUID или строка)"""
     id = serializers.CharField()
     name = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class DiscountSerializer(serializers.ModelSerializer):
+    """Сериализатор для скидок"""
+    id = serializers.UUIDField(source='external_id', read_only=True)
+    organization_name = serializers.CharField(source='organization.org_name', read_only=True)
+
+    class Meta:
+        model = Discount
+        fields = [
+            'id', 'external_id', 'name', 'organization', 'organization_name',
+            'percent', 'mode', 'is_manual', 'is_active', 'is_deleted_in_iiko',
+            'updated_at'
+        ]
+        read_only_fields = ['id', 'external_id', 'updated_at']
 
 
 class ExternalMenuSerializer(serializers.Serializer):

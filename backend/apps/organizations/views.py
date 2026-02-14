@@ -7,16 +7,17 @@ from django.shortcuts import get_object_or_404
 
 logger = logging.getLogger(__name__)
 
-from .models import Organization, Terminal, Street, PaymentType, City
+from .models import Organization, Terminal, Street, PaymentType, City, Discount
 from .serializers import (
     OrganizationSerializer, TerminalSerializer,
     StreetSerializer, PaymentTypeSerializer,
-    CitySerializer, ExternalMenuSerializer
+    CitySerializer, ExternalMenuSerializer, DiscountSerializer
 )
 from apps.iiko_integration.client import IikoClient, IikoAPIException
 from apps.iiko_integration.services import MenuSyncService, StopListSyncService
 from apps.products.tasks import is_global_sync_allowed, is_working_time
 from .delivery_utils import calculate_delivery_cost
+from .discount_services import sync_discounts_from_iiko
 
 
 class OrganizationViewSet(viewsets.ModelViewSet):
@@ -699,3 +700,91 @@ class CityViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = ['organization', 'is_active']
     search_fields = ['name']
+
+
+class DiscountViewSet(viewsets.ReadOnlyModelViewSet):
+    """ViewSet для скидок (чтение + sync + clear-inactive)"""
+    queryset = Discount.objects.all()
+    serializer_class = DiscountSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    pagination_class = None
+
+    def get_queryset(self):
+        queryset = Discount.objects.all().select_related('organization')
+        user = self.request.user
+        if hasattr(user, 'organization') and user.organization:
+            queryset = queryset.filter(organization=user.organization)
+        return queryset.order_by('-is_active', 'name')
+
+    @action(detail=False, methods=['post'], url_path='sync')
+    def sync_discounts(self, request):
+        """Запускает синхронизацию скидок из iiko"""
+        user = request.user
+        if hasattr(user, 'organization') and user.organization:
+            organization = user.organization
+        else:
+            organization = Organization.objects.filter(is_active=True).first()
+
+        if not organization:
+            return Response(
+                {'error': 'Организация не найдена'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        if not organization.api_key or not organization.iiko_organization_id:
+            return Response(
+                {'error': 'Не настроены iiko_organization_id или api_key'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            result = sync_discounts_from_iiko(organization)
+            msg = 'Скидки успешно синхронизированы'
+            if result['synced'] == 0:
+                msg += '. Синхронизировано 0 скидок — проверьте, что iiko_organization_id организации совпадает с ID в iiko'
+            return Response({
+                'message': msg,
+                'success': True,
+                'synced': result['synced'],
+                'deactivated': result['deactivated'],
+            })
+        except ValueError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except IikoAPIException as e:
+            return Response(
+                {'error': f'Ошибка при синхронизации из iiko: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            logger.error(f"Ошибка синхронизации скидок: {e}", exc_info=True)
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+    @action(detail=False, methods=['delete'], url_path='clear-inactive')
+    def clear_inactive(self, request):
+        """Удаляет из БД все скидки с is_active=False"""
+        user = request.user
+        if hasattr(user, 'organization') and user.organization:
+            organization = user.organization
+        else:
+            organization = Organization.objects.filter(is_active=True).first()
+
+        if not organization:
+            return Response(
+                {'error': 'Организация не найдена'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        deleted_count, _ = Discount.objects.filter(
+            organization=organization,
+            is_active=False
+        ).delete()
+
+        return Response({
+            'message': f'Удалено неактивных скидок: {deleted_count}',
+            'deleted': deleted_count,
+        })

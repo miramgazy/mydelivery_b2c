@@ -2,7 +2,7 @@ import json
 import logging
 from django.contrib import admin
 from django.utils.safestring import mark_safe
-from .models import Organization, Terminal, PaymentType, Street, City
+from .models import Organization, Terminal, PaymentType, Street, City, Discount
 
 logger = logging.getLogger(__name__)
 
@@ -451,6 +451,14 @@ class PaymentTypeAdmin(BaseAdmin):
             'title': 'Загрузка типов оплаты из iiko'
         }
         return render(request, 'admin/organizations/sync_payment_types.html', context)
+
+
+@admin.register(Discount)
+class DiscountAdmin(BaseAdmin):
+    list_display = ('name', 'organization', 'percent', 'mode', 'is_active', 'is_deleted_in_iiko', 'updated_at')
+    list_filter = ('is_active', 'organization', 'mode')
+    search_fields = ('name',)
+    readonly_fields = ('external_id', 'updated_at')
 
 
 @admin.register(Street)

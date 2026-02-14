@@ -115,6 +115,11 @@ const routes = [
                 component: () => import('@/views/admin/PaymentTypesManagement.vue')
             },
             {
+                path: 'organization/discounts',
+                name: 'admin-organization-discounts',
+                component: () => import('@/views/admin/DiscountManager.vue')
+            },
+            {
                 path: 'organization/menu',
                 name: 'admin-organization-menu',
                 component: () => import('@/views/admin/MenuManagement.vue')
