@@ -29,6 +29,21 @@ class UserService {
         const response = await api.patch('/users/me/', userData)
         return response.data
     }
+
+    async getBotSyncToken() {
+        const response = await api.post('/users/bot-sync-token/')
+        return response.data
+    }
+
+    async checkBotSubscription() {
+        const response = await api.get('/users/check-bot-subscription/')
+        return response.data
+    }
+
+    async declineBotSubscription() {
+        const response = await api.post('/users/decline-bot-subscription/')
+        return response.data
+    }
 }
 
 export default new UserService()

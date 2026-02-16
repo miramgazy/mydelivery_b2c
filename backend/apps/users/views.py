@@ -11,7 +11,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
 import re
 import uuid
-from .models import User, Role, DeliveryAddress, BillingPhone
+from .models import User, Role, DeliveryAddress, BillingPhone, BotSyncToken
 from .serializers import (
     UserSerializer, UserCreateSerializer, UserUpdateSerializer,
     RoleSerializer, DeliveryAddressSerializer, BillingPhoneSerializer,
@@ -160,6 +160,33 @@ class TelegramWebhookView(viewsets.ViewSet):
         update = request.data or {}
         message = update.get('message') or update.get('edited_message') or {}
         contact = message.get('contact') or {}
+        text = (message.get('text') or '').strip()
+
+        # Обработка /start <uuid> — подтверждение подписки на уведомления
+        if text.startswith('/start '):
+            start_param = text[7:].strip()
+            if start_param:
+                from django.utils import timezone
+                from datetime import timedelta
+                try:
+                    token_uuid = uuid.UUID(start_param)
+                    ttl = timezone.now() - timedelta(minutes=10)
+                    token = BotSyncToken.objects.select_related('user').filter(
+                        bot_sync_uuid=token_uuid,
+                        created_at__gte=ttl
+                    ).first()
+                    if token:
+                        user = token.user
+                        chat_id = message.get('chat', {}).get('id')
+                        if chat_id is not None:
+                            user.is_bot_subscribed = True
+                            user.chat_id = int(chat_id)
+                            user.save(update_fields=['is_bot_subscribed', 'chat_id', 'updated_at'])
+                            logger.info("Bot subscription confirmed for user=%s chat_id=%s", user.id, chat_id)
+                        token.delete()
+                except (ValueError, TypeError):
+                    pass
+            return Response({'ok': True})
 
         phone_number = contact.get('phone_number')
         telegram_id = (
@@ -231,6 +258,9 @@ class UserViewSet(viewsets.ModelViewSet):
         if self.action == 'check_access':
             # Проверка доступа доступна всем
             permission_classes = [permissions.AllowAny]
+        elif self.action in ['bot_sync_token', 'check_bot_subscription', 'decline_bot_subscription']:
+            # Подписка на уведомления — любой авторизованный пользователь
+            permission_classes = [permissions.IsAuthenticated]
         elif self.action == 'create':
             # Создавать могут только админы
             permission_classes = [IsSuperAdmin | IsOrgAdmin]
@@ -382,6 +412,54 @@ class UserViewSet(viewsets.ModelViewSet):
         user.save(update_fields=['phone'])
 
         return Response({'ok': True, 'user_id': user.id, 'phone': user.phone})
+
+    @action(detail=False, methods=['post'], url_path='bot-sync-token')
+    def bot_sync_token(self, request):
+        """
+        Создаёт токен для Deep Link подтверждения подписки на уведомления.
+        Токен валиден 10 минут. Только если is_bot_subscribed IS NULL.
+        """
+        user = request.user
+        from django.utils import timezone
+        from datetime import timedelta
+
+        # При регистрации (onboarding) показываем только если NULL.
+        # Из профиля пользователь может повторно попробовать (is_bot_subscribed=False).
+        if user.is_bot_subscribed is True:
+            return Response(
+                {'detail': 'Вы уже подписаны на уведомления'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Удаляем просроченные токены пользователя
+        ttl = timezone.now() - timedelta(minutes=10)
+        BotSyncToken.objects.filter(user=user, created_at__lt=ttl).delete()
+
+        token = BotSyncToken.objects.create(user=user)
+        bot_username = None
+        if user.organization and user.organization.bot_username:
+            bot_username = user.organization.bot_username.lstrip('@')
+
+        return Response({
+            'bot_sync_uuid': str(token.bot_sync_uuid),
+            'bot_username': bot_username or '',
+        })
+
+    @action(detail=False, methods=['get'], url_path='check-bot-subscription')
+    def check_bot_subscription(self, request):
+        """Возвращает статус is_bot_subscribed для текущей сессии."""
+        user = request.user
+        return Response({
+            'is_bot_subscribed': user.is_bot_subscribed,
+        })
+
+    @action(detail=False, methods=['post'], url_path='decline-bot-subscription')
+    def decline_bot_subscription(self, request):
+        """Устанавливает is_bot_subscribed = False (отказ/позже)."""
+        user = request.user
+        user.is_bot_subscribed = False
+        user.save(update_fields=['is_bot_subscribed', 'updated_at'])
+        return Response({'ok': True, 'is_bot_subscribed': False})
     
     def create(self, request, *args, **kwargs):
         """Создание пользователя"""

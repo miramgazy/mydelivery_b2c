@@ -76,7 +76,7 @@
                     <h3 class="font-bold text-gray-900 dark:text-white leading-tight">
                         {{ user.full_name || user.username }}
                     </h3>
-                    <div class="flex items-center gap-2 mt-1">
+                    <div class="flex flex-wrap items-center gap-2 mt-1">
                         <span class="text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase transition-colors"
                           :class="{
                             'bg-blue-100 text-blue-700': user.role_name === 'org_admin',
@@ -86,8 +86,21 @@
                         >
                             {{ user.role_display }}
                         </span>
+                        <span class="text-[10px] px-1.5 py-0.5 rounded-md font-medium"
+                          :class="{
+                            'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400': user.is_bot_subscribed === true,
+                            'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400': user.is_bot_subscribed === false,
+                            'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400': user.is_bot_subscribed == null
+                          }"
+                          :title="user.is_bot_subscribed === true && user.chat_id ? `chat_id: ${user.chat_id}` : ''"
+                        >
+                            {{ user.is_bot_subscribed === true ? 'Подписан' + (user.chat_id ? ` (${user.chat_id})` : '') : user.is_bot_subscribed === false ? 'Отказ' : 'Не выбрано' }}
+                        </span>
                         <p v-if="user.phone" class="text-xs text-gray-500">{{ user.phone }}</p>
                     </div>
+                    <p v-if="user.updated_at" class="text-[10px] text-gray-400 mt-0.5">
+                        Обновлён: {{ formatUpdatedAt(user.updated_at) }}
+                    </p>
                 </div>
             </div>
             <button 
@@ -229,6 +242,22 @@ const form = reactive({
     role: null,
     terminals: []
 })
+
+function formatUpdatedAt(isoString) {
+    if (!isoString) return '-'
+    try {
+        const d = new Date(isoString)
+        return d.toLocaleDateString('ru-RU', {
+            day: '2-digit',
+            month: '2-digit',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        })
+    } catch {
+        return isoString
+    }
+}
 
 const filteredUsers = computed(() => {
     let result = Array.isArray(users.value) ? users.value : (users.value?.results || [])

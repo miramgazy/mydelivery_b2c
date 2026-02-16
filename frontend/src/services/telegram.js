@@ -122,6 +122,18 @@ class TelegramService {
     }
 
     /**
+     * Открыть ссылку в Telegram (например, на бота с Deep Link)
+     * @param {string} url - полный URL, например https://t.me/botname?start=uuid
+     */
+    openTelegramLink(url) {
+        if (this.isInTelegram() && this.webApp?.openTelegramLink) {
+            this.webApp.openTelegramLink(url);
+        } else if (typeof window !== 'undefined' && window.open) {
+            window.open(url, '_blank');
+        }
+    }
+
+    /**
      * Запросить геолокацию пользователя
      * В Telegram Mini App и браузере используется стандартный браузерный API
      * Возвращает Promise с координатами или ошибкой

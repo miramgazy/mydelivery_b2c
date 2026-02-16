@@ -62,6 +62,21 @@ class User(AbstractUser):
     )
     
     iiko_user_id = models.UUIDField('ID в iiko', null=True, blank=True)
+    
+    # Согласие на маркетинговые и сервисные уведомления через бота
+    is_bot_subscribed = models.BooleanField(
+        'Подписан на уведомления бота',
+        null=True,
+        default=None,
+        help_text='True — подписан, False — отказался, None — не выбирал'
+    )
+    chat_id = models.BigIntegerField(
+        'ID чата с ботом',
+        null=True,
+        blank=True,
+        help_text='Telegram chat_id для отправки уведомлений'
+    )
+    
     language_code = models.CharField(
         'Код языка',
         max_length=5,
@@ -102,6 +117,39 @@ class User(AbstractUser):
     @property
     def is_customer(self):
         return self.role and self.role.role_name == Role.CUSTOMER
+
+
+class BotSyncToken(models.Model):
+    """
+    Токен для подтверждения подписки на уведомления через Deep Link.
+    TTL: 10 минут.
+    """
+    bot_sync_uuid = models.UUIDField(
+        'UUID для Deep Link',
+        default=uuid.uuid4,
+        editable=False,
+        unique=True,
+        db_index=True
+    )
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='bot_sync_tokens',
+        verbose_name='Пользователь'
+    )
+    created_at = models.DateTimeField('Создан', auto_now_add=True)
+
+    class Meta:
+        db_table = 'bot_sync_tokens'
+        verbose_name = 'Токен синхронизации бота'
+        verbose_name_plural = 'Токены синхронизации бота'
+        indexes = [
+            models.Index(fields=['bot_sync_uuid']),
+            models.Index(fields=['created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.bot_sync_uuid} ({self.user_id})"
 
 
 class DeliveryAddress(models.Model):

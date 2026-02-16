@@ -382,8 +382,13 @@ async function handleContinue() {
     // Обновляем данные пользователя в store
     await authStore.fetchCurrentUser()
     
-    // Переходим к вводу адреса
-    router.push('/onboarding/address')
+    // Переходим на consent если is_bot_subscribed не выбран, иначе на адрес
+    const user = authStore.user
+    if (user?.is_bot_subscribed == null) {
+      router.push('/onboarding/consent')
+    } else {
+      router.push('/onboarding/address')
+    }
   } catch (err) {
     console.error('Save phone error:', err)
     error.value = err.response?.data?.phone?.[0] || 'Не удалось сохранить номер телефона. Попробуйте еще раз.'

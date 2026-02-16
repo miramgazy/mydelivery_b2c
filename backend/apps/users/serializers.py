@@ -85,6 +85,12 @@ class UserSerializer(serializers.ModelSerializer):
     role_name = serializers.CharField(source='role.role_name', read_only=True, default=None)
     role_display = serializers.CharField(source='role.get_role_name_display', read_only=True, default=None)
     organization_name = serializers.CharField(source='organization.org_name', read_only=True, default=None)
+    organization_bot_username = serializers.SerializerMethodField()
+
+    def get_organization_bot_username(self, obj):
+        if obj.organization and obj.organization.bot_username:
+            return obj.organization.bot_username.lstrip('@')
+        return None
     full_name = serializers.CharField(read_only=True)
     terminals = serializers.SerializerMethodField()
     addresses = DeliveryAddressSerializer(many=True, read_only=True)
@@ -112,9 +118,10 @@ class UserSerializer(serializers.ModelSerializer):
             'id', 'telegram_id', 'first_name', 'last_name', 'username',
             'email', 'phone', 'telegram_username', 'full_name',
             'role', 'role_name', 'role_display',
-            'organization', 'organization_name',
+            'organization', 'organization_name', 'organization_bot_username',
             'terminals', 'addresses', 'billing_phones',
             'iiko_user_id', 'language_code', 'is_active', 'last_login',
+            'is_bot_subscribed', 'chat_id',
             'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'telegram_id', 'created_at', 'updated_at', 'last_login']

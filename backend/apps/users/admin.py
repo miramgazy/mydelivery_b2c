@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from .models import User, Role, DeliveryAddress
+from .models import User, Role, DeliveryAddress, BotSyncToken
 from .forms import CustomUserChangeForm
 from apps.organizations.models import Organization
 
@@ -69,8 +69,8 @@ class DeliveryAddressInline(admin.TabularInline):
 @admin.register(User)
 class CustomUserAdmin(OrgRestrictedMixin, UserAdmin):
     form = CustomUserChangeForm
-    list_display = ('username', 'email', 'full_name', 'telegram_id', 'phone', 'role', 'organization', 'is_active', 'is_staff')
-    list_filter = ('role', 'organization', 'is_active', 'is_staff')
+    list_display = ('username', 'email', 'full_name', 'telegram_id', 'phone', 'is_bot_subscribed', 'role', 'organization', 'is_active', 'is_staff')
+    list_filter = ('role', 'organization', 'is_bot_subscribed', 'is_active', 'is_staff')
     search_fields = ('username', 'email', 'first_name', 'last_name', 'phone')
     inlines = [DeliveryAddressInline]
     
@@ -78,7 +78,7 @@ class CustomUserAdmin(OrgRestrictedMixin, UserAdmin):
     
     fieldsets = UserAdmin.fieldsets + (
         ('Сброс пароля', {'fields': ('new_password',)}),
-        ('Дополнительная информация', {'fields': ('role', 'organization', 'phone', 'telegram_id', 'telegram_username', 'terminals')}),
+        ('Дополнительная информация', {'fields': ('role', 'organization', 'phone', 'telegram_id', 'telegram_username', 'terminals', 'is_bot_subscribed', 'chat_id')}),
     )
     add_fieldsets = UserAdmin.add_fieldsets + (
         ('Дополнительная информация', {'fields': ('role', 'organization', 'phone')}),
@@ -88,6 +88,14 @@ class CustomUserAdmin(OrgRestrictedMixin, UserAdmin):
         if 'new_password' in form.cleaned_data and form.cleaned_data['new_password']:
             obj.set_password(form.cleaned_data['new_password'])
         super().save_model(request, obj, form, change)
+
+@admin.register(BotSyncToken)
+class BotSyncTokenAdmin(admin.ModelAdmin):
+    list_display = ('bot_sync_uuid', 'user', 'created_at')
+    list_filter = ('created_at',)
+    search_fields = ('bot_sync_uuid', 'user__username')
+    readonly_fields = ('bot_sync_uuid', 'created_at')
+
 
 @admin.register(DeliveryAddress)
 class DeliveryAddressAdmin(OrgRestrictedMixin, admin.ModelAdmin):

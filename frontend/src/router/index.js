@@ -77,6 +77,12 @@ const routes = [
         meta: { requiresAuth: true, isOnboarding: true }
     },
     {
+        path: '/onboarding/consent',
+        name: 'onboarding-consent',
+        component: () => import('@/views/onboarding/BotConsentView.vue'),
+        meta: { requiresAuth: true, isOnboarding: true }
+    },
+    {
         path: '/onboarding/address',
         name: 'onboarding-address',
         component: () => import('@/views/onboarding/AddressInputView.vue'),
@@ -228,17 +234,22 @@ router.beforeEach((to, from, next) => {
     if (telegramService.isInTelegram() && authStore.isAuthenticated && !to.meta.isOnboarding) {
         const user = authStore.user
         // Если нет телефона - редирект на welcome (первый экран onboarding)
-        if (!user?.phone && to.name !== 'onboarding-welcome' && to.name !== 'onboarding-phone' && to.name !== 'onboarding-address' && to.name !== 'onboarding-terminal') {
+        if (!user?.phone && to.name !== 'onboarding-welcome' && to.name !== 'onboarding-phone' && to.name !== 'onboarding-address' && to.name !== 'onboarding-consent' && to.name !== 'onboarding-terminal') {
             next('/onboarding/welcome')
             return
         }
-        // Если нет адреса - редирект на ввод адреса (но только если есть телефон)
-        if (user?.phone && (!user?.addresses || user.addresses.length === 0) && to.name !== 'onboarding-address' && to.name !== 'onboarding-phone' && to.name !== 'onboarding-welcome' && to.name !== 'onboarding-terminal') {
+        // Если есть телефон и is_bot_subscribed IS NULL — редирект на consent (страница согласия)
+        if (user?.phone && user?.is_bot_subscribed == null && to.name !== 'onboarding-consent' && to.name !== 'onboarding-phone' && to.name !== 'onboarding-welcome') {
+            next('/onboarding/consent')
+            return
+        }
+        // Если нет адреса - редирект на ввод адреса (но только если есть телефон и consent пройден)
+        if (user?.phone && user?.is_bot_subscribed != null && (!user?.addresses || user.addresses.length === 0) && to.name !== 'onboarding-address' && to.name !== 'onboarding-phone' && to.name !== 'onboarding-welcome' && to.name !== 'onboarding-consent' && to.name !== 'onboarding-terminal') {
             next('/onboarding/address')
             return
         }
         // Если нет терминалов - редирект на выбор терминала (но только если есть телефон и адрес)
-        if (user?.phone && user?.addresses && user.addresses.length > 0 && (!user?.terminals || user.terminals.length === 0) && to.name !== 'onboarding-terminal' && to.name !== 'onboarding-phone' && to.name !== 'onboarding-address' && to.name !== 'onboarding-welcome') {
+        if (user?.phone && user?.addresses && user.addresses.length > 0 && (!user?.terminals || user.terminals.length === 0) && to.name !== 'onboarding-terminal' && to.name !== 'onboarding-phone' && to.name !== 'onboarding-address' && to.name !== 'onboarding-consent' && to.name !== 'onboarding-welcome') {
             next('/onboarding/terminal')
             return
         }
