@@ -67,15 +67,16 @@ class TelegramAuthView(viewsets.ViewSet):
                 )
                 logger.info(f"Found existing user: {user.id}")
                 
-                # Обновляем данные и привязываем к организации, если она найдена
+                # Обновляем данные и привязываем к организации
                 user.first_name = user_data.get('first_name', user.first_name)
                 user.last_name = user_data.get('last_name', user.last_name)
                 user.telegram_username = user_data.get('username', user.telegram_username)
                 
-                # Если организация найдена и у пользователя её нет - привязываем
-                if organization and not user.organization:
+                # Всегда обновляем организацию при логине — пользователь открыл конкретного бота,
+                # значит контекст должен быть именно этой организации (multi-bot support)
+                if organization:
                     user.organization = organization
-                    logger.info(f"Attached user {user.id} to organization {organization.org_name}")
+                    logger.info(f"Set user {user.id} organization to {organization.org_name}")
                 
                 user.save(update_fields=['first_name', 'last_name', 'telegram_username', 'organization'])
                 

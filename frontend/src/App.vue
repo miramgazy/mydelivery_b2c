@@ -56,18 +56,12 @@ onMounted(async () => {
       const tgUser = telegramService.getUser()
       if (tgUser) {
         console.log('TG User:', tgUser.id)
-        
-        // B2C: максимально быстрый старт:
-        // 1) если уже есть access_token — сначала пробуем просто подтянуть /users/me/
-        // 2) если токена нет/он протух — делаем Telegram login (1 запрос)
-        if (authService.isAuthenticated() && !authStore.isAuthenticated) {
-          await authStore.fetchCurrentUser()
-        }
 
-        let loginResult = { success: true }
-        if (!authStore.isAuthenticated) {
-          loginResult = await authStore.login()
-        }
+        // B2C multi-bot: всегда делаем Telegram login при открытии TMA.
+        // initData содержит информацию о боте — бэкенд определит организацию
+        // и переключит контекст пользователя на неё. Иначе при открытии
+        // другого бота показывались бы данные первой организации.
+        let loginResult = await authStore.login()
 
         if (authStore.isAuthenticated) {
           organizationStore.fetchOrganization().catch(() => {})

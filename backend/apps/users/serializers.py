@@ -97,9 +97,11 @@ class UserSerializer(serializers.ModelSerializer):
     billing_phones = serializers.SerializerMethodField()
     
     def get_terminals(self, obj):
-        """Возвращает только активные терминалы пользователя"""
-        active_terminals = obj.terminals.filter(is_active=True)
-        return TerminalSerializer(active_terminals, many=True).data
+        """Возвращает только активные терминалы пользователя в контексте текущей организации"""
+        qs = obj.terminals.filter(is_active=True)
+        if obj.organization_id:
+            qs = qs.filter(organization_id=obj.organization_id)
+        return TerminalSerializer(qs, many=True).data
     
     def get_billing_phones(self, obj):
         """Возвращает биллинг-номера пользователя, безопасно обрабатывая случай отсутствия таблицы"""
