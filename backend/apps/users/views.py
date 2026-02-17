@@ -582,6 +582,48 @@ class DeliveryAddressViewSet(viewsets.ModelViewSet):
             DeliveryAddressSerializer(address).data
         )
 
+    @action(detail=True, methods=['post'], url_path='coordinates')
+    def update_coordinates(self, request, pk=None):
+        """
+        Обновить только координаты адреса (для кнопки «Уточнить геопозицию»).
+        Принимает latitude и longitude, автоматически устанавливает is_verified=True.
+        """
+        address = self.get_object()
+        latitude = request.data.get('latitude')
+        longitude = request.data.get('longitude')
+
+        if latitude is None or longitude is None:
+            return Response(
+                {'detail': 'Поля latitude и longitude обязательны'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            lat = float(latitude)
+            lon = float(longitude)
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'latitude и longitude должны быть числами'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if lat < -90 or lat > 90:
+            return Response(
+                {'detail': 'Широта должна быть в диапазоне от -90 до 90'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if lon < -180 or lon > 180:
+            return Response(
+                {'detail': 'Долгота должна быть в диапазоне от -180 до 180'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        address.latitude = lat
+        address.longitude = lon
+        address.save()
+
+        return Response(DeliveryAddressSerializer(address).data)
+
 
 class BillingPhoneViewSet(viewsets.ModelViewSet):
     """ViewSet для управления дополнительными номерами телефонов (Kaspi и др.)"""

@@ -334,12 +334,12 @@ async function requestLocation() {
       return
     }
     
-    // Обновляем адрес с полученными координатами
-    // is_verified автоматически установится в True при сохранении (см. модель DeliveryAddress.save())
-    await deliveryAddressService.updateAddress(addressToUpdate.id, {
-      latitude: location.latitude,
-      longitude: location.longitude
-    })
+    // Обновляем координаты через отдельный endpoint (избегаем проблем с PATCH и валидацией)
+    await deliveryAddressService.updateCoordinates(
+      addressToUpdate.id,
+      location.latitude,
+      location.longitude
+    )
     
     // Обновляем список адресов
     await refreshAll()
@@ -347,7 +347,16 @@ async function requestLocation() {
     telegramService.showAlert('Геопозиция успешно сохранена! Адрес верифицирован.')
   } catch (err) {
     console.error('Request location failed', err)
-    const errorMessage = err.response?.data?.detail || err.message || 'Ошибка при сохранении геолокации'
+    const data = err.response?.data
+    let errorMessage = 'Ошибка при сохранении геолокации'
+    if (data?.detail) {
+      errorMessage = typeof data.detail === 'string' ? data.detail : (Array.isArray(data.detail) ? data.detail.join(', ') : JSON.stringify(data.detail))
+    } else if (data && typeof data === 'object') {
+      const parts = Object.entries(data).map(([k, v]) => `${k}: ${Array.isArray(v) ? v.join(', ') : v}`)
+      if (parts.length) errorMessage = parts.join('; ')
+    } else if (err.message) {
+      errorMessage = err.message
+    }
     telegramService.showAlert(errorMessage)
   } finally {
     requestingLocation.value = false

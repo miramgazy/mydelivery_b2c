@@ -22,6 +22,17 @@ class DeliveryAddressService {
         return response.data
     }
 
+    /**
+     * Обновить только координаты адреса (для кнопки «Уточнить геопозицию»)
+     */
+    async updateCoordinates(id, latitude, longitude) {
+        const response = await api.post(`/addresses/${id}/coordinates/`, {
+            latitude: Number(latitude),
+            longitude: Number(longitude)
+        })
+        return response.data
+    }
+
     async deleteAddress(id) {
         await api.delete(`/addresses/${id}/`)
     }
