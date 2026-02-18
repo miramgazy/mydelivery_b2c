@@ -88,12 +88,12 @@ class BaseAdmin(admin.ModelAdmin):
 
 @admin.register(Organization)
 class OrganizationAdmin(BaseAdmin):
-    list_display = ('org_name', 'iiko_organization_id', 'city', 'get_terminals_count', 'is_active', 'created_at')
+    list_display = ('org_id', 'org_name', 'iiko_organization_id', 'city', 'get_terminals_count', 'is_active', 'created_at')
     list_filter = ('is_active', 'city')
     change_form_template = 'admin/organizations/organization/change_form.html'
     fieldsets = (
         (None, {
-            'fields': ('org_name', 'api_key', 'iiko_organization_id', 'city', 'phone', 'address')
+            'fields': ('org_id_display', 'org_name', 'api_key', 'iiko_organization_id', 'city', 'phone', 'address')
         }),
         ('Telegram Bot', {
             'fields': ('bot_token', 'bot_username'),
@@ -113,7 +113,14 @@ class OrganizationAdmin(BaseAdmin):
             'fields': ('is_active', 'created_at', 'updated_at')
         }),
     )
-    readonly_fields = ('created_at', 'updated_at', 'iiko_base_structure_display')
+    readonly_fields = ('org_id_display', 'created_at', 'updated_at', 'iiko_base_structure_display')
+
+    def org_id_display(self, obj):
+        """ID организации (для URL веб-сайта: ?org=...)"""
+        if obj:
+            return mark_safe(f'<strong style="font-family:monospace;font-size:14px;">{obj.org_id}</strong>')
+        return '—'
+    org_id_display.short_description = 'ID организации'
 
     def iiko_base_structure_display(self, obj):
         """Блок «Базовая структура (Только чтение)» — шаблон JSON, генерируемого кодом."""

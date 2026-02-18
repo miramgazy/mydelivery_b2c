@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include
+from django.http import JsonResponse
 from django.conf import settings
 from django.conf.urls.static import static
 from rest_framework_simplejwt.views import TokenRefreshView
@@ -10,7 +11,14 @@ from drf_spectacular.views import (
     SpectacularRedocView
 )
 
+
+def health_check(request):
+    """Эндпоинт для healthcheck (без авторизации, не логирует 401)"""
+    return JsonResponse({'status': 'ok'})
+
+
 urlpatterns = [
+    path('api/health/', health_check),
     # Django Admin (админ-панель бэкенда; офис фронта — /admin)
     path('administrator/', admin.site.urls),
     
@@ -28,6 +36,7 @@ urlpatterns = [
     path('api/', include('apps.organizations.urls')),
     path('api/', include('apps.products.urls')),
     path('api/', include('apps.orders.urls')),
+    path('api/website/', include('apps.website.urls')),
 ]
 
 # Serve media files in development

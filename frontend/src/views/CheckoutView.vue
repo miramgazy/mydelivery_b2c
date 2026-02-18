@@ -114,20 +114,20 @@
                     @click="selectDeliveryAddress(addr)"
                     class="p-3 rounded-xl border-2 cursor-pointer transition-all"
                     :class="form.delivery_address_id === addr.id 
-                        ? 'border-primary-600 bg-primary-50 dark:bg-primary-900/30' 
+                        ? 'border-primary-600 bg-white dark:bg-white dark:border-primary-500' 
                         : 'border-gray-100 bg-white dark:bg-gray-800 dark:border-gray-700'"
                 >
                     <div class="flex items-center gap-3">
-                        <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center" :class="form.delivery_address_id === addr.id ? 'border-primary-600' : 'border-gray-300 dark:border-gray-600'">
-                            <div v-if="form.delivery_address_id === addr.id" class="w-2.5 h-2.5 bg-primary-600 rounded-full"></div>
+                        <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center" :class="form.delivery_address_id === addr.id ? 'border-primary-600 dark:border-primary-500' : 'border-gray-300 dark:border-gray-600'">
+                            <div v-if="form.delivery_address_id === addr.id" class="w-2.5 h-2.5 bg-primary-600 dark:bg-primary-600 rounded-full"></div>
                         </div>
                         <div class="flex-1">
                             <div class="flex items-center gap-2">
                                 <span 
-                                    class="text-sm"
+                                    class="text-sm font-medium"
                                     :class="form.delivery_address_id === addr.id 
-                                        ? 'text-gray-900 dark:text-gray-100' 
-                                        : 'text-gray-900 dark:text-white'"
+                                        ? 'text-gray-900' 
+                                        : 'text-gray-900 dark:text-gray-200'"
                                 >
                                     {{ addr.full_address }}
                                 </span>

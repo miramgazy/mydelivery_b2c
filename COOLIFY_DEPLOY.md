@@ -33,6 +33,15 @@
    - Добавлена политика `allkeys-lru` для автоматической очистки памяти
    - Ограничение памяти до 256MB
 
+## Сервисы после деплоя:
+
+| URL | Назначение |
+|-----|------------|
+| `/` | TMA (Telegram Mini App) |
+| `/webapp/?org=<uuid>` | Веб-сайт доставки (каталог по организации) |
+| `/administrator/` | Django Admin |
+| `/api/` | REST API |
+
 ## Последовательность запуска:
 
 ```
@@ -46,21 +55,30 @@
    ↓
 5. Frontend (ждет Backend)
    ↓
-6. Nginx (ждет Backend и Frontend)
+6. Front-website (ждет Backend)
+   ↓
+7. Nginx (ждет Backend, Frontend, Front-website)
 ```
+
 
 ## Переменные окружения в Coolify:
 
-Убедитесь, что в Coolify настроены следующие переменные:
+| Переменная | Обязательно | Описание |
+|------------|-------------|----------|
+| `DATABASE_URL` | Да | URL PostgreSQL (Coolify может подставлять автоматически) |
+| `SECRET_KEY` | Да | Секретный ключ Django (сгенерируйте надёжный) |
+| `DEBUG` | Да | `0` для production |
+| `ALLOWED_HOSTS` | Да | Домен через запятую, напр. `yourdomain.com,www.yourdomain.com` |
+| `IIKO_API_BASE_URL` | Да | `https://api-ru.iiko.services/api/1` |
+| `CORS_ALLOWED_ORIGINS` | Да | Разрешённые источники, напр. `https://yourdomain.com,https://www.yourdomain.com` |
+| `CSRF_TRUSTED_ORIGINS` | Да | Доверенные домены для CSRF, напр. `https://yourdomain.com,https://www.yourdomain.com` |
+| `CELERY_BROKER_URL` | Нет | По умолчанию `redis://tg-redis:6379/0` |
+| `CELERY_RESULT_BACKEND` | Нет | По умолчанию `redis://tg-redis:6379/0` |
+| `SECURE_SSL_REDIRECT` | Нет | `1` если за Cloudflare/SSL |
+| `SESSION_COOKIE_SECURE` | Нет | `1` для HTTPS |
+| `CSRF_COOKIE_SECURE` | Нет | `1` для HTTPS |
 
-- `DATABASE_URL` - URL базы данных (управляется Coolify)
-- `SECRET_KEY` - секретный ключ Django
-- `TELEGRAM_BOT_TOKEN` - токен Telegram бота
-- `TELEGRAM_BOT_USERNAME` - username бота
-- `IIKO_API_BASE_URL` - URL API iiko
-- `CORS_ALLOWED_ORIGINS` - разрешенные источники для CORS
-- `DEBUG` - режим отладки (0 для production)
-- `ALLOWED_HOSTS` - разрешенные хосты
+**Примечание:** Токены ботов (`bot_token`, `bot_username`) задаются в админке Django для каждой организации.
 
 ## Использование:
 

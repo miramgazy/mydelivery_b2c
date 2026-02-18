@@ -1,10 +1,11 @@
 <script setup>
-import { onMounted, computed } from 'vue'
+import { onMounted, computed, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useOrganizationStore } from '@/stores/organization'
 import telegramService from '@/services/telegram'
 import authService from '@/services/auth.service'
+import { clearTokens } from '@/services/api'
 import BottomNav from '@/components/common/BottomNav.vue'
 import ToastNotification from '@/components/common/ToastNotification.vue'
 import { paletteFromHex, normalizePrimaryHex } from '@/utils/primaryColor'
@@ -13,6 +14,10 @@ const router = useRouter()
 const route = useRoute()
 const authStore = useAuthStore()
 const organizationStore = useOrganizationStore()
+
+// Multi-bot: блокируем рендер до завершения login в TMA, чтобы запросы (organization, menu, orders)
+// не шли со старым токеном первой организации
+const tmaInitComplete = ref(false)
 
 // Primary palette from organization.primary_color — применяется ко всем primary-* в TMA
 const primaryPaletteStyle = computed(() => {
@@ -46,21 +51,19 @@ onMounted(async () => {
     // Инициализация Telegram
     telegramService.init()
 
-    // Загрузить организацию для цвета бренда (primary) — чтобы primary-* везде использовали цвет организации
-    if (authStore.isAuthenticated) {
-      organizationStore.fetchOrganization().catch(() => {})
-    }
-
-    // Если запущено в Telegram
+    // Если запущено в Telegram — блокируем рендер до завершения login
     if (telegramService.isInTelegram()) {
       const tgUser = telegramService.getUser()
       if (tgUser) {
         console.log('TG User:', tgUser.id)
 
+        // Multi-bot: очищаем старый токен и сторы, чтобы запросы не шли с данными первой организации
+        clearTokens()
+        authStore.$patch({ user: null })
+        organizationStore.$patch({ organization: null })
+
         // B2C multi-bot: всегда делаем Telegram login при открытии TMA.
-        // initData содержит информацию о боте — бэкенд определит организацию
-        // и переключит контекст пользователя на неё. Иначе при открытии
-        // другого бота показывались бы данные первой организации.
+        // initData содержит информацию о боте — бэкенд определит организацию.
         let loginResult = await authStore.login()
 
         if (authStore.isAuthenticated) {
@@ -68,92 +71,71 @@ onMounted(async () => {
         }
 
         if (!loginResult.success) {
-            console.error('Login failed:', loginResult.message)
-            // Если ошибка - показываем страницу доступа (на случай если пользователь заблокирован)
-            if (loginResult.error?.includes('заблокирован') || loginResult.error?.includes('blocked')) {
-                router.push({ 
-                    name: 'access-denied', 
-                    query: { id: tgUser.id } 
-                })
-            }
+          console.error('Login failed:', loginResult.message)
+          if (loginResult.error?.includes('заблокирован') || loginResult.error?.includes('blocked')) {
+            router.push({ name: 'access-denied', query: { id: tgUser.id } })
+          }
         } else {
-            // Проверяем наличие телефона и адреса
-            if (authStore.isAuthenticated) {
-                const user = authStore.user
-                console.log('User after login:', user)
-                console.log('User phone:', user?.phone)
-                console.log('User addresses:', user?.addresses)
-                
-                // Если нет телефона - редирект на welcome (первый экран onboarding)
-                if (!user?.phone) {
-                    console.log('User has no phone, redirecting to welcome')
-                    router.push('/onboarding/welcome')
-                    return
-                }
-                // Если нет адреса доставки - редирект на ввод адреса
-                if (!user?.addresses || user.addresses.length === 0) {
-                    console.log('User has no address, redirecting to address input')
-                    router.push('/onboarding/address')
-                    return
-                }
-                // Если нет терминалов - редирект на выбор терминала
-                if (!user?.terminals || user.terminals.length === 0) {
-                    console.log('User has no terminals, redirecting to terminal selection')
-                    router.push('/onboarding/terminal')
-                    return
-                }
+          if (authStore.isAuthenticated) {
+            const user = authStore.user
+            if (!user?.phone) {
+              router.push('/onboarding/welcome')
+              tmaInitComplete.value = true
+              return
             }
+            if (!user?.addresses || user.addresses.length === 0) {
+              router.push('/onboarding/address')
+              tmaInitComplete.value = true
+              return
+            }
+            if (!user?.terminals || user.terminals.length === 0) {
+              router.push('/onboarding/terminal')
+              tmaInitComplete.value = true
+              return
+            }
+          }
         }
       }
+      tmaInitComplete.value = true
     } else {
-        // Если запущено в браузере (десктоп)
-        // Проверяем, есть ли токен в localStorage
-        if (authService.isAuthenticated()) {
-            // Если токен есть, но пользователь не загружен - загружаем
-            if (!authStore.isAuthenticated) {
-                await authStore.fetchCurrentUser()
-            }
-            
-            // Если авторизован
-            if (authStore.isAuthenticated) {
-                const user = authStore.user
-                console.log('Desktop user loaded:', user)
-                const isAdmin = user?.role_name === 'superadmin' || user?.role_name === 'org_admin'
-                console.log('Desktop isAdmin:', isAdmin, 'route:', route.name)
-                
-                // Если на странице логина - редирект в зависимости от роли
-                if (route.name === 'login') {
-                    if (isAdmin) {
-                        console.log('Desktop: redirecting from login to /admin')
-                        router.push('/admin')
-                    } else {
-                        console.log('Desktop: redirecting from login to /')
-                        router.push('/')
-                    }
-                }
-                // Если на главной странице и админ - редирект в админку
-                else if (route.name === 'home' && isAdmin) {
-                    console.log('Desktop: redirecting from home to /admin')
-                    router.push('/admin')
-                }
-            }
-        } else {
-            // Если нет токена и не на странице логина - редирект на логин
-            if (route.name !== 'login' && route.name !== 'access-denied') {
-                router.push('/login')
-            }
+      // Не в Telegram — сразу показываем контент
+      tmaInitComplete.value = true
+
+      if (authService.isAuthenticated()) {
+        if (!authStore.isAuthenticated) {
+          await authStore.fetchCurrentUser()
         }
+        if (authStore.isAuthenticated) {
+          organizationStore.fetchOrganization().catch(() => {})
+          const user = authStore.user
+          const isAdmin = user?.role_name === 'superadmin' || user?.role_name === 'org_admin'
+          if (route.name === 'login') {
+            router.push(isAdmin ? '/admin' : '/')
+          } else if (route.name === 'home' && isAdmin) {
+            router.push('/admin')
+          }
+        }
+      } else if (route.name !== 'login' && route.name !== 'access-denied') {
+        router.push('/login')
+      }
     }
   } catch (err) {
     console.error('App Init Error:', err)
+    tmaInitComplete.value = true
   }
 })
 </script>
 
 <template>
   <div class="app-container" :style="primaryPaletteStyle">
-    <router-view></router-view>
-    <BottomNav v-if="showBottomNav" />
+    <!-- Multi-bot: в TMA не рендерим контент до завершения login, чтобы не было запросов со старым токеном -->
+    <div v-if="!tmaInitComplete" class="flex items-center justify-center min-h-screen">
+      <div class="animate-spin w-12 h-12 border-4 border-primary-600 border-t-transparent rounded-full"></div>
+    </div>
+    <template v-else>
+      <router-view></router-view>
+      <BottomNav v-if="showBottomNav" />
+    </template>
     <ToastNotification />
   </div>
 </template>

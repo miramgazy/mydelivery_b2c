@@ -57,6 +57,7 @@ INSTALLED_APPS = [
     'apps.products',
     'apps.orders',
     'apps.iiko_integration',
+    'apps.website',
 ]
 
 MIDDLEWARE = [
@@ -237,9 +238,12 @@ USE_X_FORWARDED_PORT = True
 SECURE_SSL_REDIRECT = False
 
 # Доверенные домены для CSRF (обязательно для работы за прокси)
-CSRF_TRUSTED_ORIGINS = [
+_csrf_origins = [
     'https://b2b-delivery.mevent.kz',
     'http://localhost:3005',
+    'http://127.0.0.1:3005',
 ]
+_csrf_extra = config('CSRF_TRUSTED_ORIGINS', default='').split(',')
+CSRF_TRUSTED_ORIGINS = _csrf_origins + [x.strip() for x in _csrf_extra if x.strip()]
 SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=False, cast=bool)
 CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=False, cast=bool)

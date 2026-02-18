@@ -72,6 +72,7 @@ def validate_telegram_init_data(init_data, bot_token=None):
             try:
                 receiver = json.loads(receiver_raw)
                 receiver_username = (receiver.get('username') or '').lstrip('@').strip()
+                logger.info(f"initData receiver: username={receiver_username!r}")
                 if receiver_username:
                     organization = Organization.objects.filter(
                         is_active=True,
@@ -80,11 +81,14 @@ def validate_telegram_init_data(init_data, bot_token=None):
                     if organization and organization.bot_token:
                         token_to_validate = organization.bot_token
                         logger.info(f"Resolved organization by receiver.username={receiver_username}: {organization.org_name}")
+                    else:
+                        logger.warning(f"No organization found for receiver.username={receiver_username} (bot_username not set or no bot_token)")
             except Exception as e:
                 logger.debug(f"Failed to parse receiver from initData: {e}")
 
         # Медленный fallback: если receiver не пришел/не настроен, пытаемся подобрать токен по hash (O(N)).
         if not token_to_validate:
+            logger.info("receiver not in initData or org not found by username, falling back to hash iteration")
             active_organizations = Organization.objects.filter(
                 is_active=True,
                 bot_token__isnull=False

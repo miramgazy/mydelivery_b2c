@@ -5,6 +5,7 @@ from django.db import transaction
 from django.utils import timezone
 from apps.products.models import Menu, ProductCategory, Product, Modifier, StopList
 from apps.organizations.models import Organization, Terminal
+from apps.orders.models import OrderItemModifier
 from apps.iiko_integration.client import IikoClient, IikoAPIException
 
 logger = logging.getLogger(__name__)
@@ -181,10 +182,14 @@ class MenuSyncService:
 
     def _sync_product_modifiers(self, product, group_modifiers, simple_modifiers, products_map):
         import uuid
-        # Clear existing modifiers to allow full resync
-        Modifier.objects.filter(product=product).delete()
-        
-        # Helper to create modifier
+        # Модификаторы, которые есть в заказах (OrderItemModifier), нельзя удалять (PROTECT).
+        # Используем update_or_create по modifier_code и удаляем только неиспользуемые.
+        used_modifier_ids = set(
+            OrderItemModifier.objects.values_list('modifier_id', flat=True)
+        )
+        seen_modifier_codes = set()
+
+        # Helper to create or update modifier
         def create_modifier_entry(mod_data, group_info=None):
             # mod_data usually has 'id' (product id), 'minAmount', 'maxAmount', 'required'
             # OR it might include nested 'product' info.
@@ -214,7 +219,6 @@ class MenuSyncService:
             if not name:
                 name = f"Modifier {mod_product_id}"
 
-            # If create_modifier is just linking, we generate a new ID for the link
             # Конвертируем mod_product_id в строку для сохранения в modifier_code
             modifier_code_str = str(mod_product_id).strip() if mod_product_id else None
             
@@ -224,22 +228,44 @@ class MenuSyncService:
                     f'modifier_code пустой или None после конвертации mod_product_id={mod_product_id}'
                 )
                 return
-            
-            Modifier.objects.create(
-                modifier_id=uuid.uuid4(),
-                modifier_name=name,
+
+            seen_modifier_codes.add(modifier_code_str)
+
+            min_amt = int(mod_data.get('minAmount') or 0)
+            max_amt = int(mod_data.get('maxAmount') or 1)
+            is_req = bool(mod_data.get('required')) or bool(group_info and group_info.get('required'))
+            price_val = float(price) if price is not None else 0.0
+
+            existing = Modifier.objects.filter(
                 product=product,
-                modifier_code=modifier_code_str, # Keep iiko product ID here (as string)
-                min_amount=int(mod_data.get('minAmount') or 0),
-                max_amount=int(mod_data.get('maxAmount') or 1),
-                is_required=bool(mod_data.get('required')) or bool(group_info and group_info.get('required')),
-                price=float(price) if price is not None else 0.0
-            )
-            
-            logger.debug(
-                f'Создан модификатор для продукта "{product.product_name}": '
-                f'name="{name}", modifier_code={modifier_code_str}'
-            )
+                modifier_code=modifier_code_str
+            ).first()
+            if existing:
+                existing.modifier_name = name
+                existing.min_amount = min_amt
+                existing.max_amount = max_amt
+                existing.is_required = is_req
+                existing.price = price_val
+                existing.save(update_fields=['modifier_name', 'min_amount', 'max_amount', 'is_required', 'price'])
+                logger.debug(
+                    f'Обновлен модификатор для продукта "{product.product_name}": '
+                    f'name="{name}", modifier_code={modifier_code_str}'
+                )
+            else:
+                Modifier.objects.create(
+                    modifier_id=uuid.uuid4(),
+                    modifier_name=name,
+                    product=product,
+                    modifier_code=modifier_code_str,
+                    min_amount=min_amt,
+                    max_amount=max_amt,
+                    is_required=is_req,
+                    price=price_val
+                )
+                logger.debug(
+                    f'Создан модификатор для продукта "{product.product_name}": '
+                    f'name="{name}", modifier_code={modifier_code_str}'
+                )
 
         # Process Group Modifiers
         for group in group_modifiers:
@@ -255,6 +281,17 @@ class MenuSyncService:
         # Process Simple Modifiers
         for mod in simple_modifiers:
             create_modifier_entry(mod)
+
+        # Удаляем только те модификаторы продукта, которых нет в iiko и которые не используются в заказах
+        to_delete = Modifier.objects.filter(product=product).exclude(
+            modifier_code__in=seen_modifier_codes
+        ).exclude(modifier_id__in=used_modifier_ids)
+        deleted_count = to_delete.count()
+        to_delete.delete()
+        if deleted_count:
+            logger.debug(
+                f'Удалено {deleted_count} неиспользуемых модификаторов продукта "{product.product_name}"'
+            )
 
     def _sync_modifier(self, item: Dict):
         # Placeholder for Modifier sync (if needed distinct from products)
@@ -543,10 +580,13 @@ class MenuSyncService:
         """
         Синхронизация модификаторов из формата внешнего меню (API v2).
         Модификаторы лежат в item.itemSizes[].itemModifierGroups[].items[].
+        Не удаляем модификаторы, на которые ссылаются OrderItemModifier (PROTECT).
         """
         item_sizes = item.get('itemSizes') or []
         seen_in_product = set()
-        Modifier.objects.filter(product=product).delete()
+        used_modifier_ids = set(
+            OrderItemModifier.objects.values_list('modifier_id', flat=True)
+        )
 
         for size in item_sizes:
             groups = size.get('itemModifierGroups') or []
@@ -589,16 +629,28 @@ class MenuSyncService:
                         max_amt = 1
                     is_required = group_required or min_amt > 0
                     try:
-                        Modifier.objects.create(
-                            modifier_id=uuid.uuid4(),
-                            modifier_name=name,
+                        existing = Modifier.objects.filter(
                             product=product,
-                            modifier_code=iiko_id_str,
-                            min_amount=min_amt,
-                            max_amount=max_amt,
-                            price=price_val,
-                            is_required=is_required,
-                        )
+                            modifier_code=iiko_id_str
+                        ).first()
+                        if existing:
+                            existing.modifier_name = name
+                            existing.min_amount = min_amt
+                            existing.max_amount = max_amt
+                            existing.price = price_val
+                            existing.is_required = is_required
+                            existing.save(update_fields=['modifier_name', 'min_amount', 'max_amount', 'price', 'is_required'])
+                        else:
+                            Modifier.objects.create(
+                                modifier_id=uuid.uuid4(),
+                                modifier_name=name,
+                                product=product,
+                                modifier_code=iiko_id_str,
+                                min_amount=min_amt,
+                                max_amount=max_amt,
+                                price=price_val,
+                                is_required=is_required,
+                            )
                     except (ValueError, TypeError) as e:
                         logger.warning(
                             "Пропущен модификатор %s для продукта %s: %s",
@@ -606,6 +658,12 @@ class MenuSyncService:
                             product.product_name,
                             e,
                         )
+
+        # Удаляем только те модификаторы продукта, которых нет в iiko и которые не используются в заказах
+        to_delete = Modifier.objects.filter(product=product).exclude(
+            modifier_code__in=seen_in_product
+        ).exclude(modifier_id__in=used_modifier_ids)
+        to_delete.delete()
 
     def sync_terminal_groups(self, terminal_groups_data: Dict[str, Any], organization: Organization = None):
         """

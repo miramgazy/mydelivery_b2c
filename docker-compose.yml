@@ -1,6 +1,24 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:15-alpine
+    container_name: tg_delivery_db
+    environment:
+      POSTGRES_DB: ${DB_NAME:-mydelivery_b2c}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: always
+    networks:
+      - default
+
   tg-redis:
     image: redis:alpine
     command: redis-server --appendonly yes
@@ -18,7 +36,6 @@ services:
   backend:
     build:
       context: ./backend
-    # Включаем логи доступа gunicorn
     command: >
       sh -c "python manage.py migrate &&
              python manage.py collectstatic --noinput &&
@@ -27,15 +44,19 @@ services:
       - django_static:/app/staticfiles
       - django_media:/app/media
     env_file: .env
+    environment:
+      - DB_HOST=db
     depends_on:
+      db:
+        condition: service_healthy
       tg-redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/ || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/api/health/ || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 40s
+      start_period: 60s
     restart: always
     networks:
       - default
@@ -81,6 +102,17 @@ services:
     networks:
       - default
 
+  # Веб-сайт доставки (отдельный контейнер, site.domain.com)
+  front-website:
+    build:
+      context: ./front-website
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: always
+    networks:
+      - default
+
   nginx:
     build:
       context: ./nginx
@@ -95,11 +127,14 @@ services:
         condition: service_healthy
       frontend:
         condition: service_started
+      front-website:
+        condition: service_started
     restart: always
     networks:
       - default
 
 volumes:
+  postgres_data:
   redis_data:
   django_static:
   django_media:

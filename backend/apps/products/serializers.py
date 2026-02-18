@@ -86,7 +86,10 @@ class ProductListSerializer(serializers.ModelSerializer):
             return False
         
         user = request.user
-        if not user.organization:
+        if not user.is_authenticated:
+            return False
+        organization = getattr(user, 'organization', None)
+        if not organization:
             return False
         
         # Получаем terminal_id из query параметров
@@ -95,7 +98,7 @@ class ProductListSerializer(serializers.ModelSerializer):
         from apps.products.models import StopList
         stop_list_query = StopList.objects.filter(
             product=obj,
-            organization=user.organization
+            organization=organization
         )
         
         # Если указан terminal_id, проверяем по нему
@@ -137,7 +140,10 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             return False
         
         user = request.user
-        if not user.organization:
+        if not user.is_authenticated:
+            return False
+        organization = getattr(user, 'organization', None)
+        if not organization:
             return False
         
         # Получаем terminal_id из query параметров
@@ -146,7 +152,7 @@ class ProductDetailSerializer(serializers.ModelSerializer):
         from apps.products.models import StopList
         stop_list_query = StopList.objects.filter(
             product=obj,
-            organization=user.organization
+            organization=organization
         )
         
         # Если указан terminal_id, проверяем по нему
