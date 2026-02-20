@@ -99,6 +99,25 @@
           ></textarea>
         </div>
 
+        <!-- Геопозиция текущего адреса -->
+        <div class="pt-2 border-t border-gray-100 dark:border-gray-700">
+          <p class="text-sm text-gray-600 dark:text-gray-400 mb-3">
+            {{ t('onboarding.address.geolocationHint') }}
+          </p>
+          <button
+            type="button"
+            @click="requestLocation"
+            :disabled="requestingLocation"
+            class="w-full py-3 rounded-xl font-semibold border-2 transition-all flex items-center justify-center gap-2"
+            :class="requestingLocation ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed' : 'bg-white dark:bg-gray-800 text-primary-600 border-primary-200 hover:bg-primary-50 dark:hover:bg-primary-900/20'"
+          >
+            <span v-if="requestingLocation" class="animate-spin w-5 h-5 border-2 border-primary-600 border-t-transparent rounded-full"></span>
+            <span v-else-if="locationObtained" class="text-green-600">✓</span>
+            <span v-else>📍</span>
+            <span>{{ requestingLocation ? t('onboarding.address.geolocationLoading') : t('onboarding.address.geolocationButton') }}</span>
+          </button>
+        </div>
+
         <!-- Buttons -->
         <div class="flex gap-3 pt-4">
           <button
@@ -132,6 +151,7 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '@/stores/auth'
 import deliveryAddressService from '@/services/delivery-address.service'
 import { getCities } from '@/services/organization.service'
+import telegramService from '@/services/telegram'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -149,6 +169,9 @@ const saving = ref(false)
 const error = ref('')
 const cities = ref([])
 const loadingCities = ref(false)
+const requestingLocation = ref(false)
+const locationObtained = ref(false)
+const pendingLocation = ref(null) // { latitude, longitude }
 
 onMounted(async () => {
   // Организация теперь определяется по контексту бота.
@@ -198,8 +221,8 @@ async function handleSubmit() {
     // Получаем название города для обратной совместимости
     const city = cities.value.find(c => c.id === form.city_id)
     
-    // Создаем адрес доставки
-    await deliveryAddressService.createAddress({
+    // Создаем адрес доставки (с координатами, если пользователь уточнил геопозицию)
+    const addressData = {
       city: form.city_id, // ID города из справочника
       city_name: city ? city.name : '', // Название города для обратной совместимости
       street_name: form.street_name,
@@ -207,7 +230,12 @@ async function handleSubmit() {
       flat: form.flat,
       comment: form.comment,
       is_default: true
-    })
+    }
+    if (pendingLocation.value?.latitude != null && pendingLocation.value?.longitude != null) {
+      addressData.latitude = pendingLocation.value.latitude
+      addressData.longitude = pendingLocation.value.longitude
+    }
+    await deliveryAddressService.createAddress(addressData)
     
     // Обновляем данные пользователя
     await authStore.fetchCurrentUser()
@@ -219,6 +247,28 @@ async function handleSubmit() {
     error.value = err.response?.data?.detail || t('onboarding.address.saveError')
   } finally {
     saving.value = false
+  }
+}
+
+async function requestLocation() {
+  if (requestingLocation.value) return
+  requestingLocation.value = true
+  locationObtained.value = false
+  pendingLocation.value = null
+  try {
+    const location = await telegramService.requestLocation()
+    if (location?.latitude != null && location?.longitude != null) {
+      pendingLocation.value = { latitude: location.latitude, longitude: location.longitude }
+      locationObtained.value = true
+      telegramService.showAlert(t('onboarding.address.geolocationSuccess'))
+    } else {
+      telegramService.showAlert(t('onboarding.address.geolocationFailed'))
+    }
+  } catch (err) {
+    console.error('Geolocation error', err)
+    telegramService.showAlert(err.message || t('onboarding.address.geolocationFailed'))
+  } finally {
+    requestingLocation.value = false
   }
 }
 
