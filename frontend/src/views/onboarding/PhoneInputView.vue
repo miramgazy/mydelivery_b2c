@@ -382,6 +382,13 @@ async function handleContinue() {
     // Обновляем данные пользователя в store
     await authStore.fetchCurrentUser()
     
+    // Проверка параметра возврата (если пользователь пришел из корзины/оформления)
+    const route = router.currentRoute.value
+    if (route.query.return) {
+      router.push(route.query.return)
+      return
+    }
+
     // Переходим на consent если is_bot_subscribed не выбран, иначе на адрес
     const user = authStore.user
     if (user?.is_bot_subscribed == null) {

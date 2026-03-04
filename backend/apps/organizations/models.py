@@ -89,6 +89,9 @@ class Organization(models.Model):
     bot_token = models.CharField('Токен Telegram бота', max_length=255, blank=True, null=True, unique=True)
     bot_username = models.CharField('Юзернейм Telegram бота', max_length=255, blank=True, null=True)
     
+    # Интеграции
+    yandex_maps_api_key = models.CharField('API-ключ Яндекс.Карт (Геокодер)', max_length=255, blank=True, null=True)
+    
     # Цвет оформления шапки и акцентов в TMA (hex, по умолчанию голубой как в TMA)
     primary_color = models.CharField(
         'Цвет оформления (шапка TMA)',

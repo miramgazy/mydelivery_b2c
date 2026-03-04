@@ -179,6 +179,37 @@
           </p>
         </div>
 
+        <!-- Yandex Maps API Key -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            API-ключ Яндекс.Карт (Геокодер)
+          </label>
+          <div class="relative">
+            <input
+              v-model="form.yandex_maps_api_key"
+              :type="showYandexKey ? 'text' : 'password'"
+              autocomplete="off"
+              autocapitalize="none"
+              autocorrect="off"
+              spellcheck="false"
+              class="w-full px-4 py-2.5 pr-12 border border-gray-300 dark:border-gray-600 rounded-lg
+                     bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+                     focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Введите API-ключ Яндекс.Карт"
+            />
+            <button
+              type="button"
+              @click="showYandexKey = !showYandexKey"
+              class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <Icon :icon="showYandexKey ? 'mdi:eye-off' : 'mdi:eye'" class="w-5 h-5" />
+            </button>
+          </div>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Используется для автоматического определения координат по введенному адресу
+          </p>
+        </div>
+
         <!-- Цвет оформления (шапка TMA) -->
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -311,11 +342,13 @@ const form = ref({
   address: '',
   bot_token: '',
   bot_username: '',
+  yandex_maps_api_key: '',
   primary_color: ''
 })
 
 const showApiKey = ref(false)
 const showBotToken = ref(false)
+const showYandexKey = ref(false)
 const showColorPicker = ref(false)
 const colorPickerValue = ref('#0284c7')
 const savingColor = ref(false)
@@ -343,6 +376,7 @@ const loadOrganization = async () => {
         address: org.address || '',
         bot_token: org.bot_token || '',
         bot_username: org.bot_username || '',
+        yandex_maps_api_key: org.yandex_maps_api_key || '',
         primary_color: org.primary_color || '#0284c7'
       }
     }

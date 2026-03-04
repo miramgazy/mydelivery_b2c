@@ -8,6 +8,7 @@ from decimal import Decimal
 from typing import Dict, List, Optional, Union, Any
 import random
 import re
+import requests
 from django.db import transaction
 from django.utils import timezone
 from .models import Order, OrderItem, OrderItemModifier, IikoRequestLog
@@ -196,20 +197,23 @@ class OrderService:
         delivery_type = (validated_data.get('delivery_type') or 'delivery').strip().lower()
         delivery_block = None
         if delivery_type == 'delivery' and delivery_address_id:
+            is_unverified = delivery_address and not delivery_address.is_verified
+            unverified_msg = "Стоимость доставки не расчитан из за отсутствие геоданных."
+            
             if delivery_cost is not None:
                 try:
                     delivery_cost_value = Decimal(str(delivery_cost))
                     if delivery_cost_value == 0:
-                        delivery_block = "Доставка БЕСПЛАТНАЯ"
+                        delivery_block = unverified_msg if is_unverified else "Доставка БЕСПЛАТНАЯ"
                     else:
                         delivery_block = f"Доставка ПЛАТНАЯ - сумма доставки {delivery_cost_value} ₸"
                 except Exception:
                     if delivery_cost == 0 or str(delivery_cost).strip() == '0':
-                        delivery_block = "Доставка БЕСПЛАТНАЯ"
+                        delivery_block = unverified_msg if is_unverified else "Доставка БЕСПЛАТНАЯ"
                     else:
                         delivery_block = f"Доставка ПЛАТНАЯ - сумма доставки {delivery_cost} ₸"
             else:
-                delivery_block = "Доставка БЕСПЛАТНАЯ"
+                delivery_block = unverified_msg if is_unverified else "Доставка БЕСПЛАТНАЯ"
 
         # Блок Клиента: user_comment если заполнен
         comment_parts = [payment_block]
@@ -762,3 +766,74 @@ class OrderService:
             }
         
         return delivery_point
+
+def geocode_address(address: DeliveryAddress, api_key: str) -> bool:
+    """
+    Геокодирование адреса через Яндекс.Карты Геокодер API.
+    Обновляет модель DeliveryAddress и возвращает True при успехе.
+    """
+    if not api_key:
+        logger.warning(f"Не задан API-ключ Яндекс.Карт для адреса {address.id}")
+        return False
+        
+    # Собираем строку адреса (город, улица, дом)
+    parts = []
+    city = address.city.name if address.city else address.city_name
+    if city:
+        parts.append(city)
+         
+    street = address.street_name or (address.street.street_name if address.street else '')
+    if street:
+        parts.append(street)
+         
+    if address.house:
+        parts.append(address.house)
+         
+    address_str = ", ".join([p for p in parts if p])
+    if not address_str:
+        return False
+         
+    url = "https://geocode-maps.yandex.ru/1.x/"
+    params = {
+        'apikey': api_key,
+        'format': 'json',
+        'geocode': address_str,
+        'results': 1
+    }
+    
+    try:
+        response = requests.get(url, params=params, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        
+        feature_member = data.get('response', {}).get('GeoObjectCollection', {}).get('featureMember', [])
+        if not feature_member:
+            logger.info(f"Yandex Geocoder не нашел координаты для адреса '{address_str}' ({address.id})")
+            return False
+             
+        geo_object = feature_member[0].get('GeoObject', {})
+        point = geo_object.get('Point', {}).get('pos', '')
+        
+        if point:
+            # Яндекс возвращает `долгота широта`
+            lon, lat = point.split()
+            address.longitude = Decimal(lon)
+            address.latitude = Decimal(lat)
+            address.is_verified = True
+            address.save(update_fields=['latitude', 'longitude', 'is_verified', 'updated_at'])
+            
+            # Извлекаем уточненный адрес, если необходимо (пока просто логируем)
+            meta_data = geo_object.get('metaDataProperty', {}).get('GeocoderMetaData', {})
+            normalized_text = meta_data.get('text', '')
+            
+            logger.info(f"Успешно получены координаты dla адреса {address.id} ('{normalized_text}'): lat={lat}, lon={lon}")
+            return True
+        else:
+            logger.warning(f"Яндекс вернул пустые координаты для '{address_str}'")
+             
+    except requests.RequestException as e:
+        logger.error(f"HTTP ошибка при запросе к Яндекс Геокодеру для адреса {address.id}: {e}")
+    except (ValueError, IndexError, TypeError, AttributeError) as e:
+        logger.error(f"Ошибка при парсинге ответа Яндекс Геокодера для адреса {address.id}: {e}")
+        
+    return False

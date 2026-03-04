@@ -624,6 +624,42 @@ class DeliveryAddressViewSet(viewsets.ModelViewSet):
 
         return Response(DeliveryAddressSerializer(address).data)
 
+    @action(detail=True, methods=['post'])
+    def geocode(self, request, pk=None):
+        """
+        Запускает геокодирование адреса доставки через Яндекс.Карты.
+        Если успешно - возвращает обновленные координаты и сохраняет.
+        Если адрес не найден - 404.
+        """
+        address = self.get_object()
+        
+        organization = request.user.organization
+        if not organization:
+            return Response(
+                {'detail': 'У пользователя не установлена организация'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        api_key = getattr(organization, 'yandex_maps_api_key', None)
+        if not api_key:
+            return Response(
+                {'detail': 'API-ключ Яндекс.Карт не настроен для этой организации'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        from apps.orders.services import geocode_address
+        
+        success = geocode_address(address, api_key)
+        
+        if success:
+            address.refresh_from_db()
+            return Response(DeliveryAddressSerializer(address).data)
+        else:
+            return Response(
+                {'detail': 'Адрес не найден. Уточните улицу и номер дома.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
 
 class BillingPhoneViewSet(viewsets.ModelViewSet):
     """ViewSet для управления дополнительными номерами телефонов (Kaspi и др.)"""

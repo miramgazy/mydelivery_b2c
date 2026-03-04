@@ -41,6 +41,14 @@ class DeliveryAddressService {
         const response = await api.post(`/addresses/${id}/set_default/`)
         return response.data
     }
+
+    /**
+     * Геокодировать адрес с помощью Яндекс.Карт API на бекенде
+     */
+    async geocodeAddress(id) {
+        const response = await api.post(`/addresses/${id}/geocode/`)
+        return response.data
+    }
 }
 
 export default new DeliveryAddressService()

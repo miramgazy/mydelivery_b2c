@@ -41,6 +41,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             'iiko_organization_id', 'api_key',
             'phone', 'address',
             'bot_token', 'bot_username',
+            'yandex_maps_api_key',
             'primary_color',
             'terminals', 'is_active', 'created_at', 'updated_at'
         ]
@@ -48,6 +49,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             'api_key': {'write_only': False},  # Позволяем читать для отображения
             'bot_token': {'write_only': False},  # Позволяем читать для отображения
+            'yandex_maps_api_key': {'write_only': False},
         }
 
 

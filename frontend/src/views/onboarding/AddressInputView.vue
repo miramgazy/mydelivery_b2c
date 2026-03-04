@@ -136,7 +136,7 @@
               <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
               <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            <span>{{ saving ? t('common.saving') : t('onboarding.address.submit') }}</span>
+            <span>{{ isGeocoding ? 'Проверка адреса...' : (saving ? t('common.saving') : t('onboarding.address.submit')) }}</span>
           </button>
         </div>
       </form>
@@ -166,12 +166,17 @@ const form = reactive({
 })
 
 const saving = ref(false)
+const isGeocoding = ref(false)
 const error = ref('')
 const cities = ref([])
 const loadingCities = ref(false)
 const requestingLocation = ref(false)
 const locationObtained = ref(false)
 const pendingLocation = ref(null) // { latitude, longitude }
+
+// Переменные для механизма фоллбека геокодера
+const currentAddressId = ref(null)
+const geocodeAttempted = ref(false)
 
 onMounted(async () => {
   // Организация теперь определяется по контексту бота.
@@ -215,13 +220,14 @@ async function handleSubmit() {
   }
 
   saving.value = true
+  isGeocoding.value = true
   error.value = ''
 
   try {
     // Получаем название города для обратной совместимости
     const city = cities.value.find(c => c.id === form.city_id)
     
-    // Создаем адрес доставки (с координатами, если пользователь уточнил геопозицию)
+    // Создаем или обновляем адрес доставки
     const addressData = {
       city: form.city_id, // ID города из справочника
       city_name: city ? city.name : '', // Название города для обратной совместимости
@@ -235,18 +241,41 @@ async function handleSubmit() {
       addressData.latitude = pendingLocation.value.latitude
       addressData.longitude = pendingLocation.value.longitude
     }
-    await deliveryAddressService.createAddress(addressData)
     
-    // Обновляем данные пользователя
-    await authStore.fetchCurrentUser()
-    
-    // Переходим к выбору терминала
-    router.push('/onboarding/terminal')
+    let addressId = currentAddressId.value
+    if (addressId) {
+      await deliveryAddressService.updateAddress(addressId, addressData)
+    } else {
+      const created = await deliveryAddressService.createAddress(addressData)
+      addressId = created.id
+      currentAddressId.value = addressId
+    }
+
+    // Попытка геокодирования
+    try {
+      await deliveryAddressService.geocodeAddress(addressId)
+      // Успешно - переходим дальше
+      await authStore.fetchCurrentUser()
+      router.push('/onboarding/terminal')
+    } catch (geoErr) {
+      // Ошибка геокодирования (скорее всего адрес не найден)
+      if (!geocodeAttempted.value) {
+        // Первый раз показываем ошибку
+        geocodeAttempted.value = true
+        error.value = 'Адрес не найден. Уточните улицу и номер дома, затем нажмите "Продолжить" снова, чтобы пропустить.'
+        return // Останавливаем переход, давая пользователю шанс исправить
+      } else {
+        // Второй раз игнорируем ошибку и переходим (фоллбек)
+        await authStore.fetchCurrentUser()
+        router.push('/onboarding/terminal')
+      }
+    }
   } catch (err) {
     console.error('Save address error:', err)
     error.value = err.response?.data?.detail || t('onboarding.address.saveError')
   } finally {
     saving.value = false
+    isGeocoding.value = false
   }
 }
 

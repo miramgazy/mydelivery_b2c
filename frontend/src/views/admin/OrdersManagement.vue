@@ -172,6 +172,14 @@
 
             <!-- Content -->
             <div class="p-6 space-y-6">
+              <!-- Uncalculated Delivery Warning -->
+              <div v-if="selectedOrder && !isPickup(selectedOrder) && hasUncalculatedDelivery(selectedOrder)" class="p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg flex items-start gap-3">
+                <Icon icon="mdi:alert" class="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
+                <p class="text-sm text-amber-800 dark:text-amber-200">
+                  Стоимость доставки не была рассчитана автоматически из-за отсутствия геоданных клиента! Уточните стоимость у клиента или курьера.
+                </p>
+              </div>
+
               <!-- Order Info -->
               <div class="grid grid-cols-2 gap-4">
                 <div>
@@ -190,6 +198,17 @@
                   <p class="text-sm text-gray-500 dark:text-gray-400">Дата создания</p>
                   <p class="text-base font-medium text-gray-900 dark:text-white">
                     {{ formatDate(selectedOrder.created_at) }} {{ formatTime(selectedOrder.created_at) }}
+                  </p>
+                </div>
+                <div>
+                  <p class="text-sm text-gray-500 dark:text-gray-400">Тип заказа</p>
+                  <p class="text-base font-medium text-gray-900 dark:text-white">
+                    <span v-if="isPickup(selectedOrder)" class="inline-flex items-center gap-1">
+                      <Icon icon="mdi:shopping-outline" class="w-4 h-4" /> Самовывоз
+                    </span>
+                    <span v-else class="inline-flex items-center gap-1">
+                      <Icon icon="mdi:truck-delivery-outline" class="w-4 h-4" /> Доставка
+                    </span>
                   </p>
                 </div>
                 <div>
@@ -446,5 +465,15 @@ const extractPhoneFromComment = (comment) => {
     }
   }
   return null
+}
+
+const isPickup = (order) => {
+  if (!order) return false
+  return !order.delivery_address && !order.delivery_address_full && !order.latitude && !order.longitude
+}
+
+const hasUncalculatedDelivery = (order) => {
+  if (!order || !order.comment) return false
+  return order.comment.includes('Стоимость доставки не расчитан из за отсутствие геоданных')
 }
 </script>
