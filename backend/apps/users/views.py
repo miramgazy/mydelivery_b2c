@@ -10,6 +10,7 @@ from django.db import transaction
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
 import re
+import threading
 import uuid
 from .models import User, Role, DeliveryAddress, BillingPhone, BotSyncToken
 from .serializers import (
@@ -627,38 +628,30 @@ class DeliveryAddressViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=['post'])
     def geocode(self, request, pk=None):
         """
-        Запускает геокодирование адреса доставки через Яндекс.Карты.
-        Если успешно - возвращает обновленные координаты и сохраняет.
-        Если адрес не найден - 404.
+        Принимает запрос на геокодирование адреса через Яндекс.Карты.
+        Выполняется в фоне; клиенту сразу возвращается 202 Accepted.
+        Ошибки геокодера не возвращаются пользователю (логируются на сервере).
         """
         address = self.get_object()
-        
-        organization = request.user.organization
-        if not organization:
-            return Response(
-                {'detail': 'У пользователя не установлена организация'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-            
-        api_key = getattr(organization, 'yandex_maps_api_key', None)
-        if not api_key:
-            return Response(
-                {'detail': 'API-ключ Яндекс.Карт не настроен для этой организации'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-            
-        from apps.orders.services import geocode_address
-        
-        success = geocode_address(address, api_key)
-        
-        if success:
-            address.refresh_from_db()
-            return Response(DeliveryAddressSerializer(address).data)
-        else:
-            return Response(
-                {'detail': 'Адрес не найден. Уточните улицу и номер дома.'},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        address_id = address.pk
+        organization = getattr(request.user, 'organization', None)
+        api_key = getattr(organization, 'yandex_maps_api_key', None) if organization else None
+
+        def run_geocode():
+            try:
+                from apps.orders.services import geocode_address
+                address_obj = DeliveryAddress.objects.filter(pk=address_id).select_related('city', 'street').first()
+                if address_obj:
+                    geocode_address(address_obj, api_key or '')
+            except Exception as e:
+                logger.warning("Фоновое геокодирование адреса %s не удалось: %s", address_id, e)
+
+        thread = threading.Thread(target=run_geocode, daemon=True)
+        thread.start()
+        return Response(
+            {'status': 'accepted', 'message': 'Геокодирование выполняется в фоне'},
+            status=status.HTTP_202_ACCEPTED
+        )
 
 
 class BillingPhoneViewSet(viewsets.ModelViewSet):

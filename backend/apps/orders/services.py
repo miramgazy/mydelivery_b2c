@@ -826,7 +826,7 @@ def geocode_address(address: DeliveryAddress, api_key: str) -> bool:
             meta_data = geo_object.get('metaDataProperty', {}).get('GeocoderMetaData', {})
             normalized_text = meta_data.get('text', '')
             
-            logger.info(f"Успешно получены координаты dla адреса {address.id} ('{normalized_text}'): lat={lat}, lon={lon}")
+            logger.info(f"Успешно получены координаты для адреса {address.id} ('{normalized_text}'): lat={lat}, lon={lon}")
             return True
         else:
             logger.warning(f"Яндекс вернул пустые координаты для '{address_str}'")
