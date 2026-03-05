@@ -276,7 +276,7 @@ async function createAddress() {
 
   saving.value = true
   try {
-    await deliveryAddressService.createAddress({
+    const created = await deliveryAddressService.createAddress({
       city_name: form.city_name,
       street_name: form.street_name,
       house: form.house,
@@ -286,6 +286,11 @@ async function createAddress() {
       comment: form.comment,
       is_default: !!form.is_default
     })
+
+    // Геокодирование в фоне, один раз; ошибки пользователю не показываем
+    if (created?.id) {
+      deliveryAddressService.geocodeAddress(created.id).catch(() => {})
+    }
 
     // reset
     form.city_name = ''

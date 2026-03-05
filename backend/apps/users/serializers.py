@@ -90,6 +90,7 @@ class UserSerializer(serializers.ModelSerializer):
     organization_name = serializers.CharField(source='organization.org_name', read_only=True, default=None)
     organization_bot_username = serializers.SerializerMethodField()
 
+    @extend_schema_field(OpenApiTypes.STR)
     def get_organization_bot_username(self, obj):
         if obj.organization and obj.organization.bot_username:
             return obj.organization.bot_username.lstrip('@')
@@ -98,14 +99,16 @@ class UserSerializer(serializers.ModelSerializer):
     terminals = serializers.SerializerMethodField()
     addresses = DeliveryAddressSerializer(many=True, read_only=True)
     billing_phones = serializers.SerializerMethodField()
-    
+
+    @extend_schema_field(TerminalSerializer(many=True))
     def get_terminals(self, obj):
         """Возвращает только активные терминалы пользователя в контексте текущей организации"""
         qs = obj.terminals.filter(is_active=True)
         if obj.organization_id:
             qs = qs.filter(organization_id=obj.organization_id)
         return TerminalSerializer(qs, many=True).data
-    
+
+    @extend_schema_field(BillingPhoneSerializer(many=True))
     def get_billing_phones(self, obj):
         """Возвращает биллинг-номера пользователя, безопасно обрабатывая случай отсутствия таблицы"""
         try:
@@ -201,6 +204,11 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             instance.terminals.set(terminals)
         
         return instance
+
+
+class ClientLogResponseSerializer(serializers.Serializer):
+    """Ответ эндпоинта приёма клиентских логов"""
+    ok = serializers.BooleanField(read_only=True)
 
 
 class TelegramAuthSerializer(serializers.Serializer):

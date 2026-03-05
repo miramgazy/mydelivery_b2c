@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
+from drf_spectacular.types import OpenApiTypes
 from .models import Menu, ProductCategory, Product, Modifier, StopList, FastMenuGroup, FastMenuItem
 from apps.organizations.models import Organization
 
@@ -19,6 +21,7 @@ class MenuSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['menu_id', 'menu_name', 'organization', 'created_at', 'updated_at']
 
+    @extend_schema_field(OpenApiTypes.STR)
     def get_price_category_name(self, obj):
         if obj.metadata and isinstance(obj.metadata, dict):
             return obj.metadata.get('price_category_name') or ''
@@ -78,7 +81,8 @@ class ProductListSerializer(serializers.ModelSerializer):
             'description', 'image_url', 'category',
             'is_available', 'has_modifiers', 'order_index', 'is_in_stop_list'
         ]
-    
+
+    @extend_schema_field(OpenApiTypes.BOOL)
     def get_is_in_stop_list(self, obj):
         """Проверяет, находится ли продукт в стоп-листе для указанного терминала"""
         request = self.context.get('request')
@@ -132,7 +136,8 @@ class ProductDetailSerializer(serializers.ModelSerializer):
             'is_available', 'has_modifiers', 'modifiers',
             'organization', 'order_index', 'is_in_stop_list'
         ]
-    
+
+    @extend_schema_field(OpenApiTypes.BOOL)
     def get_is_in_stop_list(self, obj):
         """Проверяет, находится ли продукт в стоп-листе для указанного терминала"""
         request = self.context.get('request')
@@ -226,10 +231,12 @@ class FastMenuGroupSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
     
+    @extend_schema_field(OpenApiTypes.INT)
     def get_items_count(self, obj):
         """Возвращает количество элементов в группе"""
         return obj.items.count()
-    
+
+    @extend_schema_field(OpenApiTypes.URI)
     def get_image_url(self, obj):
         """Полный URL изображения для отображения"""
         if obj.image:
@@ -244,11 +251,12 @@ class FastMenuGroupPublicSerializer(serializers.ModelSerializer):
     """Сериализатор для группы быстрого меню (для TMA)"""
     products = serializers.SerializerMethodField()
     image_url = serializers.SerializerMethodField()
-    
+
     class Meta:
         model = FastMenuGroup
         fields = ['id', 'name', 'image_url', 'products', 'order']
-    
+
+    @extend_schema_field(OpenApiTypes.URI)
     def get_image_url(self, obj):
         """Полный URL изображения для плитки в TMA"""
         if obj.image:
@@ -257,7 +265,8 @@ class FastMenuGroupPublicSerializer(serializers.ModelSerializer):
                 return request.build_absolute_uri(obj.image.url)
             return obj.image.url
         return None
-    
+
+    @extend_schema_field(OpenApiTypes.OBJECT)
     def get_products(self, obj):
         """Возвращает список продуктов группы, исключая те, что в стоп-листе"""
         request = self.context.get('request')

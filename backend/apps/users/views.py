@@ -17,7 +17,7 @@ from .models import User, Role, DeliveryAddress, BillingPhone, BotSyncToken
 from .serializers import (
     UserSerializer, UserCreateSerializer, UserUpdateSerializer,
     RoleSerializer, DeliveryAddressSerializer, BillingPhoneSerializer,
-    TelegramAuthSerializer
+    TelegramAuthSerializer, ClientLogResponseSerializer,
 )
 from .telegram_auth import validate_telegram_init_data, TelegramAuthException
 from core.permissions import IsSuperAdmin, IsOrgAdmin, IsOwner
@@ -234,6 +234,7 @@ class ClientLogView(viewsets.ViewSet):
     """
     permission_classes = [permissions.AllowAny]
 
+    @extend_schema(request=None, responses={200: ClientLogResponseSerializer})
     @action(detail=False, methods=['post'])
     def log(self, request):
         payload = request.data or {}
