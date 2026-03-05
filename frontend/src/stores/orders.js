@@ -173,6 +173,27 @@ export const useOrdersStore = defineStore('orders', () => {
     }
 
     /**
+     * Повторить заказ: создаётся новый заказ и в iiko отправляется сохранённый запрос.
+     * Сейчас запрос в iiko уходит с сохранённым телом (query_to_iiko) существующего заказа,
+     * новый заказ в базе не создаётся.
+     */
+    async function repeatOrder(orderId) {
+        loading.value = true
+        error.value = null
+
+        try {
+            const response = await api.post(`/orders/${orderId}/repeat/`)
+            return response.data
+        } catch (err) {
+            console.error('Repeat order error:', err)
+            error.value = err.response?.data?.error || 'Не удалось повторить заказ'
+            throw err
+        } finally {
+            loading.value = false
+        }
+    }
+
+    /**
      * Загрузить типы оплаты для организации
      */
     async function fetchPaymentTypes(organizationId) {
@@ -219,6 +240,7 @@ export const useOrdersStore = defineStore('orders', () => {
         fetchOrderStatus,
         fetchPaymentTypes,
         clearCurrentOrder,
+        repeatOrder,
         lastStatusCheck
     }
 })

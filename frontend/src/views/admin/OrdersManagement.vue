@@ -116,7 +116,7 @@
                 </span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                <div class="flex items-center justify-center gap-2">
+                <div class="flex items-center justify-center gap-2 flex-wrap">
                   <button
                     @click="handleViewOrder(order)"
                     class="flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors"
@@ -244,6 +244,20 @@
                   <span :class="getStatusClass(selectedOrder.status)">
                     {{ getStatusLabel(selectedOrder.status) }}
                   </span>
+                  <button
+                    v-if="canRepeatOrder(selectedOrder)"
+                    @click="handleRepeatOrder(selectedOrder)"
+                    :disabled="repeatingOrderId === selectedOrder.id"
+                    class="mt-2 inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/20 rounded-lg transition-colors disabled:opacity-50"
+                    title="Повторно отправить запрос в iiko для этого заказа"
+                  >
+                    <Icon
+                      icon="mdi:content-copy"
+                      :class="{ 'animate-spin': repeatingOrderId === selectedOrder.id }"
+                      class="w-4 h-4"
+                    />
+                    <span>Повторить</span>
+                  </button>
                 </div>
                 <div>
                   <p class="text-sm text-gray-500 dark:text-gray-400">Тип оплаты</p>
@@ -364,7 +378,21 @@ const ordersStore = useOrdersStore()
 
 const selectedOrder = ref(null)
 const refreshingOrderId = ref(null)
+const repeatingOrderId = ref(null)
 const error = ref(null)
+
+const FIVE_MINUTES_MS = 5 * 60 * 1000
+const TWENTY_MINUTES_MS = 20 * 60 * 1000
+
+/** Кнопка «Повторить» доступна для заказа со статусом «В процессе iiko»,
+ *  если с момента создания прошло не менее 5 минут и не более 20 минут
+ */
+function canRepeatOrder(order) {
+  if (!order || order.status !== 'InProgress') return false
+  const created = new Date(order.created_at).getTime()
+  const age = Date.now() - created
+  return age >= FIVE_MINUTES_MS && age <= TWENTY_MINUTES_MS
+}
 
 const loading = computed(() => ordersStore.loading)
 const orders = computed(() => ordersStore.orders || [])
@@ -423,6 +451,21 @@ const handleRefreshStatus = async (order) => {
     error.value = 'Не удалось обновить статус заказа'
   } finally {
     refreshingOrderId.value = null
+  }
+}
+
+const handleRepeatOrder = async (order) => {
+  repeatingOrderId.value = order.id
+  error.value = null
+
+  try {
+    const updated = await ordersStore.repeatOrder(order.id)
+    selectedOrder.value = updated
+    await loadOrders()
+  } catch (err) {
+    error.value = ordersStore.error || 'Не удалось повторить заказ'
+  } finally {
+    repeatingOrderId.value = null
   }
 }
 

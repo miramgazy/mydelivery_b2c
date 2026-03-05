@@ -4,6 +4,8 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from django.db import transaction
+from django.utils import timezone
+from datetime import timedelta
 from .models import Order, OrderItem, OrderItemModifier
 from .serializers import (
     OrderListSerializer, OrderDetailSerializer, OrderCreateSerializer
@@ -35,8 +37,8 @@ class OrderViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             # Создавать могут все авторизованные
             permission_classes = [permissions.IsAuthenticated]
-        elif self.action in ['update', 'partial_update', 'destroy']:
-            # Редактировать могут только админы
+        elif self.action in ['update', 'partial_update', 'destroy', 'repeat']:
+            # Редактировать и повторять могут только админы
             permission_classes = [IsSuperAdmin | IsOrgAdmin]
         else:
             # Просмотр - авторизованные
@@ -206,7 +208,72 @@ class OrderViewSet(viewsets.ModelViewSet):
         return Response(
             OrderDetailSerializer(order).data
         )
-    
+
+    @action(detail=True, methods=['post'])
+    def repeat(self, request, pk=None):
+        """
+        Повторная отправка заказа в iiko:
+        - в iiko уходит сохранённый запрос (query_to_iiko) текущего заказа;
+        - новый заказ в базе не создаётся, обновляется существующий.
+        Доступно только для заказов со статусом «В процессе iiko»,
+        если с момента создания прошло не менее 5 минут и не более 20 минут.
+        """
+        order = self.get_object()
+
+        if not (request.user.is_superadmin or request.user.is_org_admin):
+            return Response(
+                {'error': 'Недостаточно прав для повторной отправки заказа'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if order.status != Order.STATUS_IN_PROGRESS:
+            return Response(
+                {'error': 'Повторить можно только заказ со статусом «В процессе iiko»'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not order.query_to_iiko:
+            return Response(
+                {'error': 'У заказа отсутствует сохранённый запрос в iiko'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        now = timezone.now()
+        age = now - order.created_at
+
+        if age < timedelta(minutes=5):
+            return Response(
+                {'error': 'Повторить можно не ранее чем через 5 минут после создания заказа'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if age > timedelta(minutes=20):
+            return Response(
+                {'error': 'Повторить заказ можно только в течение 20 минут после его создания'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            order_service = OrderService()
+            order = order_service.repeat_order_to_iiko(order)
+            return Response(
+                OrderDetailSerializer(order).data,
+                status=status.HTTP_200_OK
+            )
+        except ValueError as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f'Ошибка повторной отправки заказа: {e}', exc_info=True)
+            return Response(
+                {'error': f'Не удалось повторить заказ: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     @action(detail=False, methods=['get'])
     def my_orders(self, request):
         """

@@ -461,6 +461,51 @@ class OrderService:
                 order.save(update_fields=['status', 'error_message', 'query_to_iiko'])
                 return False
 
+    @transaction.atomic
+    def repeat_order_to_iiko(self, order: Order) -> Order:
+        """
+        Повторно отправляет в iiko существующий заказ, используя сохранённый
+        JSON-запрос в поле query_to_iiko. Новый заказ в базе не создаётся.
+        """
+        if not order.query_to_iiko:
+            raise ValueError('У заказа отсутствует сохранённый запрос в iiko (query_to_iiko)')
+
+        payload = order.query_to_iiko
+        client = IikoClient(order.organization.api_key)
+
+        try:
+            response = client.create_delivery_order(payload)
+        except IikoAPIException as e:
+            logger.error(f'Повторная отправка заказа {order.order_id} в iiko: {e}')
+            order.status = Order.STATUS_ERROR
+            order.error_message = str(e)
+            order.iiko_response = {'error': str(e)}
+            order.save(update_fields=['status', 'error_message', 'iiko_response'])
+            raise
+
+        order_info = response.get('orderInfo', {})
+        correlation_id = response.get('correlationId')
+
+        order.iiko_order_id = order_info.get('id')
+        order.correlation_id = correlation_id
+        order.status = order_info.get('creationStatus') or Order.STATUS_IN_PROGRESS
+        order.sent_to_iiko_at = timezone.now()
+        order.iiko_response = response
+        order.error_message = None
+        order.save(update_fields=[
+            'iiko_order_id', 'correlation_id', 'status',
+            'sent_to_iiko_at', 'iiko_response', 'error_message'
+        ])
+
+        IikoRequestLog.objects.create(
+            order=order,
+            payload=payload,
+            success=True,
+        )
+
+        logger.info(f'Повторная отправка заказа {order.order_id} в iiko (correlationId: {correlation_id})')
+        return order
+
     def update_order_creation_status(self, order: Order) -> Dict:
         """
         Запрос статуса создания заказа в iiko по correlationId
