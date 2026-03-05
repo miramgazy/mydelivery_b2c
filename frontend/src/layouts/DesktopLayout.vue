@@ -169,6 +169,25 @@
           </router-link>
         </div>
 
+        <!-- Marketing Section -->
+        <div class="mb-6">
+          <div 
+            class="flex items-center gap-3 px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+            :class="{ 'justify-center': !sidebarOpen }"
+          >
+            <Icon icon="mdi:bullhorn" class="w-4 h-4" />
+            <span v-if="sidebarOpen">Маркетинг</span>
+          </div>
+          <router-link
+            to="/admin/mailings"
+            class="nav-item"
+            active-class="nav-item-active"
+          >
+            <Icon icon="mdi:message-badge" class="w-5 h-5" />
+            <span v-if="sidebarOpen">Рассылки</span>
+          </router-link>
+        </div>
+
         <!-- Logout -->
         <div class="pt-4 border-t border-gray-200 dark:border-gray-700">
           <button
@@ -242,6 +261,7 @@ const pageTitle = computed(() => {
     '/admin/products': 'Продукты',
     '/admin/modifiers': 'Модификаторы',
     '/admin/fast-menu': 'Быстрое меню',
+    '/admin/mailings': 'Мультиязычные рассылки',
   }
   return titles[route.path] || 'Админ панель'
 })

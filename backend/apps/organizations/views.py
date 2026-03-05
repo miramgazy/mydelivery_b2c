@@ -7,12 +7,23 @@ from django.shortcuts import get_object_or_404
 
 logger = logging.getLogger(__name__)
 
-from .models import Organization, Terminal, Street, PaymentType, City, Discount
+from .models import (
+    Organization,
+    Terminal,
+    Street,
+    PaymentType,
+    City,
+    Discount,
+    MailingTask,
+    MailingAudienceType,
+)
 from .serializers import (
     OrganizationSerializer, TerminalSerializer,
     StreetSerializer, PaymentTypeSerializer,
     CitySerializer, ExternalMenuSerializer, DiscountSerializer
 )
+from .mailing_serializers import MailingTaskSerializer
+from .tasks import send_mailing_test_to_chat, get_mailing_recipients_queryset
 from apps.iiko_integration.client import IikoClient, IikoAPIException
 from apps.iiko_integration.services import MenuSyncService, StopListSyncService
 from apps.products.tasks import is_global_sync_allowed, is_working_time
@@ -788,3 +799,74 @@ class DiscountViewSet(viewsets.ReadOnlyModelViewSet):
             'message': f'Удалено неактивных скидок: {deleted_count}',
             'deleted': deleted_count,
         })
+
+
+class MailingTaskViewSet(viewsets.ModelViewSet):
+    """
+    Управление задачами рассылок для организации.
+    Админы видят и создают рассылки только в рамках своей организации.
+    """
+    serializer_class = MailingTaskSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter]
+    search_fields = ['title']
+    filterset_fields = ['status']
+
+    def get_queryset(self):
+        user = self.request.user
+        qs = MailingTask.objects.select_related('organization')
+        if hasattr(user, 'organization') and user.organization:
+            qs = qs.filter(organization=user.organization)
+        return qs.order_by('-created_at')
+
+    def perform_create(self, serializer):
+        serializer.save()
+
+    @action(detail=False, methods=['get'], url_path='count-recipients')
+    def count_recipients(self, request):
+        """
+        Подсчет количества получателей для выбранного сегмента аудиторий.
+        GET /api/organizations/mailings/count-recipients/?segment=<all|newbies|sleepers_30|active_30>
+        """
+        user = request.user
+        if not getattr(user, 'organization', None):
+            return Response(
+                {'detail': 'Пользователь не привязан к организации'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        segment = request.query_params.get('segment') or MailingAudienceType.ALL
+        # Валидируем сегмент по choices
+        valid_values = {choice.value for choice in MailingAudienceType}
+        if segment not in valid_values:
+            return Response(
+                {'detail': 'Некорректный сегмент аудитории'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        qs = get_mailing_recipients_queryset(user.organization, segment)
+        count = qs.count()
+        return Response({'segment': segment, 'count': count})
+
+    @action(detail=True, methods=['post'], url_path='send-test')
+    def send_test(self, request, pk=None):
+        """
+        Отправка тестового сообщения на указанный chat_id.
+        """
+        mailing = self.get_object()
+        chat_id = request.data.get('chat_id')
+        if not chat_id:
+            return Response(
+                {'detail': 'chat_id обязателен'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            chat_id_int = int(chat_id)
+        except (TypeError, ValueError):
+            return Response(
+                {'detail': 'chat_id должен быть числом'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        send_mailing_test_to_chat.delay(mailing.id, chat_id_int)
+        return Response({'detail': 'Тестовое сообщение поставлено в очередь'})

@@ -61,7 +61,7 @@
           </thead>
           <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
             <tr
-              v-for="order in orders"
+              v-for="order in paginatedOrders"
               :key="order.id"
               class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
             >
@@ -141,6 +141,34 @@
             </tr>
           </tbody>
         </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+        <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+          <span>Показывать по:</span>
+          <select
+            v-model.number="perPage"
+            class="border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+          >
+            <option :value="20">20</option>
+            <option :value="50">50</option>
+          </select>
+        </div>
+
+        <div class="flex items-center gap-1">
+          <button
+            v-for="page in totalPages"
+            :key="page"
+            @click="currentPage = page"
+            class="min-w-[2.25rem] h-9 px-3 rounded-md text-sm font-medium border transition-colors"
+            :class="currentPage === page
+              ? 'bg-blue-600 text-white border-blue-600'
+              : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'"
+          >
+            {{ page }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -327,7 +355,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useOrdersStore } from '@/stores/orders'
 import { format } from 'date-fns'
@@ -340,6 +368,24 @@ const error = ref(null)
 
 const loading = computed(() => ordersStore.loading)
 const orders = computed(() => ordersStore.orders || [])
+
+const currentPage = ref(1)
+const perPage = ref(20)
+
+const totalOrders = computed(() => orders.value.length)
+const totalPages = computed(() => {
+  if (!totalOrders.value) return 1
+  return Math.max(1, Math.ceil(totalOrders.value / perPage.value))
+})
+
+const paginatedOrders = computed(() => {
+  const start = (currentPage.value - 1) * perPage.value
+  return orders.value.slice(start, start + perPage.value)
+})
+
+watch([orders, perPage], () => {
+  currentPage.value = 1
+})
 
 onMounted(async () => {
   await loadOrders()

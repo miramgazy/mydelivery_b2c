@@ -167,6 +167,12 @@ const routes = [
                 path: 'fast-menu',
                 name: 'admin-fast-menu',
                 component: () => import('@/views/admin/FastMenuManagement.vue')
+            },
+            // Mailings
+            {
+                path: 'mailings',
+                name: 'admin-mailings',
+                component: () => import('@/views/admin/MailingsManagement.vue')
             }
         ]
     }

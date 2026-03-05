@@ -269,3 +269,80 @@ class PaymentType(models.Model):
     
     def __str__(self):
         return f"{self.payment_name} ({self.organization.org_name})"
+
+
+class MailingAudienceType(models.TextChoices):
+    ALL = 'all', 'Всем'
+    NEWBIES = 'newbies', 'Новички (0 заказов)'
+    SLEEPERS_30 = 'sleepers_30', 'Спящие (30+ дней)'
+    ACTIVE_30 = 'active_30', 'Активные (< 30 дней)'
+
+
+class MailingStatus(models.TextChoices):
+    DRAFT = 'draft', 'Черновик'
+    SCHEDULED = 'scheduled', 'Запланирована'
+    IN_PROGRESS = 'in_progress', 'В процессе'
+    DONE = 'done', 'Завершена'
+    ERROR = 'error', 'Ошибка'
+
+
+class MailingTask(models.Model):
+    """
+    Задача отложенной рассылки по пользователям Telegram.
+    Привязана к организации и использует language_code пользователя для выбора текста.
+    """
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='mailing_tasks',
+        verbose_name='Организация'
+    )
+
+    title = models.CharField('Название рассылки', max_length=255)
+    message_ru = models.TextField('Текст сообщения (RU)', blank=True)
+    message_kz = models.TextField('Текст сообщения (KZ)', blank=True)
+
+    audience_type = models.CharField(
+        'Сегмент аудитории',
+        max_length=32,
+        choices=MailingAudienceType.choices,
+        default=MailingAudienceType.ALL,
+        help_text='Тип аудитории для рассылки (всем, новички, спящие, активные)',
+    )
+
+    scheduled_at = models.DateTimeField('Время отправки')
+    created_at = models.DateTimeField('Создана', auto_now_add=True)
+    updated_at = models.DateTimeField('Обновлена', auto_now=True)
+
+    status = models.CharField(
+        'Статус',
+        max_length=20,
+        choices=MailingStatus.choices,
+        default=MailingStatus.DRAFT,
+    )
+
+    total_recipients = models.PositiveIntegerField('Всего получателей', default=0)
+    sent_ru = models.PositiveIntegerField('Успешно отправлено (RU)', default=0)
+    sent_kz = models.PositiveIntegerField('Успешно отправлено (KZ)', default=0)
+    failed_count = models.PositiveIntegerField('Технические ошибки', default=0)
+    unsubscribed_count = models.PositiveIntegerField('Отписались (403)', default=0)
+
+    last_processed_user_id = models.UUIDField(
+        'Последний обработанный пользователь',
+        null=True,
+        blank=True,
+        help_text='UUID пользователя, на котором остановилась рассылка'
+    )
+
+    class Meta:
+        db_table = 'mailing_tasks'
+        verbose_name = 'Рассылка'
+        verbose_name_plural = 'Рассылки'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.title} ({self.organization.org_name})"
+
+    @property
+    def is_editable(self) -> bool:
+        return self.status in {MailingStatus.DRAFT, MailingStatus.SCHEDULED}

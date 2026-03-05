@@ -64,7 +64,7 @@
     <!-- Users List -->
     <div v-else class="space-y-4">
         <div 
-          v-for="user in filteredUsers" 
+          v-for="user in paginatedUsers" 
           :key="user.id" 
           class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm flex items-center justify-between border border-gray-100 dark:border-gray-700 transition-transform active:scale-[0.98]"
         >
@@ -111,6 +111,34 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                 </svg>
             </button>
+        </div>
+
+        <!-- Pagination -->
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
+          <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+            <span>Показывать по:</span>
+            <select
+              v-model.number="perPage"
+              class="border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+            >
+              <option :value="20">20</option>
+              <option :value="50">50</option>
+            </select>
+          </div>
+
+          <div class="flex items-center gap-1">
+            <button
+              v-for="page in totalPages"
+              :key="page"
+              @click="currentPage = page"
+              class="min-w-[2.25rem] h-9 px-3 rounded-md text-sm font-medium border transition-colors"
+              :class="currentPage === page
+                ? 'bg-primary-600 text-white border-primary-600'
+                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'"
+            >
+              {{ page }}
+            </button>
+          </div>
         </div>
     </div>
 
@@ -210,7 +238,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, reactive } from 'vue'
+import { ref, computed, onMounted, reactive, watch } from 'vue'
 import usersService from '@/services/users.service'
 import { useOrganizationStore } from '@/stores/organization'
 
@@ -276,6 +304,24 @@ const filteredUsers = computed(() => {
     }
 
     return result
+})
+
+const currentPage = ref(1)
+const perPage = ref(20)
+
+const totalUsers = computed(() => filteredUsers.value.length)
+const totalPages = computed(() => {
+    if (!totalUsers.value) return 1
+    return Math.max(1, Math.ceil(totalUsers.value / perPage.value))
+})
+
+const paginatedUsers = computed(() => {
+    const start = (currentPage.value - 1) * perPage.value
+    return filteredUsers.value.slice(start, start + perPage.value)
+})
+
+watch([filteredUsers, perPage], () => {
+    currentPage.value = 1
 })
 
 async function fetchData() {

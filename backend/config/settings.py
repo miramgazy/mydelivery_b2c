@@ -209,6 +209,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'apps.products.tasks.sync_all_terminals_stop_lists',
         'schedule': 300.0,  # Каждые 5 минут проверяем терминалы и обновляем стоп-листы
     },
+    'run-mailings-scheduler': {
+        'task': 'apps.organizations.tasks.run_mailings_scheduler',
+        'schedule': 60.0,  # Каждую минуту проверяем отложенные рассылки
+    },
 }
 
 # Стоп-лист: глобальное «рабочее» окно (часовой пояс сервера = TIME_ZONE, например Asia/Almaty +5).
