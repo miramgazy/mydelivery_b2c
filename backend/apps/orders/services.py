@@ -776,23 +776,24 @@ def geocode_address(address: DeliveryAddress, api_key: str) -> bool:
         logger.warning(f"Не задан API-ключ Яндекс.Карт для адреса {address.id}")
         return False
         
-    # Собираем строку адреса (город, улица, дом)
+    # Собираем строку адреса для Яндекса: город, улица, номер дома
     parts = []
-    city = address.city.name if address.city else address.city_name
+    city = (address.city.name if address.city else (address.city_name or '')).strip()
     if city:
         parts.append(city)
-         
-    street = address.street_name or (address.street.street_name if address.street else '')
+    street = (address.street_name or (address.street.street_name if address.street else '') or '').strip()
     if street:
         parts.append(street)
-         
-    if address.house:
-        parts.append(address.house)
-         
-    address_str = ", ".join([p for p in parts if p])
+    house = (address.house or '').strip()
+    if house:
+        parts.append(house)
+
+    address_str = ", ".join(parts)
     if not address_str:
+        logger.warning(f"Геокодер: пустой адрес (id={address.id}), нечего отправлять в Яндекс")
         return False
-         
+
+    logger.info(f"Яндекс Геокодер запрос: address_id={address.id}, geocode='{address_str}'")
     url = "https://geocode-maps.yandex.ru/1.x/"
     params = {
         'apikey': api_key,

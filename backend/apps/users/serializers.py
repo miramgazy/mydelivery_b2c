@@ -1,4 +1,6 @@
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_field
+from drf_spectacular.types import OpenApiTypes
 from .models import User, Role, DeliveryAddress, BillingPhone
 from apps.organizations.serializers import TerminalSerializer
 from apps.organizations.models import Terminal, City
@@ -29,6 +31,7 @@ class DeliveryAddressSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'user', 'created_at', 'updated_at']
     
+    @extend_schema_field(OpenApiTypes.STR)
     def get_full_address(self, obj):
         """Полный адрес в строковом виде"""
         return str(obj)

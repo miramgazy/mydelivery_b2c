@@ -9,6 +9,7 @@ from django.conf import settings
 from django.db import transaction
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import Q
+from drf_spectacular.utils import extend_schema
 import re
 import threading
 import uuid
@@ -32,7 +33,8 @@ MAX_BILLING_PHONES_PER_USER = 5
 class TelegramAuthView(viewsets.ViewSet):
     """Аутентификация через Telegram Mini App"""
     permission_classes = [permissions.AllowAny]
-    
+
+    @extend_schema(request=TelegramAuthSerializer, responses={200: TelegramAuthSerializer})
     @action(detail=False, methods=['post'])
     def login(self, request):
         """
