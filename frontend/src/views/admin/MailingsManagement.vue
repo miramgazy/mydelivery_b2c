@@ -97,7 +97,8 @@ const selectedMailing = ref(null)
 
 const fetchMailings = async () => {
   const { data } = await api.get('/organizations/mailings/')
-  mailings.value = data
+  // DRF по умолчанию возвращает пагинированный ответ {count, results, ...}
+  mailings.value = Array.isArray(data) ? data : (data.results || [])
 }
 
 const openCreateModal = () => {
