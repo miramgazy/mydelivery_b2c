@@ -17,7 +17,7 @@ from core.permissions import IsSuperAdmin, IsOrgAdmin, IsOwner
 class OrderViewSet(viewsets.ModelViewSet):
     """ViewSet для заказов"""
     queryset = Order.objects.select_related(
-        'user', 'organization', 'delivery_address', 'payment_type'
+        'user', 'organization', 'delivery_address', 'payment_type', 'terminal'
     ).prefetch_related('items__modifiers__modifier', 'items__product')
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['status', 'organization']

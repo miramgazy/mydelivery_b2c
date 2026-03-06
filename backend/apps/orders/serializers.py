@@ -151,6 +151,7 @@ class OrderListSerializer(serializers.ModelSerializer):
     total_price = serializers.DecimalField(source='total_amount', max_digits=10, decimal_places=2, read_only=True)
     payment_type_name = serializers.CharField(source='payment_type.payment_name', read_only=True)
     payment_type_system_type = serializers.CharField(source='payment_type.system_type', read_only=True)
+    terminal_name = serializers.CharField(source='terminal.terminal_group_name', read_only=True, allow_null=True)
     
     class Meta:
         model = Order
@@ -161,6 +162,7 @@ class OrderListSerializer(serializers.ModelSerializer):
             'delivery_cost',
             'phone', 'items_count',
             'payment_type', 'payment_type_name', 'payment_type_system_type',
+            'terminal', 'terminal_name',
             'comment',
             'created_at', 'updated_at'
         ]

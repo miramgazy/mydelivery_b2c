@@ -3,7 +3,20 @@
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm">
       <!-- Header -->
       <div class="p-6 border-b border-gray-200 dark:border-gray-700">
-        <h2 class="text-xl font-bold text-gray-900 dark:text-white">Заказы</h2>
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <h2 class="text-xl font-bold text-gray-900 dark:text-white">Заказы</h2>
+          <div class="flex items-center gap-2">
+            <label for="orders-search" class="sr-only">Поиск</label>
+            <input
+              id="orders-search"
+              v-model.trim="searchQuery"
+              type="search"
+              placeholder="Имя, телефон, № заказа..."
+              class="w-full sm:w-64 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            />
+            <Icon icon="mdi:magnify" class="w-5 h-5 text-gray-400 flex-shrink-0" />
+          </div>
+        </div>
       </div>
 
       <!-- Error Message -->
@@ -36,23 +49,68 @@
         <table class="w-full">
           <thead class="bg-gray-50 dark:bg-gray-700">
             <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                № Заказа
+              <th
+                class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-gray-600"
+                @click="setSort('order_number')"
+              >
+                <span class="inline-flex items-center gap-1">
+                  № Заказа
+                  <Icon v-if="sortKey === 'order_number'" :icon="sortOrder === 'asc' ? 'mdi:chevron-up' : 'mdi:chevron-down'" class="w-4 h-4" />
+                </span>
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Клиент
+              <th
+                class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-gray-600"
+                @click="setSort('user_name')"
+              >
+                <span class="inline-flex items-center gap-1">
+                  Клиент
+                  <Icon v-if="sortKey === 'user_name'" :icon="sortOrder === 'asc' ? 'mdi:chevron-up' : 'mdi:chevron-down'" class="w-4 h-4" />
+                </span>
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Дата
+              <th
+                class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-gray-600"
+                @click="setSort('created_at')"
+              >
+                <span class="inline-flex items-center gap-1">
+                  Дата
+                  <Icon v-if="sortKey === 'created_at'" :icon="sortOrder === 'asc' ? 'mdi:chevron-up' : 'mdi:chevron-down'" class="w-4 h-4" />
+                </span>
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Сумма
+              <th
+                class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-gray-600"
+                @click="setSort('total_price')"
+              >
+                <span class="inline-flex items-center gap-1">
+                  Сумма
+                  <Icon v-if="sortKey === 'total_price'" :icon="sortOrder === 'asc' ? 'mdi:chevron-up' : 'mdi:chevron-down'" class="w-4 h-4" />
+                </span>
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Оплата
+              <th
+                class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-gray-600"
+                @click="setSort('payment_type_name')"
+              >
+                <span class="inline-flex items-center gap-1">
+                  Оплата
+                  <Icon v-if="sortKey === 'payment_type_name'" :icon="sortOrder === 'asc' ? 'mdi:chevron-up' : 'mdi:chevron-down'" class="w-4 h-4" />
+                </span>
               </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Статус
+              <th
+                class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-gray-600"
+                @click="setSort('terminal_name')"
+              >
+                <span class="inline-flex items-center gap-1">
+                  Терминал
+                  <Icon v-if="sortKey === 'terminal_name'" :icon="sortOrder === 'asc' ? 'mdi:chevron-up' : 'mdi:chevron-down'" class="w-4 h-4" />
+                </span>
+              </th>
+              <th
+                class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer select-none hover:bg-gray-100 dark:hover:bg-gray-600"
+                @click="setSort('status')"
+              >
+                <span class="inline-flex items-center gap-1">
+                  Статус
+                  <Icon v-if="sortKey === 'status'" :icon="sortOrder === 'asc' ? 'mdi:chevron-up' : 'mdi:chevron-down'" class="w-4 h-4" />
+                </span>
               </th>
               <th class="px-6 py-3 text-center text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Действия
@@ -109,6 +167,11 @@
                     {{ getSystemTypeLabel(order.payment_type_system_type) }}
                   </span>
                 </div>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <span class="text-sm text-gray-900 dark:text-white">
+                  {{ order.terminal_name || '—' }}
+                </span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 <span :class="getStatusClass(order.status)">
@@ -279,6 +342,12 @@
                     </span>
                   </div>
                 </div>
+                <div>
+                  <p class="text-sm text-gray-500 dark:text-gray-400">Терминал</p>
+                  <p class="text-base font-medium text-gray-900 dark:text-white">
+                    {{ selectedOrder.terminal_name || '—' }}
+                  </p>
+                </div>
               </div>
 
               <!-- Delivery Address -->
@@ -397,10 +466,72 @@ function canRepeatOrder(order) {
 const loading = computed(() => ordersStore.loading)
 const orders = computed(() => ordersStore.orders || [])
 
+const searchQuery = ref('')
+const sortKey = ref('created_at')
+const sortOrder = ref('desc')
+
+const setSort = (key) => {
+  if (sortKey.value === key) {
+    sortOrder.value = sortOrder.value === 'asc' ? 'desc' : 'asc'
+  } else {
+    sortKey.value = key
+    sortOrder.value = 'asc'
+  }
+}
+
+const filteredOrders = computed(() => {
+  const q = (searchQuery.value || '').toLowerCase()
+  if (!q) return orders.value
+  return orders.value.filter((order) => {
+    const name = (order.user_name || '').toLowerCase()
+    const phone = (order.phone || '').replace(/\D/g, '')
+    const orderNum = (order.order_number || order.id || '').toString().toLowerCase()
+    const qNorm = q.replace(/\D/g, '')
+    return (
+      name.includes(q) ||
+      (order.phone || '').toLowerCase().includes(q) ||
+      (qNorm && phone.includes(qNorm)) ||
+      orderNum.includes(q)
+    )
+  })
+})
+
+const sortedOrders = computed(() => {
+  const list = [...filteredOrders.value]
+  const key = sortKey.value
+  const asc = sortOrder.value === 'asc'
+  list.sort((a, b) => {
+    let va = a[key]
+    let vb = b[key]
+    if (key === 'created_at') {
+      va = new Date(va || 0).getTime()
+      vb = new Date(vb || 0).getTime()
+    }
+    if (key === 'total_price' || key === 'total_amount') {
+      va = Number(va) || 0
+      vb = Number(vb) || 0
+    }
+    if (key === 'order_number') {
+      va = (va || a.id || '').toString()
+      vb = (vb || b.id || '').toString()
+    }
+    if (va == null) return asc ? 1 : -1
+    if (vb == null) return asc ? -1 : 1
+    if (typeof va === 'string' && typeof vb === 'string') {
+      const c = va.localeCompare(vb, 'ru')
+      return asc ? c : -c
+    }
+    if (va < vb) return asc ? -1 : 1
+    if (va > vb) return asc ? 1 : -1
+    return 0
+  })
+  return list
+})
+
 const currentPage = ref(1)
 const perPage = ref(20)
 
-const totalOrders = computed(() => orders.value.length)
+const totalOrders = computed(() => sortedOrders.value.length)
 const totalPages = computed(() => {
   if (!totalOrders.value) return 1
   return Math.max(1, Math.ceil(totalOrders.value / perPage.value))
@@ -408,10 +539,10 @@ const totalPages = computed(() => {
 
 const paginatedOrders = computed(() => {
   const start = (currentPage.value - 1) * perPage.value
-  return orders.value.slice(start, start + perPage.value)
+  return sortedOrders.value.slice(start, start + perPage.value)
 })
 
-watch([orders, perPage], () => {
+watch([orders, perPage, searchQuery, sortKey, sortOrder], () => {
   currentPage.value = 1
 })
 
