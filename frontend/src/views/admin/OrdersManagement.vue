@@ -505,7 +505,15 @@ const getStatusLabel = (status) => {
     'error': 'Ошибка',
     'InProgress': 'В процессе iiko',
     'Success': 'Создан в iiko',
-    'SentToBackupWebhook': 'Отправлен на резервный вебхук'
+    'SentToBackupWebhook': 'Отправлен на резервный вебхук',
+    // Статусы из iiko (order.status после creationStatus=Success)
+    'Cancelled': 'Отменен',
+    'Confirmed': 'Подтвержден',
+    'Cooking': 'Готовится',
+    'ReadyForCooking': 'Готов к приготовлению',
+    'Delivered': 'Доставлен',
+    'Closed': 'Закрыт',
+    'Unconfirmed': 'Не подтвержден'
   }
   return labels[status] || status
 }
@@ -522,7 +530,14 @@ const getStatusClass = (status) => {
     'error': 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400',
     'InProgress': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400',
     'Success': 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400',
-    'SentToBackupWebhook': 'bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:text-amber-400'
+    'SentToBackupWebhook': 'bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:text-amber-400',
+    'Cancelled': 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400',
+    'Confirmed': 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400',
+    'Cooking': 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400',
+    'ReadyForCooking': 'bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400',
+    'Delivered': 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400',
+    'Closed': 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-400',
+    'Unconfirmed': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400'
   }
   return `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${classes[status] || ''}`
 }

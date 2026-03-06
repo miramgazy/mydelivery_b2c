@@ -12,6 +12,7 @@ import requests
 from django.db import transaction
 from django.utils import timezone
 from .models import Order, OrderItem, OrderItemModifier, IikoRequestLog
+from .serializers import OrderDetailSerializer
 from apps.products.models import Product, Modifier, StopList
 from apps.users.models import User, DeliveryAddress, BillingPhone
 from apps.organizations.models import Organization, PaymentType, Terminal
@@ -433,12 +434,18 @@ class OrderService:
                 order.iiko_order_id = order_info.get('id')
                 order.correlation_id = correlation_id
                 order.status = order_info.get('creationStatus') or Order.STATUS_IN_PROGRESS
+                # iiko может вернуть номер заказа сразу при создании
+                iiko_number = order_info.get('number') or order_info.get('externalNumber')
+                if iiko_number:
+                    order.iiko_delivery_number = str(iiko_number)
+                    order.order_number = str(iiko_number)
                 order.sent_to_iiko_at = timezone.now()
                 order.iiko_response = response
                 order.error_message = None
                 order.save(update_fields=[
                     'iiko_order_id', 'correlation_id', 'status',
-                    'sent_to_iiko_at', 'iiko_response', 'query_to_iiko', 'error_message'
+                    'sent_to_iiko_at', 'iiko_response', 'query_to_iiko', 'error_message',
+                    'iiko_delivery_number', 'order_number',
                 ])
 
                 request_log.success = True
@@ -519,20 +526,30 @@ class OrderService:
             
             status_response = client.get_creation_status(org_id, str(order.correlation_id))
             
-            creation_status = status_response.get('state') # usually 'Success', 'InProgress', 'Error'
+            creation_status = status_response.get('state')  # usually 'Success', 'InProgress', 'Error'
             
             # В iiko commands/status возвращает 'state'
             # Если это deliveries/create, то в ответе может быть 'Success'
             if creation_status == 'Success':
-                 # Если успех, пытаемся получить детали заказа
-                 order.status = Order.STATUS_SUCCESS
-                 
-                 # Пытаемся вытащить номер доставки если он есть в ответе
-                 # Команды в iiko обычно возвращают результат в поле 'result'
-                 result = status_response.get('result', {})
-                 if isinstance(result, dict):
-                     order_info = result.get('orderInfo', {})
-                     order.iiko_delivery_number = order_info.get('number') or order_info.get('externalNumber')
+                # Команды в iiko обычно возвращают результат в поле 'result'
+                result = status_response.get('result', {})
+                if isinstance(result, dict):
+                    order_info = result.get('orderInfo', {}) or {}
+                    # Может прийти iiko_order_id и номер
+                    if not order.iiko_order_id and order_info.get('id'):
+                        order.iiko_order_id = order_info.get('id')
+                    iiko_number = order_info.get('number') or order_info.get('externalNumber')
+                    if iiko_number:
+                        order.iiko_delivery_number = str(iiko_number)
+                        order.order_number = str(iiko_number)
+
+                # По требованию: если создание успешно — назначаем реальный статус заказа из iiko
+                # (например Cancelled / Cooking / Confirmed), который приходит из deliveries/by_id.
+                # Если iiko_order_id уже известен — подтянем детали и применим status.
+                if order.iiko_order_id:
+                    self.get_order_details_and_update(order)
+                else:
+                    order.status = Order.STATUS_SUCCESS
             
             elif creation_status == 'Error':
                 order.status = Order.STATUS_ERROR
@@ -540,7 +557,9 @@ class OrderService:
             else:
                 order.status = creation_status
             
-            order.save(update_fields=['status', 'iiko_delivery_number', 'error_message'])
+            order.save(update_fields=[
+                'status', 'iiko_delivery_number', 'error_message', 'order_number', 'iiko_order_id'
+            ])
             return status_response
             
         except IikoAPIException as e:
@@ -561,17 +580,66 @@ class OrderService:
             status_data = client.get_order_status(org_id, str(order.iiko_order_id))
             
             if 'orders' in status_data and len(status_data['orders']) > 0:
-                iiko_order = status_data['orders'][0]
-                # Обновляем номер если он появился
-                order.iiko_delivery_number = iiko_order.get('number')
-                # Здесь можно добавить маппинг статусов доставки (New, Waiting, Cooking, etc.)
-                # order.status = ...
-                order.save(update_fields=['iiko_delivery_number'])
+                iiko_order = status_data['orders'][0] or {}
+                creation_status = iiko_order.get('creationStatus')
+                inner_order = iiko_order.get('order') or {}
+
+                # Номер заказа (в ответе приходит как order.number)
+                iiko_number = inner_order.get('number') or iiko_order.get('externalNumber')
+                if iiko_number:
+                    order.iiko_delivery_number = str(iiko_number)
+                    order.order_number = str(iiko_number)
+
+                # Два статуса:
+                # - creationStatus: статус создания
+                # - order.status: реальный статус заказа (Cancelled/Confirmed/Cooking/etc.)
+                if str(creation_status).lower() == 'success':
+                    real_status = inner_order.get('status')
+                    if real_status:
+                        order.status = str(real_status)
+                elif creation_status:
+                    order.status = str(creation_status)
+
+                order.save(update_fields=['iiko_delivery_number', 'order_number', 'status'])
             
             return status_data
         except IikoAPIException as e:
             logger.error(f'Ошибка получения деталей заказа {order.order_id}: {e}')
             raise
+
+    def send_order_to_backup_webhook(self, order: Order) -> bool:
+        """
+        Отправляет заказ на резервный вебхук организации (webhook_link).
+        При успешной отправке переводит заказ в статус SentToBackupWebhook.
+        Возвращает True при успехе, False если вебхук не настроен или запрос не удался.
+        """
+        webhook_url = (order.organization.webhook_link or '').strip()
+        if not webhook_url:
+            logger.debug(f'send_order_to_backup_webhook: organization {order.organization_id} has no webhook_link')
+            return False
+        try:
+            order_full = Order.objects.select_related(
+                'organization', 'user', 'payment_type', 'terminal', 'delivery_address'
+            ).prefetch_related('items__modifiers__modifier', 'items__product').get(order_id=order.order_id)
+            payload = OrderDetailSerializer(order_full).data
+        except Order.DoesNotExist:
+            logger.warning(f'send_order_to_backup_webhook: order {order.order_id} not found')
+            return False
+        try:
+            resp = requests.post(
+                webhook_url,
+                json=payload,
+                headers={'Content-Type': 'application/json'},
+                timeout=15,
+            )
+            resp.raise_for_status()
+            order.status = Order.STATUS_SENT_TO_BACKUP_WEBHOOK
+            order.save(update_fields=['status'])
+            logger.info(f'Order {order.order_id} sent to backup webhook successfully')
+            return True
+        except requests.RequestException as e:
+            logger.warning(f'send_order_to_backup_webhook failed for order {order.order_id}: {e}')
+            return False
     
     def _is_pickup(self, order: Order) -> bool:
         """Самовывоз: нет адреса доставки и нет разовых координат."""
