@@ -60,20 +60,22 @@ def send_order_to_iiko_task(self, order_id: str):
 @shared_task(ignore_result=True)
 def smart_retry_and_backup_orders_task():
     """
-    Умный повтор и резервный вебхук. Запускается каждые 120 секунд.
-    - Заказы со статусом ERROR, созданные не более 3 минут назад: сразу отправка на резервный канал.
-    - Заказы со статусом InProgress, созданные не более 10 минут назад:
-      через 5 минут первый повтор, через 8 минут второй, через 10 минут или после 2 повторов — вебхук.
+    Проверка статуса и резервный вебхук. Запускается каждые 120 секунд.
+    - Заказы со статусом ERROR, созданные не более 3 минут назад: сразу отправка на вебхук.
+    - Заказы InProgress, созданные не более 10 минут назад:
+      через 5 минут — один раз запускается проверка статуса (как кнопка «Проверить статус» в TMA),
+      обновляется статус заказа. Если после проверки статус Error — отправка на вебхук.
+      Если через 10 минут заказ всё ещё InProgress — отправка на вебхук.
+    - Логика повторной отправки заказа в iiko (repeat) убрана.
     """
     now = timezone.now()
     cutoff = now - timedelta(minutes=10)
     five_min = now - timedelta(minutes=5)
-    eight_min = now - timedelta(minutes=8)
     error_cutoff = now - timedelta(minutes=3)
 
     service = OrderService()
 
-    # Заказы со статусом «Ошибка», не старше 3 минут — сразу на резервный канал
+    # Заказы со статусом «Ошибка», не старше 3 минут — сразу на вебхук
     error_orders = Order.objects.filter(
         status=Order.STATUS_ERROR,
         created_at__gte=error_cutoff,
@@ -85,7 +87,7 @@ def smart_retry_and_backup_orders_task():
         except Exception as e:
             logger.exception(f"smart_retry: error sending ERROR order {order.order_id} to webhook: {e}")
 
-    # Заказы InProgress: умный повтор и затем вебхук
+    # Заказы InProgress: через 5 мин — проверка статуса (как в TMA), при ошибке или через 10 мин — вебхук
     orders = Order.objects.filter(
         status=Order.STATUS_IN_PROGRESS,
         created_at__gte=cutoff,
@@ -96,30 +98,29 @@ def smart_retry_and_backup_orders_task():
             created_at = order.created_at
             age_sec = (now - created_at).total_seconds()
 
-            if age_sec >= 600 or order.retry_count >= 2:
+            # Через 10 минут всё ещё InProgress — отправляем на вебхук
+            if age_sec >= 600:
                 if service.send_order_to_backup_webhook(order):
-                    pass
+                    logger.info(f"smart_retry: order {order.order_id} (InProgress >= 10 min) sent to backup webhook")
                 continue
-            if created_at <= eight_min and order.retry_count == 1:
-                if order.query_to_iiko:
-                    service.repeat_order_to_iiko(order)
-                    order.refresh_from_db()
-                    order.retry_count = 2
-                    order.save(update_fields=['retry_count'])
-                    logger.info(f"smart_retry: order {order.order_id} second retry, retry_count=2")
-                else:
+
+            # Через 5 минут — один раз проверяем статус (логика кнопки «Проверить статус» в TMA)
+            if age_sec >= 300 and order.retry_count == 0:
+                order.retry_count = 1
+                order.save(update_fields=['retry_count'])
+                try:
+                    if order.correlation_id and (order.status == Order.STATUS_IN_PROGRESS or not order.iiko_order_id):
+                        service.update_order_creation_status(order)
+                    elif order.iiko_order_id:
+                        service.get_order_details_and_update(order)
+                except Exception as e:
+                    logger.warning(f"smart_retry: order {order.order_id} status check failed: {e}, sending to webhook")
                     if service.send_order_to_backup_webhook(order):
-                        pass
-                continue
-            if created_at <= five_min and order.retry_count == 0:
-                if order.query_to_iiko:
-                    service.repeat_order_to_iiko(order)
-                    order.refresh_from_db()
-                    order.retry_count = 1
-                    order.save(update_fields=['retry_count'])
-                    logger.info(f"smart_retry: order {order.order_id} first retry, retry_count=1")
-                else:
+                        logger.info(f"smart_retry: order {order.order_id} sent to backup webhook after status check error")
+                    continue
+                order.refresh_from_db()
+                if order.status == Order.STATUS_ERROR:
                     if service.send_order_to_backup_webhook(order):
-                        pass
+                        logger.info(f"smart_retry: order {order.order_id} status=Error after check, sent to webhook")
         except Exception as e:
             logger.exception(f"smart_retry: error processing order {order.order_id}: {e}")
