@@ -12,7 +12,6 @@ import requests
 from django.db import transaction
 from django.utils import timezone
 from .models import Order, OrderItem, OrderItemModifier, IikoRequestLog
-from .serializers import OrderDetailSerializer
 from apps.products.models import Product, Modifier, StopList
 from apps.users.models import User, DeliveryAddress, BillingPhone
 from apps.organizations.models import Organization, PaymentType, Terminal
@@ -507,30 +506,6 @@ class OrderService:
         logger.info(f'Повторная отправка заказа {order.order_id} в iiko (correlationId: {correlation_id})')
         return order
 
-    def send_order_to_backup_webhook(self, order: Order) -> bool:
-        """
-        Отправить полный JSON заказа на webhook_link организации (резервный канал).
-        После успешной отправки статус заказа меняется на SentToBackupWebhook.
-        """
-        url = (getattr(order.organization, 'webhook_link', None) or '').strip()
-        if not url:
-            logger.warning(f'У организации {order.organization_id} не задан webhook_link, пропуск резервной отправки')
-            return False
-        payload = OrderDetailSerializer(order).data
-        payload['retry_count'] = order.retry_count
-        if order.query_to_iiko:
-            payload['query_to_iiko'] = order.query_to_iiko
-        try:
-            r = requests.post(url, json=payload, timeout=15)
-            r.raise_for_status()
-        except requests.RequestException as e:
-            logger.error(f'Ошибка отправки заказа {order.order_id} на резервный вебхук: {e}')
-            return False
-        order.status = Order.STATUS_SENT_TO_BACKUP_WEBHOOK
-        order.save(update_fields=['status'])
-        logger.info(f'Заказ {order.order_id} отправлен на резервный вебхук')
-        return True
-
     def update_order_creation_status(self, order: Order) -> Dict:
         """
         Запрос статуса создания заказа в iiko по correlationId
@@ -742,8 +717,6 @@ class OrderService:
             raise ValueError(f"Order {order.order_id} has no terminal assigned")
 
         order_payload = {
-            'id': str(order.order_id),
-            'externalNumber': order.order_number or '',
             'orderServiceType': 'DeliveryByClient' if is_pickup else 'DeliveryByCourier',
             'customer': {
                 'name': self._customer_name(order.user),

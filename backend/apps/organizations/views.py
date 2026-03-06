@@ -133,9 +133,14 @@ class OrganizationViewSet(viewsets.ModelViewSet):
             if getattr(e, 'response', None) is not None:
                 sc = getattr(e.response, 'status_code', None)
                 if sc is not None:
-                    msg = f'Ответ сервера: {sc}'
+                    if sc == 404:
+                        msg = 'Вебхук вернул 404 (страница не найдена). Проверьте URL и что приёмник (n8n и т.п.) включён и путь совпадает.'
+                    else:
+                        msg = f'Вебхук вернул ошибку: {sc}'
+            else:
+                msg = f'Не удалось подключиться к вебхуку: {msg}'
             return Response(
-                {'error': f'Не удалось отправить запрос: {msg}'},
+                {'error': msg},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
