@@ -213,6 +213,10 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'apps.organizations.tasks.run_mailings_scheduler',
         'schedule': 60.0,  # Каждую минуту проверяем отложенные рассылки
     },
+    'smart-retry-and-backup-orders': {
+        'task': 'apps.orders.tasks.smart_retry_and_backup_orders_task',
+        'schedule': 120.0,  # Каждые 120 секунд: умный повтор InProgress и резервный вебхук
+    },
 }
 
 # Стоп-лист: глобальное «рабочее» окно (часовой пояс сервера = TIME_ZONE, например Asia/Almaty +5).

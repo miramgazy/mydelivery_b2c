@@ -17,6 +17,12 @@ export const updateOrganization = async (data) => {
     return response.data
 }
 
+// Отправить тестовый JSON на webhook_link организации
+export const testWebhook = async () => {
+    const response = await api.post('/organizations/test-webhook/')
+    return response.data
+}
+
 // Get terminals list
 export const getTerminals = async () => {
     const response = await api.get('/organizations/terminals/')
@@ -142,6 +148,7 @@ export const getCities = async (organizationId = null) => {
 export default {
     getOrganization,
     updateOrganization,
+    testWebhook,
     getTerminals,
     loadTerminalsFromIiko,
     getPaymentTypes,

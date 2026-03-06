@@ -210,6 +210,43 @@
           </p>
         </div>
 
+        <!-- Webhook для резервной отправки заказов -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Ссылка для резервной отправки заказов (вебхук)
+          </label>
+          <input
+            v-model="form.webhook_link"
+            type="url"
+            autocomplete="off"
+            class="w-full px-4 py-2.5 border rounded-lg
+                   bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+                   focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            :class="webhookLinkError ? 'border-red-500 dark:border-red-500' : 'border-gray-300 dark:border-gray-600'"
+            placeholder="https://example.com/webhook"
+          />
+          <p v-if="webhookLinkError" class="mt-1 text-sm text-red-600 dark:text-red-400">
+            {{ webhookLinkError }}
+          </p>
+          <p v-else class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            URL для отправки заказа при сбое доставки в iiko (умный повтор). Оставьте пустым, если не используете.
+          </p>
+          <div v-if="form.webhook_link" class="mt-2 flex items-center gap-2">
+            <button
+              type="button"
+              @click="handleTestWebhook"
+              :disabled="testingWebhook || !!webhookLinkError"
+              class="inline-flex items-center gap-2 px-4 py-2 bg-amber-100 dark:bg-amber-900/30 hover:bg-amber-200 dark:hover:bg-amber-900/50 text-amber-800 dark:text-amber-200 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <Icon :icon="testingWebhook ? 'mdi:loading' : 'mdi:send'" :class="{ 'animate-spin': testingWebhook }" class="w-5 h-5" />
+              {{ testingWebhook ? 'Отправка...' : 'Тестировать вебхук' }}
+            </button>
+            <span v-if="testWebhookResult" class="text-sm" :class="testWebhookSuccess ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
+              {{ testWebhookResult }}
+            </span>
+          </div>
+        </div>
+
         <!-- Цвет оформления (шапка TMA) -->
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -294,11 +331,55 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import { useOrganizationStore } from '@/stores/organization'
+import organizationService from '@/services/organization.service'
 
 const organizationStore = useOrganizationStore()
+
+const testingWebhook = ref(false)
+const testWebhookResult = ref('')
+const testWebhookSuccess = ref(false)
+
+function isValidUrl(s) {
+  if (!s || typeof s !== 'string') return true
+  const t = s.trim()
+  if (!t) return true
+  try {
+    const u = new URL(t)
+    return u.protocol === 'http:' || u.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+const webhookLinkError = computed(() => {
+  const v = form.value.webhook_link
+  if (!v || !v.trim()) return ''
+  if (!isValidUrl(v)) return 'Введите корректную ссылку (http или https)'
+  return ''
+})
+
+async function handleTestWebhook() {
+  if (webhookLinkError.value) return
+  testingWebhook.value = true
+  testWebhookResult.value = ''
+  try {
+    await organizationService.testWebhook()
+    testWebhookSuccess.value = true
+    testWebhookResult.value = 'Тестовый запрос успешно отправлен'
+  } catch (err) {
+    testWebhookSuccess.value = false
+    testWebhookResult.value = err.response?.data?.error || 'Ошибка отправки'
+  } finally {
+    testingWebhook.value = false
+  }
+}
+
+watch(() => form.value.webhook_link, () => {
+  testWebhookResult.value = ''
+})
 
 const displayPrimaryColor = computed(() => {
   const c = form.value.primary_color || ''
@@ -343,7 +424,8 @@ const form = ref({
   bot_token: '',
   bot_username: '',
   yandex_maps_api_key: '',
-  primary_color: ''
+  primary_color: '',
+  webhook_link: ''
 })
 
 const showApiKey = ref(false)
@@ -377,7 +459,8 @@ const loadOrganization = async () => {
         bot_token: org.bot_token || '',
         bot_username: org.bot_username || '',
         yandex_maps_api_key: org.yandex_maps_api_key || '',
-        primary_color: org.primary_color || '#0284c7'
+        primary_color: org.primary_color || '#0284c7',
+        webhook_link: org.webhook_link || ''
       }
     }
   } catch (err) {

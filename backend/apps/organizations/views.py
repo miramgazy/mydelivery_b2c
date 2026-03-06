@@ -97,6 +97,48 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(organization)
         return Response(serializer.data)
 
+    @action(detail=False, methods=['post'], url_path='test-webhook')
+    def test_webhook(self, request):
+        """Отправить тестовый JSON на webhook_link организации (для проверки ссылки)."""
+        import requests
+        user = request.user
+        if hasattr(user, 'organization') and user.organization:
+            organization = user.organization
+        else:
+            organization = Organization.objects.filter(is_active=True).first()
+        if not organization:
+            return Response(
+                {'error': 'Организация не найдена'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+        url = (organization.webhook_link or '').strip()
+        if not url:
+            return Response(
+                {'error': 'Не указана ссылка вебхука (webhook_link) в настройках организации'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        payload = {
+            'test': True,
+            'message': 'Тестовый запрос от B2C. Вебхук доступен.',
+            'organization_id': str(organization.org_id),
+            'organization_name': organization.org_name,
+        }
+        try:
+            r = requests.post(url, json=payload, timeout=10)
+            r.raise_for_status()
+            return Response({'ok': True, 'message': 'Тестовый запрос успешно отправлен', 'status_code': r.status_code})
+        except requests.RequestException as e:
+            logger.warning('test_webhook failed: %s', e)
+            msg = str(e)
+            if getattr(e, 'response', None) is not None:
+                sc = getattr(e.response, 'status_code', None)
+                if sc is not None:
+                    msg = f'Ответ сервера: {sc}'
+            return Response(
+                {'error': f'Не удалось отправить запрос: {msg}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
     @action(detail=False, methods=['get'], url_path='terminals')
     def get_terminals(self, request):
         """Получить терминалы организации"""
@@ -822,11 +864,13 @@ class MailingTaskViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save()
 
-    @action(detail=False, methods=['get'], url_path='count-recipients')
+    @action(detail=False, methods=['get', 'post'], url_path='count-recipients')
     def count_recipients(self, request):
         """
         Подсчет количества получателей для выбранного сегмента аудиторий.
-        GET /api/organizations/mailings/count-recipients/?segment=<all|newbies|sleepers_30|active_30>
+        GET/POST /api/organizations/mailings/count-recipients/
+        Параметр segment можно передать через query params или в теле POST:
+        <all|newbies|sleepers_30|active_30>
         """
         user = request.user
         if not getattr(user, 'organization', None):
@@ -835,7 +879,10 @@ class MailingTaskViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        segment = request.query_params.get('segment') or MailingAudienceType.ALL
+        if request.method.lower() == 'post':
+            segment = request.data.get('segment') or MailingAudienceType.ALL
+        else:
+            segment = request.query_params.get('segment') or MailingAudienceType.ALL
         # Валидируем сегмент по choices
         valid_values = {choice.value for choice in MailingAudienceType}
         if segment not in valid_values:
@@ -854,6 +901,15 @@ class MailingTaskViewSet(viewsets.ModelViewSet):
         Отправка тестового сообщения на указанный chat_id.
         """
         mailing = self.get_object()
+        organization = getattr(mailing, 'organization', None)
+
+        # Явно проверяем наличие bot_token, чтобы не "молча" падать в Celery-задаче
+        if not organization or not organization.bot_token:
+            return Response(
+                {'detail': 'Для организации не настроен Telegram bot_token. Укажите его в настройках организации.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         chat_id = request.data.get('chat_id')
         if not chat_id:
             return Response(

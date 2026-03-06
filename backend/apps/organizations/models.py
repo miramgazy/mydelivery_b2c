@@ -113,6 +113,14 @@ class Organization(models.Model):
         )
     )
     
+    webhook_link = models.URLField(
+        'Ссылка для резервной отправки заказов',
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text='URL для отправки заказа при сбое доставки в iiko (умный повтор)'
+    )
+    
     is_active = models.BooleanField('Активна', default=True)
     
     created_at = models.DateTimeField('Создана', auto_now_add=True)

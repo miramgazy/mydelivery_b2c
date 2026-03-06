@@ -504,7 +504,8 @@ const getStatusLabel = (status) => {
     'cancelled': 'Отменен',
     'error': 'Ошибка',
     'InProgress': 'В процессе iiko',
-    'Success': 'Создан в iiko'
+    'Success': 'Создан в iiko',
+    'SentToBackupWebhook': 'Отправлен на резервный вебхук'
   }
   return labels[status] || status
 }
@@ -520,7 +521,8 @@ const getStatusClass = (status) => {
     'cancelled': 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400',
     'error': 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400',
     'InProgress': 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400',
-    'Success': 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400'
+    'Success': 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400',
+    'SentToBackupWebhook': 'bg-amber-100 text-amber-800 dark:bg-amber-900/20 dark:text-amber-400'
   }
   return `inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${classes[status] || ''}`
 }

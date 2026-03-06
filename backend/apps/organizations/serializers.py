@@ -43,6 +43,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             'bot_token', 'bot_username',
             'yandex_maps_api_key',
             'primary_color',
+            'webhook_link',
             'terminals', 'is_active', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'org_id', 'created_at', 'updated_at']

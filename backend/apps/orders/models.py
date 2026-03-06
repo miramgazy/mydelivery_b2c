@@ -15,6 +15,7 @@ class Order(models.Model):
     # Iiko Creation Statuses
     STATUS_IN_PROGRESS = 'InProgress'
     STATUS_SUCCESS = 'Success'
+    STATUS_SENT_TO_BACKUP_WEBHOOK = 'SentToBackupWebhook'
     
     STATUS_CHOICES = [
         (STATUS_PENDING, 'Ожидает'),
@@ -26,6 +27,7 @@ class Order(models.Model):
         (STATUS_ERROR, 'Ошибка'),
         (STATUS_IN_PROGRESS, 'В процессе iiko'),
         (STATUS_SUCCESS, 'Успешно создан в iiko'),
+        (STATUS_SENT_TO_BACKUP_WEBHOOK, 'Отправлен на резервный вебхук'),
     ]
     
     order_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
@@ -100,6 +102,9 @@ class Order(models.Model):
     # Полный payload, отправленный в iiko (для отладки)
     query_to_iiko = models.JSONField('Запрос в iiko', null=True, blank=True)
     error_message = models.TextField('Текст ошибки', blank=True, null=True)
+    
+    # Умный повтор: сколько раз уже повторяли отправку в iiko (0, 1, 2)
+    retry_count = models.PositiveSmallIntegerField('Количество повторов в iiko', default=0)
     
     created_at = models.DateTimeField('Создан', auto_now_add=True)
     updated_at = models.DateTimeField('Обновлен', auto_now=True)
