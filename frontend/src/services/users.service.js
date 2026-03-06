@@ -1,8 +1,8 @@
 import api from './api'
 
 class UserService {
-    async getUsers() {
-        const response = await api.get('/users/')
+    async getUsers(params = {}) {
+        const response = await api.get('/users/', { params })
         return response.data
     }
 

@@ -21,6 +21,7 @@ from .serializers import (
 )
 from .telegram_auth import validate_telegram_init_data, TelegramAuthException
 from core.permissions import IsSuperAdmin, IsOrgAdmin, IsOwner
+from .pagination import UsersPagination
 
 
 import logging
@@ -247,6 +248,7 @@ class UserViewSet(viewsets.ModelViewSet):
     """ViewSet для управления пользователями"""
     queryset = User.objects.select_related('role', 'organization').prefetch_related('addresses', 'billing_phones').all().order_by('-created_at')
     serializer_class = UserSerializer
+    pagination_class = UsersPagination
     filter_backends = [filters.SearchFilter, DjangoFilterBackend]
     search_fields = ['first_name', 'last_name', 'username', 'phone', 'email']
     filterset_fields = ['role', 'organization', 'is_active']

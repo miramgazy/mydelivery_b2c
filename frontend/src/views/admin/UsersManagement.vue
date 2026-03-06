@@ -51,7 +51,7 @@
     </div>
 
     <!-- Empty State -->
-    <div v-else-if="filteredUsers.length === 0" class="text-center py-12 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-dashed border-gray-200 dark:border-gray-700">
+    <div v-else-if="totalUsers === 0" class="text-center py-12 bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-dashed border-gray-200 dark:border-gray-700">
         <div class="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded-full flex items-center justify-center mx-auto mb-4">
             <svg class="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -357,7 +357,8 @@ import deliveryAddressService from '@/services/delivery-address.service'
 import { useNotificationStore } from '@/stores/notifications'
 
 const loading = ref(true)
-const users = ref([])
+const users = ref([]) // текущая страница
+const totalCount = ref(0)
 const allRoles = ref([])
 const organizationStore = useOrganizationStore()
 const availableTerminals = computed(() => organizationStore.terminals)
@@ -404,62 +405,66 @@ function formatUpdatedAt(isoString) {
     }
 }
 
-const filteredUsers = computed(() => {
-    let result = Array.isArray(users.value) ? users.value : (users.value?.results || [])
-
-    if (activeFilter.value !== 'all') {
-        result = result.filter(u => u.role_name === activeFilter.value)
-    }
-
-    if (searchQuery.value) {
-        const query = searchQuery.value.toLowerCase()
-        result = result.filter(u => 
-            (u.full_name?.toLowerCase().includes(query)) ||
-            (u.username?.toLowerCase().includes(query)) ||
-            (u.phone?.includes(query))
-        )
-    }
-
-    return result
-})
-
 const currentPage = ref(1)
 const perPage = ref(20)
 
-const totalUsers = computed(() => filteredUsers.value.length)
-const totalPages = computed(() => {
-    if (!totalUsers.value) return 1
-    return Math.max(1, Math.ceil(totalUsers.value / perPage.value))
-})
+const totalUsers = computed(() => totalCount.value)
+const totalPages = computed(() => Math.max(1, Math.ceil((totalCount.value || 0) / (perPage.value || 20))))
+const paginatedUsers = computed(() => users.value)
 
-const paginatedUsers = computed(() => {
-    const start = (currentPage.value - 1) * perPage.value
-    return filteredUsers.value.slice(start, start + perPage.value)
-})
+function getRoleIdByRoleName(roleName) {
+  const role = (allRoles.value || []).find(r => r.role_name === roleName)
+  return role?.id ?? null
+}
 
-watch([filteredUsers, perPage], () => {
-    currentPage.value = 1
-})
+async function fetchUsersPage() {
+  loading.value = true
+  try {
+    const params = {
+      page: currentPage.value,
+      page_size: perPage.value,
+    }
+
+    if (searchQuery.value?.trim()) {
+      params.search = searchQuery.value.trim()
+    }
+
+    if (activeFilter.value !== 'all') {
+      const roleId = getRoleIdByRoleName(activeFilter.value)
+      if (roleId) params.role = roleId
+    }
+
+    const data = await usersService.getUsers(params)
+    users.value = Array.isArray(data) ? data : (data.results || [])
+    totalCount.value = data?.count ?? users.value.length
+  } catch (err) {
+    console.error('Fetch users error:', err)
+    users.value = []
+    totalCount.value = 0
+  } finally {
+    loading.value = false
+  }
+}
 
 async function fetchData() {
     loading.value = true
     try {
-        const [usersData, rolesData] = await Promise.all([
-            usersService.getUsers(),
+        const [rolesData] = await Promise.all([
             usersService.getRoles(),
             organizationStore.fetchTerminals()
         ])
         
-        // Handle paginated or non-paginated response
-        users.value = Array.isArray(usersData) ? usersData : (usersData.results || [])
         allRoles.value = Array.isArray(rolesData) ? rolesData : (rolesData.results || [])
         
         // По умолчанию ставим роль "клиент" для формы
         const customerRole = allRoles.value.find(r => r.role_name === 'customer')
         if (customerRole) form.role = customerRole.id
+
+        await fetchUsersPage()
     } catch (err) {
         console.error('Fetch error:', err)
     } finally {
+        // fetchUsersPage уже снимает loading, но оставим на всякий случай
         loading.value = false
     }
 }
@@ -585,7 +590,7 @@ async function saveUser() {
             await usersService.createUser(payload)
         }
         
-        await fetchData()
+        await fetchUsersPage()
         closeModal()
     } catch (err) {
         console.error('Save error:', err)
@@ -604,6 +609,29 @@ async function saveUser() {
 }
 
 onMounted(fetchData)
+
+let searchDebounceTimer = null
+watch(searchQuery, () => {
+  if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
+  searchDebounceTimer = setTimeout(() => {
+    currentPage.value = 1
+    fetchUsersPage()
+  }, 400)
+})
+
+watch(activeFilter, async () => {
+  currentPage.value = 1
+  await fetchUsersPage()
+})
+
+watch(perPage, async () => {
+  currentPage.value = 1
+  await fetchUsersPage()
+})
+
+watch(currentPage, async () => {
+  await fetchUsersPage()
+})
 </script>
 
 <style scoped>
