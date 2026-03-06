@@ -640,6 +640,18 @@ class DeliveryAddressViewSet(viewsets.ModelViewSet):
         organization = getattr(request.user, 'organization', None)
         api_key = getattr(organization, 'yandex_maps_api_key', None) if organization else None
 
+        # Для админки: синхронный режим, чтобы можно было отобразить ошибку сразу
+        sync = request.query_params.get('sync') in ('1', 'true', 'yes')
+        if sync:
+            from apps.orders.services import geocode_address_verbose
+            address_obj = DeliveryAddress.objects.filter(pk=address_id).select_related('city', 'street').first()
+            if not address_obj:
+                return Response({'detail': 'Адрес не найден'}, status=status.HTTP_404_NOT_FOUND)
+            ok, err = geocode_address_verbose(address_obj, api_key or '')
+            if not ok:
+                return Response({'detail': err or 'Геокодирование не удалось'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(DeliveryAddressSerializer(address_obj).data)
+
         def run_geocode():
             try:
                 from apps.orders.services import geocode_address

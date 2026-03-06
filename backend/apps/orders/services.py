@@ -951,3 +951,79 @@ def geocode_address(address: DeliveryAddress, api_key: str) -> bool:
         logger.error(f"Ошибка при парсинге ответа Яндекс Геокодера для адреса {address.id}: {e}")
         
     return False
+
+
+def geocode_address_verbose(address: DeliveryAddress, api_key: str):
+    """
+    Геокодирование адреса через Яндекс.Карты Геокодер API (расширенная версия).
+    Возвращает tuple(ok: bool, error_message: str|None).
+    """
+    if not api_key:
+        msg = "Не задан API-ключ Яндекс.Карт"
+        logger.warning("%s для адреса %s", msg, address.id)
+        return False, msg
+
+    parts = []
+    city = (address.city.name if address.city else (address.city_name or '')).strip()
+    if city:
+        parts.append(city)
+    street = (address.street_name or (address.street.street_name if address.street else '') or '').strip()
+    if street:
+        parts.append(street)
+    house = (address.house or '').strip()
+    if house:
+        parts.append(house)
+
+    address_str = ", ".join(parts)
+    if not address_str:
+        msg = "Пустой адрес: нечего отправлять в геокодер"
+        logger.warning("Геокодер: %s (id=%s)", msg, address.id)
+        return False, msg
+
+    logger.info("Яндекс Геокодер (sync) запрос: address_id=%s, geocode='%s'", address.id, address_str)
+    url = "https://geocode-maps.yandex.ru/1.x/"
+    params = {
+        'apikey': api_key,
+        'format': 'json',
+        'geocode': address_str,
+        'results': 1
+    }
+
+    try:
+        response = requests.get(url, params=params, timeout=5)
+        # Иногда Яндекс возвращает 403/401 при невалидном ключе
+        if response.status_code in (401, 403):
+            msg = f"Ошибка Яндекс Геокодера: доступ запрещён (HTTP {response.status_code}). Проверьте API-ключ."
+            logger.warning("%s address_id=%s", msg, address.id)
+            return False, msg
+        response.raise_for_status()
+        data = response.json()
+
+        feature_member = data.get('response', {}).get('GeoObjectCollection', {}).get('featureMember', [])
+        if not feature_member:
+            msg = "Яндекс Геокодер не нашел координаты для указанного адреса"
+            logger.info("%s '%s' (%s)", msg, address_str, address.id)
+            return False, msg
+
+        geo_object = feature_member[0].get('GeoObject', {})
+        point = geo_object.get('Point', {}).get('pos', '')
+        if not point:
+            msg = "Яндекс вернул пустые координаты"
+            logger.warning("%s для '%s' (%s)", msg, address_str, address.id)
+            return False, msg
+
+        lon, lat = point.split()
+        address.longitude = Decimal(lon)
+        address.latitude = Decimal(lat)
+        address.is_verified = True
+        address.save(update_fields=['latitude', 'longitude', 'is_verified', 'updated_at'])
+        return True, None
+
+    except requests.RequestException as e:
+        msg = f"HTTP ошибка при запросе к Яндекс Геокодеру: {e}"
+        logger.error("%s address_id=%s", msg, address.id)
+        return False, msg
+    except (ValueError, IndexError, TypeError, AttributeError) as e:
+        msg = f"Ошибка при обработке ответа Яндекс Геокодера: {e}"
+        logger.error("%s address_id=%s", msg, address.id)
+        return False, msg

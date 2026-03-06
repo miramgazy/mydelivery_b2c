@@ -45,8 +45,9 @@ class DeliveryAddressService {
     /**
      * Геокодировать адрес с помощью Яндекс.Карт API на бекенде
      */
-    async geocodeAddress(id) {
-        const response = await api.post(`/addresses/${id}/geocode/`)
+    async geocodeAddress(id, options = {}) {
+        const sync = options?.sync === true
+        const response = await api.post(`/addresses/${id}/geocode/${sync ? '?sync=1' : ''}`)
         return response.data
     }
 }

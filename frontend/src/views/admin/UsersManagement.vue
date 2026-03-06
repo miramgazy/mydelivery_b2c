@@ -61,60 +61,102 @@
         <p class="text-sm text-gray-500">Попробуйте изменить параметры поиска</p>
     </div>
 
-    <!-- Users List -->
-    <div v-else class="space-y-4">
-        <div 
-          v-for="user in paginatedUsers" 
-          :key="user.id" 
-          class="bg-white dark:bg-gray-800 p-4 rounded-2xl shadow-sm flex items-center justify-between border border-gray-100 dark:border-gray-700 transition-transform active:scale-[0.98]"
-        >
-            <div class="flex items-center gap-4">
-                <div class="w-12 h-12 bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 rounded-full flex items-center justify-center font-bold text-lg">
-                    {{ (user.first_name || user.username || 'U')[0].toUpperCase() }}
-                </div>
-                <div>
-                    <h3 class="font-bold text-gray-900 dark:text-white leading-tight">
-                        {{ user.full_name || user.username }}
-                    </h3>
-                    <div class="flex flex-wrap items-center gap-2 mt-1">
-                        <span class="text-[10px] px-1.5 py-0.5 rounded-md font-bold uppercase transition-colors"
-                          :class="{
-                            'bg-blue-100 text-blue-700': user.role_name === 'org_admin',
-                            'bg-green-100 text-green-700': user.role_name === 'customer',
-                            'bg-purple-100 text-purple-700': user.role_name === 'superadmin'
-                          }"
-                        >
-                            {{ user.role_display }}
-                        </span>
-                        <span class="text-[10px] px-1.5 py-0.5 rounded-md font-medium"
-                          :class="{
-                            'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400': user.is_bot_subscribed === true,
-                            'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400': user.is_bot_subscribed === false,
-                            'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400': user.is_bot_subscribed == null
-                          }"
-                          :title="user.is_bot_subscribed === true && user.chat_id ? `chat_id: ${user.chat_id}` : ''"
-                        >
-                            {{ user.is_bot_subscribed === true ? 'Подписан' + (user.chat_id ? ` (${user.chat_id})` : '') : user.is_bot_subscribed === false ? 'Отказ' : 'Не выбрано' }}
-                        </span>
-                        <p v-if="user.phone" class="text-xs text-gray-500">{{ user.phone }}</p>
-                    </div>
-                    <p v-if="user.updated_at" class="text-[10px] text-gray-400 mt-0.5">
-                        Обновлён: {{ formatUpdatedAt(user.updated_at) }}
-                    </p>
-                </div>
-            </div>
-            <button 
-              @click="editUser(user)"
-              class="w-10 h-10 flex items-center justify-center text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+    <!-- Users Table -->
+    <div v-else class="bg-white dark:bg-gray-800 rounded-2xl shadow-sm border border-gray-100 dark:border-gray-700 overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead class="bg-gray-50 dark:bg-gray-900/40">
+            <tr>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Имя</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Роль</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Telegram ID</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Телефон</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Терминал</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Подписка</th>
+              <th class="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">Адрес подтвержден</th>
+              <th class="px-4 py-3 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">Действие</th>
+            </tr>
+          </thead>
+          <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+            <tr
+              v-for="user in paginatedUsers"
+              :key="user.id"
+              class="hover:bg-gray-50 dark:hover:bg-gray-700/40"
             >
-                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <td class="px-4 py-3 text-sm font-medium text-gray-900 dark:text-white">
+                <div class="flex items-center gap-3">
+                  <div class="w-9 h-9 bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 rounded-full flex items-center justify-center font-bold">
+                    {{ (user.first_name || user.username || 'U')[0].toUpperCase() }}
+                  </div>
+                  <div>
+                    <div class="leading-tight">{{ user.full_name || user.username }}</div>
+                    <div v-if="user.updated_at" class="text-[11px] text-gray-400">
+                      Обновлён: {{ formatUpdatedAt(user.updated_at) }}
+                    </div>
+                  </div>
+                </div>
+              </td>
+              <td class="px-4 py-3 text-sm text-gray-700 dark:text-gray-200">
+                <span
+                  class="text-[11px] px-2 py-1 rounded-md font-bold uppercase"
+                  :class="{
+                    'bg-blue-100 text-blue-700': user.role_name === 'org_admin',
+                    'bg-green-100 text-green-700': user.role_name === 'customer',
+                    'bg-purple-100 text-purple-700': user.role_name === 'superadmin'
+                  }"
+                >
+                  {{ user.role_display }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                {{ user.telegram_id || '-' }}
+              </td>
+              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                {{ user.phone || '-' }}
+              </td>
+              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                {{ formatUserTerminals(user) }}
+              </td>
+              <td class="px-4 py-3 text-sm">
+                <span
+                  class="text-[11px] px-2 py-1 rounded-md font-semibold"
+                  :class="{
+                    'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400': user.is_bot_subscribed === true,
+                    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400': user.is_bot_subscribed === false,
+                    'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400': user.is_bot_subscribed == null
+                  }"
+                  :title="user.is_bot_subscribed === true && user.chat_id ? `chat_id: ${user.chat_id}` : ''"
+                >
+                  {{ user.is_bot_subscribed === true ? 'Подписан' : user.is_bot_subscribed === false ? 'Отказ' : 'Не выбрано' }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
+                <span v-if="isAnyAddressVerified(user)" class="text-green-600 font-semibold">Да</span>
+                <span v-else class="text-gray-400">Нет</span>
+              </td>
+              <td class="px-4 py-3 text-right">
+                <button
+                  @click="editUser(user)"
+                  class="w-9 h-9 inline-flex items-center justify-center text-gray-400 hover:text-primary-600 dark:hover:text-primary-400 rounded-full hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+                  title="Редактировать"
+                >
+                  <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-            </button>
-        </div>
+                  </svg>
+                </button>
+              </td>
+            </tr>
+            <tr v-if="paginatedUsers.length === 0">
+              <td colspan="8" class="px-4 py-8 text-center text-sm text-gray-500 dark:text-gray-400">
+                Пользователи не найдены
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
 
         <!-- Pagination -->
-        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4">
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 p-4">
           <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
             <span>Показывать по:</span>
             <select
@@ -221,6 +263,76 @@
                         {{ modalError }}
                     </div>
 
+                    <!-- Delivery Addresses (read-only + coordinates tools) -->
+                    <div v-if="editingUser" class="pt-4 border-t border-gray-100 dark:border-gray-700">
+                      <h4 class="text-sm font-bold text-gray-900 dark:text-white mb-3">
+                        Адреса доставки
+                      </h4>
+                      <div v-if="addressRows.length === 0" class="text-sm text-gray-500 dark:text-gray-400">
+                        Адресов нет
+                      </div>
+                      <div v-else class="space-y-3">
+                        <div
+                          v-for="row in addressRows"
+                          :key="row.id"
+                          class="p-3 rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900"
+                        >
+                          <div class="flex items-start justify-between gap-3">
+                            <div class="flex-1">
+                              <div class="text-sm font-semibold text-gray-900 dark:text-white">
+                                {{ row.full_address || '—' }}
+                              </div>
+                              <div class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                <span v-if="row.is_verified">✅ Подтвержден</span>
+                                <span v-else>⚠️ Не подтвержден</span>
+                              </div>
+                            </div>
+                            <button
+                              type="button"
+                              class="text-xs px-3 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
+                              :disabled="row.geocoding"
+                              @click="runGeocoder(row)"
+                            >
+                              {{ row.geocoding ? 'Геокодер...' : 'Запустить геокодер' }}
+                            </button>
+                          </div>
+
+                          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+                            <div>
+                              <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Широта</label>
+                              <input
+                                v-model="row.latitude"
+                                type="text"
+                                inputmode="decimal"
+                                class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                                placeholder="43.1234567"
+                              >
+                            </div>
+                            <div>
+                              <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Долгота</label>
+                              <input
+                                v-model="row.longitude"
+                                type="text"
+                                inputmode="decimal"
+                                class="w-full px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+                                placeholder="76.1234567"
+                              >
+                            </div>
+                            <div class="flex items-end">
+                              <button
+                                type="button"
+                                class="w-full px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-60"
+                                :disabled="row.saving"
+                                @click="saveAddressCoordinates(row)"
+                              >
+                                {{ row.saving ? 'Сохранение...' : 'Сохранить' }}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
                     <div class="pt-4">
                         <button 
                           type="submit" 
@@ -241,6 +353,8 @@
 import { ref, computed, onMounted, reactive, watch } from 'vue'
 import usersService from '@/services/users.service'
 import { useOrganizationStore } from '@/stores/organization'
+import deliveryAddressService from '@/services/delivery-address.service'
+import { useNotificationStore } from '@/stores/notifications'
 
 const loading = ref(true)
 const users = ref([])
@@ -254,6 +368,9 @@ const showCreateModal = ref(false)
 const editingUser = ref(null)
 const modalLoading = ref(false)
 const modalError = ref('')
+const notificationStore = useNotificationStore()
+
+const addressRows = ref([]) // [{ id, full_address, latitude, longitude, is_verified, saving, geocoding }]
 
 const rolesFilter = [
     { id: 'all', name: 'Все' },
@@ -379,6 +496,79 @@ function editUser(user) {
         ? user.terminals.map(t => typeof t === 'object' ? t.id : t) 
         : []
     showCreateModal.value = true
+
+    // Адреса (для модалки)
+    const raw = Array.isArray(user.addresses) ? user.addresses : []
+    addressRows.value = raw.map(a => ({
+      id: a.id,
+      full_address: a.full_address || '',
+      latitude: a.latitude ?? '',
+      longitude: a.longitude ?? '',
+      is_verified: !!a.is_verified,
+      saving: false,
+      geocoding: false,
+    }))
+}
+
+function formatUserTerminals(user) {
+  const terms = Array.isArray(user?.terminals) ? user.terminals : []
+  if (!terms.length) return '-'
+  const names = terms.map(t => (typeof t === 'object' ? (t.name || t.terminal_group_name || t.id) : t)).filter(Boolean)
+  return names.join(', ')
+}
+
+function isAnyAddressVerified(user) {
+  const addrs = Array.isArray(user?.addresses) ? user.addresses : []
+  return addrs.some(a => a?.is_verified)
+}
+
+async function saveAddressCoordinates(row) {
+  if (!row?.id) return
+  row.saving = true
+  try {
+    const updated = await deliveryAddressService.updateCoordinates(row.id, row.latitude, row.longitude)
+    row.latitude = updated.latitude ?? row.latitude
+    row.longitude = updated.longitude ?? row.longitude
+    row.is_verified = !!updated.is_verified
+    notificationStore.show('Координаты сохранены')
+    // обновим пользователя из списка (локально), чтобы колонка "подтвержден" обновилась
+    if (editingUser.value?.addresses) {
+      const idx = editingUser.value.addresses.findIndex(a => a.id === row.id)
+      if (idx >= 0) editingUser.value.addresses[idx] = updated
+    }
+  } catch (err) {
+    const msg = err.response?.data?.detail || 'Не удалось сохранить координаты'
+    notificationStore.show(msg, 4000)
+  } finally {
+    row.saving = false
+  }
+}
+
+async function runGeocoder(row) {
+  if (!row?.id) return
+  row.geocoding = true
+  try {
+    // Для админки просим синхронный ответ с ошибкой (если будет)
+    const updated = await deliveryAddressService.geocodeAddress(row.id, { sync: true })
+    // backend может вернуть либо объект адреса, либо {status,message}
+    if (updated?.id) {
+      row.latitude = updated.latitude ?? row.latitude
+      row.longitude = updated.longitude ?? row.longitude
+      row.is_verified = !!updated.is_verified
+      notificationStore.show('Геокодирование выполнено')
+      if (editingUser.value?.addresses) {
+        const idx = editingUser.value.addresses.findIndex(a => a.id === row.id)
+        if (idx >= 0) editingUser.value.addresses[idx] = updated
+      }
+    } else {
+      notificationStore.show(updated?.message || 'Геокодирование запущено', 3000)
+    }
+  } catch (err) {
+    const msg = err.response?.data?.detail || 'Ошибка геокодера'
+    notificationStore.show(msg, 5000)
+  } finally {
+    row.geocoding = false
+  }
 }
 
 async function saveUser() {
