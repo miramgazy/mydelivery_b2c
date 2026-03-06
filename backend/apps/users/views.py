@@ -505,8 +505,26 @@ class DeliveryAddressViewSet(viewsets.ModelViewSet):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        """Пользователь видит только свои адреса"""
-        return self.queryset.filter(user=self.request.user).order_by('-is_default', '-updated_at')
+        """
+        Права видимости адресов:
+        - Суперадмин видит все адреса
+        - Админ организации видит адреса пользователей своей организации
+        - Обычный пользователь видит только свои адреса
+        """
+        user = self.request.user
+
+        # Суперадмин — полный доступ
+        if getattr(user, 'is_superadmin', False):
+            return self.queryset.order_by('-is_default', '-updated_at')
+
+        # Админ организации — адреса только своей организации
+        if getattr(user, 'is_org_admin', False) and getattr(user, 'organization_id', None):
+            return self.queryset.filter(user__organization_id=user.organization_id).order_by(
+                '-is_default', '-updated_at'
+            )
+
+        # Обычный пользователь — только свои адреса
+        return self.queryset.filter(user=user).order_by('-is_default', '-updated_at')
     
     @transaction.atomic
     def perform_create(self, serializer):
