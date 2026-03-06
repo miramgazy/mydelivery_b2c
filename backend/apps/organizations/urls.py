@@ -7,14 +7,14 @@ from .views import (
 )
 
 router = DefaultRouter()
+# Эндпоинты рассылок живут под /api/organizations/mailings/
+router.register(r'organizations/mailings', MailingTaskViewSet, basename='mailings')
 router.register(r'organizations', OrganizationViewSet)
 router.register(r'terminals', TerminalViewSet)
 router.register(r'streets', StreetViewSet)
 router.register(r'payment-types', PaymentTypeViewSet)
 router.register(r'cities', CityViewSet)
 router.register(r'discounts', DiscountViewSet)
-# Эндпоинты рассылок живут под /api/organizations/mailings/
-router.register(r'organizations/mailings', MailingTaskViewSet, basename='mailings')
 
 urlpatterns = [
     path('', include(router.urls)),
