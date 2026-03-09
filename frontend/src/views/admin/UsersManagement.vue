@@ -168,17 +168,43 @@
             </select>
           </div>
 
-          <div class="flex items-center gap-1">
+          <div class="flex items-center gap-1 flex-wrap justify-center">
             <button
-              v-for="page in totalPages"
-              :key="page"
-              @click="currentPage = page"
-              class="min-w-[2.25rem] h-9 px-3 rounded-md text-sm font-medium border transition-colors"
-              :class="currentPage === page
-                ? 'bg-primary-600 text-white border-primary-600'
-                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'"
+              type="button"
+              aria-label="Предыдущий блок страниц"
+              :disabled="!canGoPrev"
+              @click="goPrevWindow"
+              class="min-w-[2.25rem] h-9 px-2 rounded-md text-sm font-medium border border-gray-300 dark:border-gray-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
             >
-              {{ page }}
+              &laquo;
+            </button>
+            <template v-for="(item, idx) in visiblePageNumbers" :key="item.type === 'ellipsis' ? `ellipsis-${idx}` : item.num">
+              <span
+                v-if="item.type === 'ellipsis'"
+                class="min-w-[2.25rem] h-9 flex items-center justify-center text-gray-500 dark:text-gray-400"
+              >
+                &hellip;
+              </span>
+              <button
+                v-else
+                type="button"
+                @click="currentPage = item.num"
+                class="min-w-[2.25rem] h-9 px-3 rounded-md text-sm font-medium border transition-colors"
+                :class="currentPage === item.num
+                  ? 'bg-primary-600 text-white border-primary-600'
+                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'"
+              >
+                {{ item.num }}
+              </button>
+            </template>
+            <button
+              type="button"
+              aria-label="Следующий блок страниц"
+              :disabled="!canGoNext"
+              @click="goNextWindow"
+              class="min-w-[2.25rem] h-9 px-2 rounded-md text-sm font-medium border border-gray-300 dark:border-gray-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              &raquo;
             </button>
           </div>
         </div>
@@ -405,12 +431,55 @@ function formatUpdatedAt(isoString) {
     }
 }
 
+const PAGINATION_WINDOW = 12
+const PAGINATION_LAST = 3
+
 const currentPage = ref(1)
 const perPage = ref(20)
+const paginationWindowStart = ref(1)
 
 const totalUsers = computed(() => totalCount.value)
 const totalPages = computed(() => Math.max(1, Math.ceil((totalCount.value || 0) / (perPage.value || 20))))
 const paginatedUsers = computed(() => users.value)
+
+/** Номера страниц для отображения: до 15 — все; больше 15 — окно 12 + "..." + последние 3, прокрутка << >> */
+const visiblePageNumbers = computed(() => {
+  const total = totalPages.value
+  if (total <= 15) {
+    return Array.from({ length: total }, (_, i) => ({ type: 'page', num: i + 1 }))
+  }
+  const start = paginationWindowStart.value
+  const windowEnd = Math.min(start + PAGINATION_WINDOW - 1, total - PAGINATION_LAST)
+  const list = []
+  for (let p = start; p <= windowEnd; p++) {
+    list.push({ type: 'page', num: p })
+  }
+  if (windowEnd < total - PAGINATION_LAST) {
+    list.push({ type: 'ellipsis' })
+    for (let p = total - PAGINATION_LAST + 1; p <= total; p++) {
+      list.push({ type: 'page', num: p })
+    }
+  }
+  return list
+})
+
+const canGoPrev = computed(() => totalPages.value > 15 && paginationWindowStart.value > 1)
+const canGoNext = computed(() =>
+  totalPages.value > 15 && paginationWindowStart.value <= totalPages.value - 15
+)
+
+function goPrevWindow() {
+  if (!canGoPrev.value) return
+  paginationWindowStart.value = Math.max(1, paginationWindowStart.value - PAGINATION_WINDOW)
+}
+
+function goNextWindow() {
+  if (!canGoNext.value) return
+  paginationWindowStart.value = Math.min(
+    totalPages.value - 14,
+    paginationWindowStart.value + PAGINATION_WINDOW
+  )
+}
 
 function getRoleIdByRoleName(roleName) {
   const role = (allRoles.value || []).find(r => r.role_name === roleName)
@@ -615,22 +684,30 @@ watch(searchQuery, () => {
   if (searchDebounceTimer) clearTimeout(searchDebounceTimer)
   searchDebounceTimer = setTimeout(() => {
     currentPage.value = 1
+    paginationWindowStart.value = 1
     fetchUsersPage()
   }, 400)
 })
 
 watch(activeFilter, async () => {
   currentPage.value = 1
+  paginationWindowStart.value = 1
   await fetchUsersPage()
 })
 
 watch(perPage, async () => {
   currentPage.value = 1
+  paginationWindowStart.value = 1
   await fetchUsersPage()
 })
 
 watch(currentPage, async () => {
   await fetchUsersPage()
+})
+
+watch(totalPages, (newTotal) => {
+  if (newTotal <= 15) paginationWindowStart.value = 1
+  else paginationWindowStart.value = Math.min(paginationWindowStart.value, newTotal - 14)
 })
 </script>
 
