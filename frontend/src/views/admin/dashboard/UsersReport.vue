@@ -133,7 +133,11 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { Icon } from '@iconify/vue'
-import { fetchAllUsersForReport, aggregateUsersReport } from '@/services/dashboard.service'
+import {
+  fetchUsersReportStatistics,
+  fetchAllUsersForReport,
+  aggregateUsersReport
+} from '@/services/dashboard.service'
 
 const loading = ref(true)
 const error = ref(null)
@@ -155,11 +159,20 @@ async function loadReport() {
   error.value = null
   report.value = null
   try {
-    const users = await fetchAllUsersForReport()
-    report.value = aggregateUsersReport(users)
+    report.value = await fetchUsersReportStatistics()
   } catch (err) {
-    console.error(err)
-    error.value = err.response?.data?.detail || 'Не удалось загрузить отчёт по пользователям'
+    if (err.response?.status === 404) {
+      try {
+        const users = await fetchAllUsersForReport()
+        report.value = aggregateUsersReport(users)
+      } catch (fallbackErr) {
+        console.error(fallbackErr)
+        error.value = fallbackErr.response?.data?.detail || 'Не удалось загрузить отчёт по пользователям'
+      }
+    } else {
+      console.error(err)
+      error.value = err.response?.data?.detail || 'Не удалось загрузить отчёт по пользователям'
+    }
   } finally {
     loading.value = false
   }

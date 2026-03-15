@@ -8,7 +8,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.conf import settings
 from django.db import transaction
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db.models import Q
+from django.db.models import Q, Count
 from drf_spectacular.utils import extend_schema
 import re
 import threading
@@ -488,6 +488,46 @@ class UserViewSet(viewsets.ModelViewSet):
             UserSerializer(serializer.instance).data,
             status=status.HTTP_201_CREATED
         )
+
+    @action(detail=False, methods=['get'], url_path='statistics')
+    def statistics(self, request):
+        """
+        Агрегированная статистика по пользователям для дашборда.
+        Учитывает только пользователей, доступных текущему админу (по организации).
+        Один лёгкий запрос вместо загрузки всех записей.
+        """
+        qs = self.get_queryset()
+        total_users = qs.count()
+        subscribed_count = qs.filter(is_bot_subscribed=True).count()
+        with_verified_address_count = qs.filter(addresses__is_verified=True).distinct().count()
+        with_phone_count = qs.exclude(phone__isnull=True).exclude(phone='').count()
+
+        # Пользователи по терминалам: через M2M, один запрос
+        user_ids = list(qs.values_list('id', flat=True))
+        through = User.terminals.through
+        terminal_counts = (
+            through.objects.filter(user_id__in=user_ids)
+            .values('terminal_id')
+            .annotate(user_count=Count('user_id'))
+        )
+        terminal_id_list = [r['terminal_id'] for r in terminal_counts]
+        from apps.organizations.models import Terminal
+        terminals_map = {
+            str(t.terminal_id): (t.terminal_group_name or str(t.terminal_id))
+            for t in Terminal.objects.filter(terminal_id__in=terminal_id_list).only('terminal_id', 'terminal_group_name')
+        }
+        by_terminal = [
+            {'name': terminals_map.get(str(r['terminal_id']), str(r['terminal_id'])), 'count': r['user_count']}
+            for r in terminal_counts
+        ]
+
+        return Response({
+            'total_users': total_users,
+            'subscribed_count': subscribed_count,
+            'with_verified_address_count': with_verified_address_count,
+            'with_phone_count': with_phone_count,
+            'by_terminal': by_terminal,
+        })
 
 
 class RoleViewSet(viewsets.ReadOnlyModelViewSet):

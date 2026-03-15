@@ -81,7 +81,25 @@ export function aggregateOrdersReport(orders) {
 }
 
 /**
+ * Загрузка статистики по пользователям с бэкенда (один лёгкий запрос).
+ * Учитывает всех пользователей, доступных текущему админу (в т.ч. 600+).
+ */
+export async function fetchUsersReportStatistics() {
+  const { data } = await api.get('/users/statistics/')
+  return {
+    totalUsers: data.total_users ?? 0,
+    subscribedCount: data.subscribed_count ?? 0,
+    withVerifiedAddressCount: data.with_verified_address_count ?? 0,
+    withPhoneCount: data.with_phone_count ?? 0,
+    byTerminal: Array.isArray(data.by_terminal)
+      ? data.by_terminal.map((x) => ({ name: x.name ?? '—', count: x.count ?? 0 }))
+      : []
+  }
+}
+
+/**
  * Загрузка всех пользователей для отчёта (постранично).
+ * Используется только как fallback, если бэкенд не отдаёт /users/statistics/.
  */
 export async function fetchAllUsersForReport() {
   const pageSize = 500
