@@ -104,6 +104,17 @@ const routes = [
                 path: '',
                 redirect: '/admin/organization/settings'
             },
+            // Dashboard routes
+            {
+                path: 'dashboard/orders-report',
+                name: 'admin-dashboard-orders-report',
+                component: () => import('@/views/admin/dashboard/OrdersReport.vue')
+            },
+            {
+                path: 'dashboard/users-report',
+                name: 'admin-dashboard-users-report',
+                component: () => import('@/views/admin/dashboard/UsersReport.vue')
+            },
             // Organization routes
             {
                 path: 'organization/settings',

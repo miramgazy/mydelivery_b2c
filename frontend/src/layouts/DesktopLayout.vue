@@ -29,6 +29,33 @@
 
       <!-- Navigation -->
       <nav class="p-4 space-y-2 overflow-y-auto h-[calc(100vh-4rem)]">
+        <!-- Dashboard Section -->
+        <div class="mb-6">
+          <div
+            class="flex items-center gap-3 px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider"
+            :class="{ 'justify-center': !sidebarOpen }"
+          >
+            <Icon icon="mdi:view-dashboard" class="w-4 h-4" />
+            <span v-if="sidebarOpen">Dashboard</span>
+          </div>
+          <router-link
+            to="/admin/dashboard/orders-report"
+            class="nav-item"
+            active-class="nav-item-active"
+          >
+            <Icon icon="mdi:chart-box" class="w-5 h-5" />
+            <span v-if="sidebarOpen">Отчет по заказам</span>
+          </router-link>
+          <router-link
+            to="/admin/dashboard/users-report"
+            class="nav-item"
+            active-class="nav-item-active"
+          >
+            <Icon icon="mdi:account-group" class="w-5 h-5" />
+            <span v-if="sidebarOpen">Отчет по пользователям</span>
+          </router-link>
+        </div>
+
         <!-- Organization Section -->
         <div class="mb-6">
           <div 
@@ -249,6 +276,8 @@ const handleLogout = () => {
 
 const pageTitle = computed(() => {
   const titles = {
+    '/admin/dashboard/orders-report': 'Отчет по заказам',
+    '/admin/dashboard/users-report': 'Отчет по пользователям',
     '/admin/organization/settings': 'Настройки организации',
     '/admin/organization/terminals': 'Терминалы',
     '/admin/organization/stop-list': 'Стоп-лист',
