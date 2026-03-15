@@ -2,8 +2,38 @@ import api from './api'
 import usersService from './users.service'
 
 /**
- * Заказы за период: запрос к API с опциональными date_from, date_to.
- * Если бэкенд не фильтрует по дате — фильтрация по created_at на клиенте.
+ * Отчёт по заказам за период с бэкенда (один запрос, агрегация в БД).
+ * Параметры: dateFrom, dateTo (YYYY-MM-DD).
+ */
+export async function fetchOrdersReportFromApi(dateFrom, dateTo) {
+  const { data } = await api.get('/orders/report/', {
+    params: { date_from: dateFrom, date_to: dateTo }
+  })
+  return {
+    totalOrders: data.total_orders ?? 0,
+    cancelledOrders: data.cancelled_orders ?? 0,
+    totalSum: data.total_sum ?? 0,
+    byTerminal: Array.isArray(data.by_terminal)
+      ? data.by_terminal.map((x) => ({ name: x.name ?? '—', count: x.count ?? 0 }))
+      : [],
+    sumByTerminal: Array.isArray(data.sum_by_terminal)
+      ? data.sum_by_terminal.map((x) => ({ name: x.name ?? '—', sum: x.sum ?? 0 }))
+      : [],
+    byPaymentType: Array.isArray(data.by_payment_type)
+      ? data.by_payment_type.map((x) => ({ name: x.name ?? '—', count: x.count ?? 0 }))
+      : [],
+    sumByPaymentType: Array.isArray(data.sum_by_payment_type)
+      ? data.sum_by_payment_type.map((x) => ({ name: x.name ?? '—', sum: x.sum ?? 0 }))
+      : [],
+    paidDeliveryCount: data.paid_delivery_count ?? 0,
+    paidDeliverySum: data.paid_delivery_sum ?? 0,
+    freeDeliveryCount: data.free_delivery_count ?? 0,
+    freeDeliverySum: data.free_delivery_sum ?? 0
+  }
+}
+
+/**
+ * Заказы за период: запрос к API (fallback, если бэкенд не отдаёт /orders/report/).
  */
 export async function fetchOrdersForReport(dateFrom, dateTo) {
   const params = {}

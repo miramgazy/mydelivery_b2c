@@ -4,8 +4,9 @@ from rest_framework.response import Response
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from django.db import transaction
+from django.db.models import F, Sum, Count, Q
 from django.utils import timezone
-from datetime import timedelta
+from datetime import datetime, timedelta
 from .models import Order, OrderItem, OrderItemModifier
 from .serializers import (
     OrderListSerializer, OrderDetailSerializer, OrderCreateSerializer
@@ -37,8 +38,8 @@ class OrderViewSet(viewsets.ModelViewSet):
         if self.action == 'create':
             # Создавать могут все авторизованные
             permission_classes = [permissions.IsAuthenticated]
-        elif self.action in ['update', 'partial_update', 'destroy', 'repeat']:
-            # Редактировать и повторять могут только админы
+        elif self.action in ['update', 'partial_update', 'destroy', 'repeat', 'report']:
+            # Редактировать, повторять и отчёт — только админы
             permission_classes = [IsSuperAdmin | IsOrgAdmin]
         else:
             # Просмотр - авторизованные
@@ -308,7 +309,7 @@ class OrderViewSet(viewsets.ModelViewSet):
         
         queryset = self.get_queryset()
         
-        from django.db.models import Count, Sum, Avg
+        from django.db.models import Avg
         
         stats = queryset.aggregate(
             total_orders=Count('order_id'),
@@ -321,3 +322,94 @@ class OrderViewSet(viewsets.ModelViewSet):
         )
         
         return Response(stats)
+
+    @action(detail=False, methods=['get'], url_path='report')
+    def report(self, request):
+        """
+        Отчёт по заказам за период для дашборда (только для админов).
+        Параметры: date_from, date_to (YYYY-MM-DD). Агрегация в БД без выгрузки всех заказов.
+        """
+        if not (request.user.is_superadmin or request.user.is_org_admin):
+            return Response(
+                {'error': 'Недостаточно прав'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+        date_from = request.query_params.get('date_from')
+        date_to = request.query_params.get('date_to')
+        if not date_from or not date_to:
+            return Response(
+                {'error': 'Укажите date_from и date_to (YYYY-MM-DD)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            dt_from = datetime.strptime(date_from, '%Y-%m-%d').date()
+            dt_to = datetime.strptime(date_to, '%Y-%m-%d').date()
+        except ValueError:
+            return Response(
+                {'error': 'Неверный формат даты, используйте YYYY-MM-DD'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        qs = self.get_queryset().filter(
+            created_at__date__gte=dt_from,
+            created_at__date__lte=dt_to
+        )
+        total_orders = qs.count()
+        cancelled_count = qs.filter(status=Order.STATUS_CANCELLED).count()
+        not_cancelled = qs.exclude(status=Order.STATUS_CANCELLED)
+
+        total_sum = not_cancelled.aggregate(
+            s=Sum(F('total_amount') + F('delivery_cost'))
+        )['s']
+        total_sum = float(total_sum) if total_sum is not None else 0
+
+        by_terminal_qs = not_cancelled.values(
+            'terminal__terminal_group_name', 'terminal_id'
+        ).annotate(
+            count=Count('order_id'),
+            sum=Sum(F('total_amount') + F('delivery_cost'))
+        )
+        by_terminal = [
+            {'name': (r['terminal__terminal_group_name'] or '—'), 'count': r['count']}
+            for r in by_terminal_qs
+        ]
+        sum_by_terminal = [
+            {'name': (r['terminal__terminal_group_name'] or '—'), 'sum': float(r['sum'] or 0)}
+            for r in by_terminal_qs
+        ]
+
+        by_payment_qs = not_cancelled.values('payment_type__payment_name').annotate(
+            count=Count('order_id'),
+            sum=Sum(F('total_amount') + F('delivery_cost'))
+        )
+        by_payment_type = [
+            {'name': (r['payment_type__payment_name'] or '—'), 'count': r['count']}
+            for r in by_payment_qs
+        ]
+        sum_by_payment_type = [
+            {'name': (r['payment_type__payment_name'] or '—'), 'sum': float(r['sum'] or 0)}
+            for r in by_payment_qs
+        ]
+
+        paid_delivery = not_cancelled.filter(delivery_cost__gt=0).aggregate(
+            count=Count('order_id'),
+            sum=Sum('delivery_cost')
+        )
+        paid_delivery_count = paid_delivery['count'] or 0
+        paid_delivery_sum = float(paid_delivery['sum'] or 0)
+        free_delivery_count = not_cancelled.filter(
+            Q(delivery_cost=0) | Q(delivery_cost__isnull=True)
+        ).count()
+
+        return Response({
+            'total_orders': total_orders,
+            'cancelled_orders': cancelled_count,
+            'total_sum': total_sum,
+            'by_terminal': by_terminal,
+            'sum_by_terminal': sum_by_terminal,
+            'by_payment_type': by_payment_type,
+            'sum_by_payment_type': sum_by_payment_type,
+            'paid_delivery_count': paid_delivery_count,
+            'paid_delivery_sum': paid_delivery_sum,
+            'free_delivery_count': free_delivery_count,
+            'free_delivery_sum': 0,
+        })

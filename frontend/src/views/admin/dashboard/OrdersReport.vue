@@ -259,7 +259,11 @@ import {
   subYears,
   format as formatDateFns
 } from 'date-fns'
-import { fetchOrdersForReport, aggregateOrdersReport } from '@/services/dashboard.service'
+import {
+  fetchOrdersReportFromApi,
+  fetchOrdersForReport,
+  aggregateOrdersReport
+} from '@/services/dashboard.service'
 
 const PRESETS = {
   today: () => {
@@ -367,11 +371,20 @@ async function loadReport() {
   error.value = null
   report.value = null
   try {
-    const orders = await fetchOrdersForReport(dateFrom.value, dateTo.value)
-    report.value = aggregateOrdersReport(orders)
+    report.value = await fetchOrdersReportFromApi(dateFrom.value, dateTo.value)
   } catch (err) {
-    console.error(err)
-    error.value = err.response?.data?.detail || 'Не удалось загрузить отчёт по заказам'
+    if (err.response?.status === 404) {
+      try {
+        const orders = await fetchOrdersForReport(dateFrom.value, dateTo.value)
+        report.value = aggregateOrdersReport(orders)
+      } catch (fallbackErr) {
+        console.error(fallbackErr)
+        error.value = fallbackErr.response?.data?.detail || 'Не удалось загрузить отчёт по заказам'
+      }
+    } else {
+      console.error(err)
+      error.value = err.response?.data?.error || err.response?.data?.detail || 'Не удалось загрузить отчёт по заказам'
+    }
   } finally {
     loading.value = false
   }
