@@ -66,6 +66,20 @@
             </div>
           </div>
         </div>
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border border-gray-200 dark:border-gray-700">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-xl bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
+              <Icon icon="mdi:cart-check" class="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+            </div>
+            <div>
+              <p class="text-sm text-gray-500 dark:text-gray-400">Сделали хотя бы один заказ</p>
+              <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ report.usersWithOrdersCount }}</p>
+              <p v-if="report.totalUsers > 0" class="text-xs text-gray-400">
+                {{ percent(report.usersWithOrdersCount, report.totalUsers) }}%
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
       <!-- Пользователи по терминалам -->

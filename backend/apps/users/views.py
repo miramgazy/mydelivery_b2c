@@ -502,6 +502,9 @@ class UserViewSet(viewsets.ModelViewSet):
         with_verified_address_count = qs.filter(addresses__is_verified=True).distinct().count()
         with_phone_count = qs.exclude(phone__isnull=True).exclude(phone='').count()
 
+        # Пользователи, у которых есть хотя бы один заказ
+        users_with_orders_count = qs.filter(orders__isnull=False).distinct().count()
+
         # Пользователи по терминалам: через M2M, один запрос
         user_ids = list(qs.values_list('id', flat=True))
         through = User.terminals.through
@@ -526,6 +529,7 @@ class UserViewSet(viewsets.ModelViewSet):
             'subscribed_count': subscribed_count,
             'with_verified_address_count': with_verified_address_count,
             'with_phone_count': with_phone_count,
+            'users_with_orders_count': users_with_orders_count,
             'by_terminal': by_terminal,
         })
 

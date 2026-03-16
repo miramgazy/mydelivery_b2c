@@ -152,6 +152,7 @@ export async function fetchUsersReportStatistics() {
     subscribedCount: data.subscribed_count ?? 0,
     withVerifiedAddressCount: data.with_verified_address_count ?? 0,
     withPhoneCount: data.with_phone_count ?? 0,
+    usersWithOrdersCount: data.users_with_orders_count ?? 0,
     byTerminal: Array.isArray(data.by_terminal)
       ? data.by_terminal.map((x) => ({ name: x.name ?? '—', count: x.count ?? 0 }))
       : []
