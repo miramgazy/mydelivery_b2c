@@ -65,8 +65,8 @@ export function aggregateOrdersReport(orders) {
   const isCancelled = (o) => cancelledStatuses.includes(o.status)
   const isTmp = (o) => {
     if (!o || !o.order_number) return false
-    const num = String(o.order_number)
-    return num.includes('TMP-')
+    const num = String(o.order_number).toUpperCase()
+    return num.includes('TMP')
   }
   const validOrders = orders.filter((o) => !isTmp(o))
   const notCancelled = validOrders.filter((o) => !isCancelled(o))

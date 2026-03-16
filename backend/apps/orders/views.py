@@ -354,13 +354,14 @@ class OrderViewSet(viewsets.ModelViewSet):
             created_at__date__lte=dt_to
         )
 
-        # Исключаем временные заказы с номером вида TMP-XXXX
-        valid_qs = qs.exclude(order_number__startswith='TMP-')
+        # Исключаем временные заказы с номером, содержащим TMP (например, ##TMP-4713)
+        valid_qs = qs.exclude(order_number__icontains='TMP')
 
         # Для всех метрик на дашборде учитываем только валидные заказы
-        total_orders = valid_qs.count()
+        # и только неотменённые, как описано в требовании
         cancelled_count = valid_qs.filter(status=Order.STATUS_CANCELLED).count()
         not_cancelled = valid_qs.exclude(status=Order.STATUS_CANCELLED)
+        total_orders = not_cancelled.count()
 
         total_sum = not_cancelled.aggregate(
             s=Sum(F('total_amount') + F('delivery_cost'))
