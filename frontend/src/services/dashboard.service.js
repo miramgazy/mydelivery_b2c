@@ -28,7 +28,11 @@ export async function fetchOrdersReportFromApi(dateFrom, dateTo) {
     paidDeliveryCount: data.paid_delivery_count ?? 0,
     paidDeliverySum: data.paid_delivery_sum ?? 0,
     freeDeliveryCount: data.free_delivery_count ?? 0,
-    freeDeliverySum: data.free_delivery_sum ?? 0
+    freeDeliverySum: data.free_delivery_sum ?? 0,
+    deliveryOrdersCount: data.delivery_orders_count ?? 0,
+    deliveryOrdersSum: data.delivery_orders_sum ?? 0,
+    pickupOrdersCount: data.pickup_orders_count ?? 0,
+    pickupOrdersSum: data.pickup_orders_sum ?? 0
   }
 }
 
@@ -59,7 +63,13 @@ export async function fetchOrdersForReport(dateFrom, dateTo) {
 export function aggregateOrdersReport(orders) {
   const cancelledStatuses = ['cancelled', 'Cancelled']
   const isCancelled = (o) => cancelledStatuses.includes(o.status)
-  const notCancelled = orders.filter((o) => !isCancelled(o))
+  const isTmp = (o) => {
+    if (!o || !o.order_number) return false
+    const num = String(o.order_number)
+    return num.includes('TMP-')
+  }
+  const validOrders = orders.filter((o) => !isTmp(o))
+  const notCancelled = validOrders.filter((o) => !isCancelled(o))
 
   const byTerminal = {}
   const sumByTerminal = {}
@@ -69,6 +79,14 @@ export function aggregateOrdersReport(orders) {
   let paidDeliverySum = 0
   let freeDeliveryCount = 0
   let freeDeliverySum = 0
+  let deliveryOrdersCount = 0
+  let deliveryOrdersSum = 0
+  let pickupOrdersCount = 0
+  let pickupOrdersSum = 0
+
+  const isDelivery = (o) => {
+    return !!(o.delivery_address_full || o.delivery_address || o.latitude || o.longitude)
+  }
 
   for (const o of notCancelled) {
     const terminalName = o.terminal_name || '—'
@@ -87,16 +105,25 @@ export function aggregateOrdersReport(orders) {
     } else {
       freeDeliveryCount += 1
     }
+
+    const totalForType = total
+    if (isDelivery(o)) {
+      deliveryOrdersCount += 1
+      deliveryOrdersSum += totalForType
+    } else {
+      pickupOrdersCount += 1
+      pickupOrdersSum += totalForType
+    }
   }
 
   const totalSum = notCancelled.reduce(
     (acc, o) => acc + Number(o.total_price ?? o.total_amount ?? 0) + Number(o.delivery_cost ?? 0),
     0
   )
-  const cancelledCount = orders.filter(isCancelled).length
+  const cancelledCount = validOrders.filter(isCancelled).length
 
   return {
-    totalOrders: orders.length,
+    totalOrders: notCancelled.length,
     cancelledOrders: cancelledCount,
     byTerminal: Object.entries(byTerminal).map(([name, count]) => ({ name, count })),
     sumByTerminal: Object.entries(sumByTerminal).map(([name, sum]) => ({ name, sum })),
@@ -106,7 +133,11 @@ export function aggregateOrdersReport(orders) {
     paidDeliveryCount,
     paidDeliverySum,
     freeDeliveryCount,
-    freeDeliverySum
+    freeDeliverySum,
+    deliveryOrdersCount,
+    deliveryOrdersSum,
+    pickupOrdersCount,
+    pickupOrdersSum
   }
 }
 

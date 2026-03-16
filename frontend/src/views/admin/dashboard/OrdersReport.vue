@@ -193,6 +193,56 @@
         </div>
       </div>
 
+      <!-- Типы заказов: доставка и самовывоз -->
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
+        <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Типы заказов: доставка и самовывоз</h3>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
+          <div class="flex items-center gap-4 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+            <div class="w-14 h-14 rounded-xl bg-emerald-200 dark:bg-emerald-800/50 flex items-center justify-center">
+              <Icon icon="mdi:truck-delivery-outline" class="w-7 h-7 text-emerald-700 dark:text-emerald-300" />
+            </div>
+            <div>
+              <p class="text-sm text-gray-600 dark:text-gray-400">Доставка</p>
+              <p class="text-xl font-bold text-gray-900 dark:text-white">
+                {{ report.deliveryOrdersCount }} заказов
+              </p>
+              <p class="text-sm font-medium text-emerald-700 dark:text-emerald-400">
+                {{ formatPrice(report.deliveryOrdersSum) }} ₸
+              </p>
+            </div>
+          </div>
+          <div class="flex items-center gap-4 p-4 rounded-xl bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800">
+            <div class="w-14 h-14 rounded-xl bg-orange-200 dark:bg-orange-800/50 flex items-center justify-center">
+              <Icon icon="mdi:storefront-outline" class="w-7 h-7 text-orange-700 dark:text-orange-300" />
+            </div>
+            <div>
+              <p class="text-sm text-gray-600 dark:text-gray-400">Самовывоз</p>
+              <p class="text-xl font-bold text-gray-900 dark:text-white">
+                {{ report.pickupOrdersCount }} заказов
+              </p>
+              <p class="text-sm font-medium text-orange-700 dark:text-orange-400">
+                {{ formatPrice(report.pickupOrdersSum) }} ₸
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="mt-4 flex gap-4">
+          <div class="flex-1 h-4 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden flex">
+            <div
+              class="h-full bg-emerald-500 rounded-l-full"
+              :style="{ width: orderTypeBarWidth('delivery') + '%' }"
+            />
+            <div
+              class="h-full bg-orange-500 rounded-r-full"
+              :style="{ width: orderTypeBarWidth('pickup') + '%' }"
+            />
+          </div>
+          <span class="text-sm text-gray-500 whitespace-nowrap">
+            Доставка: {{ report.deliveryOrdersCount }}, самовывоз: {{ report.pickupOrdersCount }}
+          </span>
+        </div>
+      </div>
+
       <!-- Платная и бесплатная доставка -->
       <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
         <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Доставки: платные и бесплатные</h3>
@@ -360,6 +410,14 @@ function deliveryBarWidth(type) {
   if (total === 0) return type === 'paid' ? 0 : 100
   if (type === 'paid') return (report.value.paidDeliveryCount / total) * 100
   return (report.value.freeDeliveryCount / total) * 100
+}
+
+function orderTypeBarWidth(type) {
+  if (!report.value) return 0
+  const total = report.value.deliveryOrdersCount + report.value.pickupOrdersCount
+  if (total === 0) return type === 'delivery' ? 0 : 100
+  if (type === 'delivery') return (report.value.deliveryOrdersCount / total) * 100
+  return (report.value.pickupOrdersCount / total) * 100
 }
 
 async function loadReport() {

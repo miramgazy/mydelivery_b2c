@@ -353,9 +353,14 @@ class OrderViewSet(viewsets.ModelViewSet):
             created_at__date__gte=dt_from,
             created_at__date__lte=dt_to
         )
-        total_orders = qs.count()
-        cancelled_count = qs.filter(status=Order.STATUS_CANCELLED).count()
-        not_cancelled = qs.exclude(status=Order.STATUS_CANCELLED)
+
+        # Исключаем временные заказы с номером вида TMP-XXXX
+        valid_qs = qs.exclude(order_number__startswith='TMP-')
+
+        # Для всех метрик на дашборде учитываем только валидные заказы
+        total_orders = valid_qs.count()
+        cancelled_count = valid_qs.filter(status=Order.STATUS_CANCELLED).count()
+        not_cancelled = valid_qs.exclude(status=Order.STATUS_CANCELLED)
 
         total_sum = not_cancelled.aggregate(
             s=Sum(F('total_amount') + F('delivery_cost'))
@@ -400,6 +405,26 @@ class OrderViewSet(viewsets.ModelViewSet):
             Q(delivery_cost=0) | Q(delivery_cost__isnull=True)
         ).count()
 
+        # Тип заказа: доставка / самовывоз
+        # Эвристика: если есть адрес или координаты — считаем доставкой, иначе самовывоз.
+        delivery_filter = Q(delivery_address__isnull=False) | Q(latitude__isnull=False) | Q(longitude__isnull=False)
+        delivery_qs = not_cancelled.filter(delivery_filter)
+        pickup_qs = not_cancelled.exclude(delivery_filter)
+
+        delivery_agg = delivery_qs.aggregate(
+            count=Count('order_id'),
+            sum=Sum(F('total_amount') + F('delivery_cost'))
+        )
+        pickup_agg = pickup_qs.aggregate(
+            count=Count('order_id'),
+            sum=Sum(F('total_amount') + F('delivery_cost'))
+        )
+
+        delivery_orders_count = delivery_agg['count'] or 0
+        delivery_orders_sum = float(delivery_agg['sum'] or 0)
+        pickup_orders_count = pickup_agg['count'] or 0
+        pickup_orders_sum = float(pickup_agg['sum'] or 0)
+
         return Response({
             'total_orders': total_orders,
             'cancelled_orders': cancelled_count,
@@ -412,4 +437,8 @@ class OrderViewSet(viewsets.ModelViewSet):
             'paid_delivery_sum': paid_delivery_sum,
             'free_delivery_count': free_delivery_count,
             'free_delivery_sum': 0,
+            'delivery_orders_count': delivery_orders_count,
+            'delivery_orders_sum': delivery_orders_sum,
+            'pickup_orders_count': pickup_orders_count,
+            'pickup_orders_sum': pickup_orders_sum,
         })
