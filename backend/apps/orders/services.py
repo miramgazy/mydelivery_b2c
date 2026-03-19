@@ -684,6 +684,29 @@ class OrderService:
                 # В iiko API amount для модификатора - это количество на одну единицу продукта
                 # Если заказано 2 пиццы и к каждой добавлен сыр x3, то amount = 3.0 (не 6.0)
                 modifier_amount = float(order_mod.quantity)
+
+                # iiko валидирует modifiers[].amount в диапазоне [min_amount, max_amount].
+                # Чтобы не слать заведомо неверные значения (из-за рассинхрона меню/ограничений),
+                # делаем клип перед отправкой.
+                mod_def = order_mod.modifier
+                min_amt_def = float(mod_def.min_amount or 0)
+                max_amt_def = float(mod_def.max_amount or 0)
+                if min_amt_def < 0:
+                    min_amt_def = 0.0
+                if max_amt_def <= 0:
+                    max_amt_def = None
+                original_amount = modifier_amount
+                if min_amt_def > 0 and modifier_amount < min_amt_def:
+                    modifier_amount = min_amt_def
+                if max_amt_def is not None and modifier_amount > max_amt_def:
+                    modifier_amount = max_amt_def
+                if modifier_amount != original_amount:
+                    logger.warning(
+                        f'Клинч amount модификатора для iiko: order={order.order_id}, '
+                        f'product="{order_item.product_name}", mod="{order_mod.modifier_name}", '
+                        f'productId={modifier_code}, original={original_amount}, clipped={modifier_amount}, '
+                        f'allowed=[{min_amt_def or 0}..{max_amt_def if max_amt_def is not None else "inf"}]'
+                    )
                 
                 # Проверяем, что количество положительное
                 if modifier_amount <= 0:
@@ -695,10 +718,16 @@ class OrderService:
                 
                 # Если модификатор уже был добавлен (дубликат), суммируем количества
                 if modifier_code in user_selected_modifiers:
-                    user_selected_modifiers[modifier_code]['amount'] += modifier_amount
+                    existing_amount = float(user_selected_modifiers[modifier_code]['amount'] or 0)
+                    new_amount = existing_amount + modifier_amount
+                    if min_amt_def > 0 and new_amount < min_amt_def:
+                        new_amount = min_amt_def
+                    if max_amt_def is not None and new_amount > max_amt_def:
+                        new_amount = max_amt_def
+                    user_selected_modifiers[modifier_code]['amount'] = new_amount
                     logger.warning(
                         f'Дубликат модификатора {modifier_code} для позиции "{order_item.product_name}". '
-                        f'Суммируем количества: {user_selected_modifiers[modifier_code]["amount"] - modifier_amount} + {modifier_amount} = {user_selected_modifiers[modifier_code]["amount"]}'
+                        f'Суммируем и клипим amount по min/max iiko.'
                     )
                 else:
                     user_selected_modifiers[modifier_code] = {
@@ -727,13 +756,28 @@ class OrderService:
                         )
                         continue
                     min_amt = float(mod_def.min_amount or 0)
+                    max_amt = float(mod_def.max_amount or 0)
                     if min_amt <= 0:
+                        # Для required-ограничений без minAmount отправляем 1
                         min_amt = 1.0
+                    if max_amt <= 0:
+                        max_amt = min_amt
+                    if min_amt > max_amt:
+                        logger.warning(
+                            f'Неконсистентные ограничения модификатора для iiko: order={order.order_id}, '
+                            f'product="{order_item.product_name}", mod="{mod_def.modifier_name}", '
+                            f'productId={modifier_code}, min={min_amt}, max={max_amt}. Отправляем max.'
+                        )
+                        min_amt = max_amt
                     # Для развёрнутого формата (каждая штука отдельно) — amount модификатора на одну единицу = min_amt
                     if modifier_code in user_selected_modifiers:
-                        existing = user_selected_modifiers[modifier_code]['amount']
+                        existing = float(user_selected_modifiers[modifier_code]['amount'] or 0)
+                        # iiko ожидает, что amount попадёт в диапазон min..max
                         if existing < min_amt:
-                            user_selected_modifiers[modifier_code]['amount'] = min_amt
+                            existing = min_amt
+                        if existing > max_amt:
+                            existing = max_amt
+                        user_selected_modifiers[modifier_code]['amount'] = existing
                         continue
                     user_selected_modifiers[modifier_code] = {
                         'type': 'Product',
