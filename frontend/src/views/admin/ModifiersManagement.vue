@@ -33,30 +33,31 @@
       </div>
 
       <!-- Modifiers Table -->
-      <div v-else class="overflow-x-auto">
-        <table class="w-full">
-          <thead class="bg-gray-50 dark:bg-gray-700">
-            <tr>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Название
-              </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Продукт
-              </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Цена
-              </th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Статус
-              </th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
+      <div v-else>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-gray-50 dark:bg-gray-700">
+              <tr>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Название
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Продукт
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Цена
+                </th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                  Статус
+                </th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200 dark:divide-gray-700">
               <tr
-              v-for="modifier in filteredModifiers"
-              :key="modifier?.id || Math.random()"
-              class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
-            >
+                v-for="modifier in paginatedModifiers"
+                :key="modifier.id"
+                class="hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors"
+              >
               <td class="px-6 py-4">
                 <div class="flex items-center gap-2">
                   <Icon icon="mdi:tune" class="w-5 h-5 text-purple-600" />
@@ -92,22 +93,86 @@
                   {{ modifier?.is_available ? 'Доступен' : 'Недоступен' }}
                 </span>
               </td>
-            </tr>
-          </tbody>
-        </table>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 border-t border-gray-200 dark:border-gray-700">
+          <div class="flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+            <span>Показывать по:</span>
+            <select
+              v-model.number="perPage"
+              class="border border-gray-300 dark:border-gray-600 rounded-md px-2 py-1 bg-white dark:bg-gray-800 text-gray-900 dark:text-white text-sm"
+            >
+              <option :value="20">20</option>
+              <option :value="50">50</option>
+            </select>
+          </div>
+
+          <div class="flex items-center gap-1 flex-wrap justify-center">
+            <button
+              type="button"
+              aria-label="Предыдущий блок страниц"
+              :disabled="!canGoPrev"
+              @click="goPrevWindow"
+              class="min-w-[2.25rem] h-9 px-2 rounded-md text-sm font-medium border border-gray-300 dark:border-gray-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              &laquo;
+            </button>
+
+            <template v-for="(item, idx) in visiblePageNumbers" :key="item.type === 'ellipsis' ? `ellipsis-${idx}` : item.num">
+              <span
+                v-if="item.type === 'ellipsis'"
+                class="min-w-[2.25rem] h-9 flex items-center justify-center text-gray-500 dark:text-gray-400"
+              >
+                &hellip;
+              </span>
+              <button
+                v-else
+                type="button"
+                @click="currentPage = item.num"
+                class="min-w-[2.25rem] h-9 px-3 rounded-md text-sm font-medium border transition-colors"
+                :class="currentPage === item.num
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700'"
+              >
+                {{ item.num }}
+              </button>
+            </template>
+
+            <button
+              type="button"
+              aria-label="Следующий блок страниц"
+              :disabled="!canGoNext"
+              @click="goNextWindow"
+              class="min-w-[2.25rem] h-9 px-2 rounded-md text-sm font-medium border border-gray-300 dark:border-gray-600 transition-colors disabled:opacity-40 disabled:cursor-not-allowed bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+            >
+              &raquo;
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { Icon } from '@iconify/vue'
 import api from '@/services/api'
+
+const PAGINATION_WINDOW = 12
+const PAGINATION_LAST = 3
 
 const modifiers = ref([])
 const loading = ref(false)
 const searchQuery = ref('')
+
+const currentPage = ref(1)
+const perPage = ref(20)
+const paginationWindowStart = ref(1)
 
 const filteredModifiers = computed(() => {
   if (!modifiers.value) return []
@@ -127,18 +192,94 @@ const filteredModifiers = computed(() => {
   )
 })
 
-onMounted(async () => {
-  await loadModifiers()
+const totalModifiers = computed(() => filteredModifiers.value.length)
+const totalPages = computed(() => {
+  if (!totalModifiers.value) return 1
+  return Math.max(1, Math.ceil(totalModifiers.value / perPage.value))
 })
 
-const loadModifiers = async () => {
+const paginatedModifiers = computed(() => {
+  const start = (currentPage.value - 1) * perPage.value
+  return filteredModifiers.value.slice(start, start + perPage.value)
+})
+
+const visiblePageNumbers = computed(() => {
+  const total = totalPages.value
+  if (total <= 15) {
+    return Array.from({ length: total }, (_, i) => ({ type: 'page', num: i + 1 }))
+  }
+
+  const start = paginationWindowStart.value
+  const lastStart = total - PAGINATION_LAST + 1
+  const firstEnd = Math.min(start + PAGINATION_WINDOW - 1, lastStart - 1)
+
+  const list = []
+  for (let p = start; p <= firstEnd; p++) list.push({ type: 'page', num: p })
+
+  if (firstEnd < lastStart - 1) {
+    list.push({ type: 'ellipsis' })
+  }
+
+  for (let p = lastStart; p <= total; p++) list.push({ type: 'page', num: p })
+  return list
+})
+
+const canGoPrev = computed(() => totalPages.value > 15 && paginationWindowStart.value > 1)
+const canGoNext = computed(() => totalPages.value > 15 && paginationWindowStart.value <= totalPages.value - 15)
+
+function goPrevWindow() {
+  if (!canGoPrev.value) return
+  paginationWindowStart.value = Math.max(1, paginationWindowStart.value - PAGINATION_WINDOW)
+}
+
+function goNextWindow() {
+  if (!canGoNext.value) return
+  paginationWindowStart.value = Math.min(totalPages.value - 14, paginationWindowStart.value + PAGINATION_WINDOW)
+}
+
+onMounted(async () => {
+  await loadModifiersAllPages()
+})
+
+watch([searchQuery, perPage], () => {
+  currentPage.value = 1
+  paginationWindowStart.value = 1
+})
+
+watch(totalPages, (newTotal) => {
+  if (newTotal <= 15) paginationWindowStart.value = 1
+  else paginationWindowStart.value = Math.min(paginationWindowStart.value, newTotal - 14)
+})
+
+const loadModifiersAllPages = async () => {
   loading.value = true
   try {
-    const response = await api.get('/modifiers/')
-    // Ensure response.data is an array and filter out invalid items if any
-    modifiers.value = Array.isArray(response.data) 
-      ? response.data 
-      : (response.data.results || [])
+    modifiers.value = []
+
+    // Загружаем все страницы, потому что API обычно возвращает пагинированные данные.
+    // Это сохраняет работу поиска по всем модификаторам.
+    let page = 1
+    const pageSize = 50
+
+    while (true) {
+      const response = await api.get('/modifiers/', {
+        params: { page, page_size: pageSize }
+      })
+
+      if (Array.isArray(response.data)) {
+        modifiers.value = response.data
+        break
+      }
+
+      const results = response.data?.results || []
+      modifiers.value.push(...results)
+
+      const totalCount = response.data?.count
+      if (results.length === 0) break
+      if (typeof totalCount === 'number' && modifiers.value.length >= totalCount) break
+
+      page += 1
+    }
   } catch (err) {
     console.error('Failed to load modifiers:', err)
   } finally {

@@ -579,17 +579,17 @@ const visiblePageNumbers = computed(() => {
     return Array.from({ length: total }, (_, i) => ({ type: 'page', num: i + 1 }))
   }
   const start = paginationWindowStart.value
-  const windowEnd = Math.min(start + PAGINATION_WINDOW - 1, total - PAGINATION_LAST)
+  const lastStart = total - PAGINATION_LAST + 1
+  const firstEnd = Math.min(start + PAGINATION_WINDOW - 1, lastStart - 1)
+
   const list = []
-  for (let p = start; p <= windowEnd; p++) {
-    list.push({ type: 'page', num: p })
-  }
-  if (windowEnd < total - PAGINATION_LAST) {
+  for (let p = start; p <= firstEnd; p++) list.push({ type: 'page', num: p })
+
+  if (firstEnd < lastStart - 1) {
     list.push({ type: 'ellipsis' })
-    for (let p = total - PAGINATION_LAST + 1; p <= total; p++) {
-      list.push({ type: 'page', num: p })
-    }
   }
+
+  for (let p = lastStart; p <= total; p++) list.push({ type: 'page', num: p })
   return list
 })
 
