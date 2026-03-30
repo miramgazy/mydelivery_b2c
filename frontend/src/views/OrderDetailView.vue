@@ -29,6 +29,16 @@
             <p class="text-xs text-gray-400">{{ formatDate(order.created_at) }}</p>
         </div>
 
+        <!-- Ошибка передачи в ресторан (iiko): понятное сообщение для пользователя -->
+        <div
+            v-if="order.error_message_user && order.status === 'error'"
+            class="bg-amber-50 dark:bg-amber-900/25 border border-amber-200 dark:border-amber-800 rounded-xl p-4 text-left"
+        >
+            <p class="text-sm font-medium text-amber-900 dark:text-amber-100 leading-snug">
+                {{ order.error_message_user }}
+            </p>
+        </div>
+
         <!-- Items -->
         <div class="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-sm">
             <h3 class="font-bold text-lg mb-4 text-gray-900 dark:text-white">Состав заказа</h3>

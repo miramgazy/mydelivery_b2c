@@ -51,6 +51,12 @@
                         {{ formatPrice(order.total_amount) }} ₸
                     </span>
                 </div>
+                <p
+                    v-if="order.status === 'error' && order.error_message_user"
+                    class="mt-2 text-xs text-amber-800 dark:text-amber-200 leading-snug"
+                >
+                    {{ order.error_message_user }}
+                </p>
             </div>
         </div>
     </div>

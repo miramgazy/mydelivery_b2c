@@ -6,6 +6,7 @@ from .models import Order, OrderItem, OrderItemModifier
 from apps.products.models import Product, Modifier, StopList
 from apps.users.models import DeliveryAddress
 from apps.organizations.models import PaymentType, Terminal
+from apps.iiko_integration.user_messages import iiko_error_message_for_user
 
 
 class OrderItemModifierSerializer(serializers.ModelSerializer):
@@ -152,6 +153,7 @@ class OrderListSerializer(serializers.ModelSerializer):
     payment_type_name = serializers.CharField(source='payment_type.payment_name', read_only=True)
     payment_type_system_type = serializers.CharField(source='payment_type.system_type', read_only=True)
     terminal_name = serializers.CharField(source='terminal.terminal_group_name', read_only=True, allow_null=True)
+    error_message_user = serializers.SerializerMethodField()
     
     class Meta:
         model = Order
@@ -164,12 +166,16 @@ class OrderListSerializer(serializers.ModelSerializer):
             'payment_type', 'payment_type_name', 'payment_type_system_type',
             'terminal', 'terminal_name',
             'comment',
+            'error_message_user',
             'created_at', 'updated_at'
         ]
     
     def get_items_count(self, obj):
         """Количество позиций в заказе"""
         return obj.items.count()
+
+    def get_error_message_user(self, obj):
+        return iiko_error_message_for_user(getattr(obj, 'error_message', None))
     
     def get_user_name(self, obj):
         """
@@ -209,6 +215,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
     items = OrderItemSerializer(many=True, read_only=True)
     delivery_address_full = serializers.SerializerMethodField()
     total_price = serializers.DecimalField(source='total_amount', max_digits=10, decimal_places=2, read_only=True)
+    error_message_user = serializers.SerializerMethodField()
     
     class Meta:
         model = Order
@@ -222,7 +229,7 @@ class OrderDetailSerializer(serializers.ModelSerializer):
             'payment_type', 'payment_type_name', 'payment_type_system_type',
             'terminal', 'terminal_name',
             'latitude', 'longitude',
-            'items', 'sent_to_iiko_at', 'error_message',
+            'items', 'sent_to_iiko_at', 'error_message', 'error_message_user',
             'iiko_delivery_number', 'correlation_id',
             'created_at', 'updated_at'
         ]
@@ -232,6 +239,9 @@ class OrderDetailSerializer(serializers.ModelSerializer):
         if obj.delivery_address:
             return str(obj.delivery_address)
         return None
+
+    def get_error_message_user(self, obj):
+        return iiko_error_message_for_user(getattr(obj, 'error_message', None))
     
     def get_user_name(self, obj):
         user = getattr(obj, 'user', None)
