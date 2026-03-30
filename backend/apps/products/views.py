@@ -124,7 +124,7 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet для продуктов"""
     queryset = Product.objects.select_related(
         'menu', 'organization', 'category'
-    ).prefetch_related('modifiers')
+    )
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['menu', 'category', 'is_available', 'organization']
@@ -181,7 +181,16 @@ class ProductViewSet(viewsets.ReadOnlyModelViewSet):
                 # stop_list.product_id references Product.pk (Product.id)
                 stop_list_product_pks = stop_list_query.values_list('product_id', flat=True)
                 queryset = queryset.exclude(pk__in=stop_list_product_pks)
-        
+
+        if self.request.query_params.get('for_management') == '1' and (
+            getattr(user, 'is_superadmin', False) or getattr(user, 'is_org_admin', False)
+        ):
+            queryset = queryset.prefetch_related('modifiers')
+        else:
+            queryset = queryset.prefetch_related(
+                Prefetch('modifiers', Modifier.objects.filter(is_available=True))
+            )
+
         return queryset
 
 
@@ -191,7 +200,7 @@ class ModifierViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = ModifierSerializer
     permission_classes = [permissions.IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['product']
+    filterset_fields = ['product', 'is_available']
     ordering = ['modifier_name', 'price']
 
     def get_queryset(self):
@@ -204,6 +213,10 @@ class ModifierViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(product__menu__is_active=True)
         elif not (getattr(user, 'is_superadmin', False) or getattr(user, 'is_org_admin', False)):
             queryset = queryset.filter(product__menu__is_active=True)
+        if self.request.query_params.get('for_management') != '1' or not (
+            getattr(user, 'is_superadmin', False) or getattr(user, 'is_org_admin', False)
+        ):
+            queryset = queryset.filter(is_available=True)
         return queryset
 
 
@@ -416,7 +429,12 @@ class FastMenuGroupPublicViewSet(viewsets.ReadOnlyModelViewSet):
         Prefetch(
             'items',
             queryset=FastMenuItem.objects.select_related('product', 'product__category')
-                .prefetch_related('product__modifiers')
+                .prefetch_related(
+                    Prefetch(
+                        'product__modifiers',
+                        Modifier.objects.filter(is_available=True),
+                    )
+                )
                 .order_by('order')
         )
     )

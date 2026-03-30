@@ -45,7 +45,6 @@ class ModifierSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source='modifier_name', read_only=True)
     description = serializers.SerializerMethodField()
     product_name = serializers.CharField(source='product.product_name', read_only=True)
-    is_available = serializers.BooleanField(default=True, read_only=True)
     
     class Meta:
         model = Modifier

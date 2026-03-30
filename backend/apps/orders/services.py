@@ -10,6 +10,7 @@ import random
 import re
 import requests
 from django.db import transaction
+from django.db.models import Prefetch
 from django.utils import timezone
 from .models import Order, OrderItem, OrderItemModifier, IikoRequestLog
 from .serializers import OrderDetailSerializer
@@ -284,7 +285,9 @@ class OrderService:
         product_ids = [item_data['product_id'] for item_data in items_data]
         products_map = {
             p.product_id: p
-            for p in Product.objects.prefetch_related('modifiers').filter(
+            for p in Product.objects.prefetch_related(
+                Prefetch('modifiers', Modifier.objects.filter(is_available=True))
+            ).filter(
                 product_id__in=product_ids,
                 organization=organization,
                 menu__is_active=True,
@@ -337,7 +340,8 @@ class OrderService:
                 try:
                     modifier = Modifier.objects.get(
                         modifier_id=modifier_id,
-                        product=product
+                        product=product,
+                        is_available=True,
                     )
                     OrderItemModifier.objects.create(
                         order_item=order_item,
@@ -352,7 +356,7 @@ class OrderService:
 
             # Обязательные модификаторы (is_required или min_amount > 0): добавляем автоматически
             if product.has_modifiers:
-                for mod_def in product.modifiers.all():
+                for mod_def in product.modifiers.filter(is_available=True):
                     if not (mod_def.is_required or (mod_def.min_amount or 0) > 0):
                         continue
                     if mod_def.modifier_id in user_selected_modifier_ids:
@@ -744,7 +748,7 @@ class OrderService:
             
             # 2. Обязательные модификаторы (is_required или min_amount > 0): добавляем в JSON для iiko (per-unit amount)
             if order_item.product.has_modifiers:
-                modifiers_defined = order_item.product.modifiers.all()
+                modifiers_defined = order_item.product.modifiers.filter(is_available=True)
                 for mod_def in modifiers_defined:
                     if not (mod_def.is_required or (mod_def.min_amount or 0) > 0):
                         continue

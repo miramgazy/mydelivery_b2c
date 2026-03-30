@@ -176,6 +176,7 @@ class Modifier(models.Model):
     )
     price = models.DecimalField('Цена', max_digits=10, decimal_places=2, default=0)
     is_required = models.BooleanField('Обязательный', default=False)
+    is_available = models.BooleanField('Доступен (есть в текущей выгрузке iiko)', default=True)
     
     # Синхронизация с iiko
     updated_from_iiko = models.DateTimeField('Обновлено из iiko', blank=True, null=True)
@@ -189,6 +190,7 @@ class Modifier(models.Model):
         verbose_name_plural = 'Модификаторы'
         indexes = [
             models.Index(fields=['product']),
+            models.Index(fields=['is_available']),
         ]
     
     def __str__(self):

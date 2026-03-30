@@ -116,7 +116,7 @@ class OrderItemCreateSerializer(serializers.Serializer):
         if modifiers_data:
             product_modifiers = {
                 m.modifier_id: m
-                for m in Modifier.objects.filter(product=product)
+                for m in Modifier.objects.filter(product=product, is_available=True)
             }
             for mod_data in modifiers_data:
                 modifier_id = mod_data.get('modifier_id')

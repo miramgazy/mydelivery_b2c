@@ -5,10 +5,19 @@ from django.db import transaction
 from django.utils import timezone
 from apps.products.models import Menu, ProductCategory, Product, Modifier, StopList
 from apps.organizations.models import Organization, Terminal
-from apps.orders.models import OrderItemModifier
 from apps.iiko_integration.client import IikoClient, IikoAPIException
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_iiko_product_uuid(value) -> Optional[uuid.UUID]:
+    if value is None:
+        return None
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError, AttributeError):
+        return None
+
 
 class MenuSyncService:
     def sync_menu(self, organization: Organization, menu_data: Dict[str, Any]):
@@ -37,6 +46,46 @@ class MenuSyncService:
             
             # 3. Process Products & Modifiers
             self._sync_products_and_modifiers(menu, organization, products, products_map)
+            seen_ids = self._collect_seen_nomenclature_product_ids(products)
+            self._deactivate_products_not_in_seen(menu, seen_ids)
+
+    def _collect_seen_nomenclature_product_ids(self, items: List[Dict]) -> set:
+        """ID продуктов Dish/Good из выгрузки номенклатуры (не удалённые в iiko)."""
+        seen: set = set()
+        for item in items:
+            if item.get('isDeleted'):
+                continue
+            if item.get('type') not in ('Dish', 'Good'):
+                continue
+            uid = _normalize_iiko_product_uuid(item.get('id'))
+            if uid:
+                seen.add(uid)
+        return seen
+
+    def _deactivate_products_not_in_seen(self, menu: Menu, seen_product_ids: set) -> int:
+        """
+        Помечает продукты меню как недоступные (is_available=False), если их нет в последней
+        выгрузке. Записи не удаляются — сохраняются ссылки в заказах.
+        При пустом seen не трогаем БД (защита от пустой/битой выгрузки).
+        """
+        if not seen_product_ids:
+            logger.warning(
+                "Деактивация продуктов, отсутствующих в выгрузке iiko, пропущена: "
+                "список ID товаров пуст."
+            )
+            return 0
+        now = timezone.now()
+        qs = Product.objects.filter(menu=menu, is_available=True).exclude(
+            product_id__in=seen_product_ids
+        )
+        count = qs.update(is_available=False, updated_from_iiko=now)
+        if count:
+            logger.info(
+                "Деактивировано продуктов (нет в текущей выгрузке iiko): %s, menu_id=%s",
+                count,
+                menu.menu_id,
+            )
+        return count
 
     def _sync_categories(self, menu: Menu, groups: List[Dict], products: List[Dict] = None):
         """
@@ -130,7 +179,6 @@ class MenuSyncService:
                 self._sync_product(menu, organization, item, products_map)
                 
     def _sync_product(self, menu: Menu, organization: Organization, item: Dict, products_map: Dict[str, Dict]):
-        import uuid
         product_id = item['id']
         category_id = item.get('groupId')
         parent_group_id = item.get('parentGroup')
@@ -172,21 +220,34 @@ class MenuSyncService:
                 'image_url': item.get('imageLinks', [])[0] if item.get('imageLinks') else None,
                 'type': item.get('type'),
                 'outer_data': item,
-                'has_modifiers': has_modifiers
+                'has_modifiers': has_modifiers,
+                'is_available': True,
+                'updated_from_iiko': timezone.now(),
             }
         )
         
-        # Sync Modifiers if present
+        # Модификаторы: при отсутствии в выгрузке — деактивация (is_available=False), без удаления (FK заказов).
         if has_modifiers:
             self._sync_product_modifiers(product, group_modifiers, simple_modifiers, products_map)
+        else:
+            self._sync_product_modifiers(product, [], [], products_map)
+
+    def _deactivate_modifiers_not_in_seen(self, product: Product, seen_modifier_codes: set) -> int:
+        """Помечает модификаторы продукта как недоступные, если их нет в текущей выгрузке."""
+        now = timezone.now()
+        qs = Modifier.objects.filter(product=product, is_available=True).exclude(
+            modifier_code__in=seen_modifier_codes
+        )
+        count = qs.update(is_available=False, updated_from_iiko=now)
+        if count:
+            logger.debug(
+                'Деактивировано модификаторов (нет в выгрузке iiko): %s для продукта "%s"',
+                count,
+                product.product_name,
+            )
+        return count
 
     def _sync_product_modifiers(self, product, group_modifiers, simple_modifiers, products_map):
-        import uuid
-        # Модификаторы, которые есть в заказах (OrderItemModifier), нельзя удалять (PROTECT).
-        # Используем update_or_create по modifier_code и удаляем только неиспользуемые.
-        used_modifier_ids = set(
-            OrderItemModifier.objects.values_list('modifier_id', flat=True)
-        )
         seen_modifier_codes = set()
 
         # Helper to create or update modifier
@@ -246,7 +307,14 @@ class MenuSyncService:
                 existing.max_amount = max_amt
                 existing.is_required = is_req
                 existing.price = price_val
-                existing.save(update_fields=['modifier_name', 'min_amount', 'max_amount', 'is_required', 'price'])
+                existing.is_available = True
+                existing.updated_from_iiko = timezone.now()
+                existing.save(
+                    update_fields=[
+                        'modifier_name', 'min_amount', 'max_amount', 'is_required', 'price',
+                        'is_available', 'updated_from_iiko',
+                    ]
+                )
                 logger.debug(
                     f'Обновлен модификатор для продукта "{product.product_name}": '
                     f'name="{name}", modifier_code={modifier_code_str}'
@@ -260,7 +328,9 @@ class MenuSyncService:
                     min_amount=min_amt,
                     max_amount=max_amt,
                     is_required=is_req,
-                    price=price_val
+                    price=price_val,
+                    is_available=True,
+                    updated_from_iiko=timezone.now(),
                 )
                 logger.debug(
                     f'Создан модификатор для продукта "{product.product_name}": '
@@ -282,16 +352,7 @@ class MenuSyncService:
         for mod in simple_modifiers:
             create_modifier_entry(mod)
 
-        # Удаляем только те модификаторы продукта, которых нет в iiko и которые не используются в заказах
-        to_delete = Modifier.objects.filter(product=product).exclude(
-            modifier_code__in=seen_modifier_codes
-        ).exclude(modifier_id__in=used_modifier_ids)
-        deleted_count = to_delete.count()
-        to_delete.delete()
-        if deleted_count:
-            logger.debug(
-                f'Удалено {deleted_count} неиспользуемых модификаторов продукта "{product.product_name}"'
-            )
+        self._deactivate_modifiers_not_in_seen(product, seen_modifier_codes)
 
     def _sync_modifier(self, item: Dict):
         # Placeholder for Modifier sync (if needed distinct from products)
@@ -358,6 +419,8 @@ class MenuSyncService:
                     products_map = {p['id']: p for p in all_products}
 
                 self._sync_products_and_modifiers(menu, organization, products_to_sync, products_map)
+                seen_ids = self._collect_seen_nomenclature_product_ids(products_to_sync)
+                self._deactivate_products_not_in_seen(menu, seen_ids)
 
     def _price_for_category(
         self,
@@ -492,6 +555,7 @@ class MenuSyncService:
 
             org_id = getattr(organization, 'iiko_organization_id', None)
             products_created = 0
+            seen_external_product_ids: set = set()
 
             for cat_data in item_categories:
                 category_id = cat_data.get('id') or cat_data.get('categoryId') or cat_data.get('groupId')
@@ -561,11 +625,18 @@ class MenuSyncService:
                             'type': 'Dish',
                             'outer_data': item,
                             'has_modifiers': bool(item.get('modifierSchemaId') or has_modifier_groups),
+                            'is_available': True,
+                            'updated_from_iiko': timezone.now(),
                         }
                     )
+                    seen_external_product_ids.add(product.product_id)
                     products_created += 1
                     if has_modifier_groups:
                         self._sync_external_menu_modifiers(product, item, organization_id=org_id)
+                    else:
+                        self._deactivate_modifiers_not_in_seen(product, set())
+
+            self._deactivate_products_not_in_seen(menu, seen_external_product_ids)
 
             logger.info(
                 "sync_external_menu: menu=%s, categories=%s, products=%s",
@@ -580,13 +651,10 @@ class MenuSyncService:
         """
         Синхронизация модификаторов из формата внешнего меню (API v2).
         Модификаторы лежат в item.itemSizes[].itemModifierGroups[].items[].
-        Не удаляем модификаторы, на которые ссылаются OrderItemModifier (PROTECT).
+        Отсутствующие в выгрузке — деактивируются (is_available=False), без удаления.
         """
         item_sizes = item.get('itemSizes') or []
         seen_in_product = set()
-        used_modifier_ids = set(
-            OrderItemModifier.objects.values_list('modifier_id', flat=True)
-        )
 
         for size in item_sizes:
             groups = size.get('itemModifierGroups') or []
@@ -639,7 +707,14 @@ class MenuSyncService:
                             existing.max_amount = max_amt
                             existing.price = price_val
                             existing.is_required = is_required
-                            existing.save(update_fields=['modifier_name', 'min_amount', 'max_amount', 'price', 'is_required'])
+                            existing.is_available = True
+                            existing.updated_from_iiko = timezone.now()
+                            existing.save(
+                                update_fields=[
+                                    'modifier_name', 'min_amount', 'max_amount', 'price', 'is_required',
+                                    'is_available', 'updated_from_iiko',
+                                ]
+                            )
                         else:
                             Modifier.objects.create(
                                 modifier_id=uuid.uuid4(),
@@ -650,6 +725,8 @@ class MenuSyncService:
                                 max_amount=max_amt,
                                 price=price_val,
                                 is_required=is_required,
+                                is_available=True,
+                                updated_from_iiko=timezone.now(),
                             )
                     except (ValueError, TypeError) as e:
                         logger.warning(
@@ -659,11 +736,7 @@ class MenuSyncService:
                             e,
                         )
 
-        # Удаляем только те модификаторы продукта, которых нет в iiko и которые не используются в заказах
-        to_delete = Modifier.objects.filter(product=product).exclude(
-            modifier_code__in=seen_in_product
-        ).exclude(modifier_id__in=used_modifier_ids)
-        to_delete.delete()
+        self._deactivate_modifiers_not_in_seen(product, seen_in_product)
 
     def sync_terminal_groups(self, terminal_groups_data: Dict[str, Any], organization: Organization = None):
         """

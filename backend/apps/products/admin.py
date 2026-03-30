@@ -104,11 +104,12 @@ class ProductAdmin(BaseProductAdmin):
 
 @admin.register(Modifier)
 class ModifierAdmin(BaseProductAdmin):
-    list_display = ('modifier_name', 'price', 'product', 'is_required')
+    list_display = ('modifier_name', 'price', 'product', 'is_required', 'is_available')
     list_filter = (
         ('product__organization', admin.RelatedOnlyFieldListFilter),
         ('product__menu', admin.RelatedOnlyFieldListFilter),
-        'is_required'
+        'is_required',
+        'is_available',
     )
     search_fields = ('modifier_name',)
 
