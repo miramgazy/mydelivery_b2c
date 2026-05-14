@@ -144,6 +144,51 @@ class OrganizationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+    @action(detail=True, methods=['post'], url_path='set-webhook')
+    def set_webhook(self, request, pk=None):
+        """Установить вебхук для Telegram бота организации."""
+        import requests
+        from django.conf import settings
+        
+        organization = self.get_object()
+        if not organization.bot_token:
+            return Response(
+                {'error': 'В настройках организации не указан токен Telegram-бота (bot_token)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+            
+        backend_url = getattr(settings, 'BACKEND_URL', '').rstrip('/')
+        if not backend_url:
+            return Response(
+                {'error': 'В настройках сервера не задан BACKEND_URL'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+            
+        # Формируем URL вебхука: https://<DOMAIN>/api/telegram/webhook/<bot_token>/
+        webhook_url = f"{backend_url}/api/telegram/webhook/{organization.bot_token}/"
+        
+        telegram_api_url = f"https://api.telegram.org/bot{organization.bot_token}/setWebhook"
+        try:
+            r = requests.post(telegram_api_url, data={'url': webhook_url}, timeout=10)
+            r.raise_for_status()
+            response_data = r.json()
+            if response_data.get('ok'):
+                return Response({
+                    'message': 'Вебхук успешно установлен',
+                    'success': True,
+                    'webhook_url': webhook_url
+                })
+            else:
+                return Response({
+                    'error': f"Telegram вернул ошибку: {response_data.get('description')}"
+                }, status=status.HTTP_400_BAD_REQUEST)
+        except requests.RequestException as e:
+            logger.error(f"Ошибка при установке вебхука: {e}", exc_info=True)
+            return Response(
+                {'error': f"Не удалось подключиться к Telegram API: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
     @action(detail=False, methods=['get'], url_path='terminals')
     def get_terminals(self, request):
         """Получить терминалы организации"""

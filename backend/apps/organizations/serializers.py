@@ -40,7 +40,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
             'id', 'org_id', 'name', 'org_name', 'city',
             'iiko_organization_id', 'api_key',
             'phone', 'address',
-            'bot_token', 'bot_username',
+            'bot_token', 'bot_username', 'tma_name',
             'yandex_maps_api_key',
             'primary_color',
             'webhook_link',

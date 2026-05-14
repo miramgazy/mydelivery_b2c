@@ -23,6 +23,13 @@ export const testWebhook = async () => {
     return response.data
 }
 
+// Установить вебхук в Telegram для получения телефона
+export const setWebhook = async (orgId) => {
+    // URL action detail=True, поэтому путь /organizations/<orgId>/set-webhook/
+    const response = await api.post(`/organizations/${orgId}/set-webhook/`)
+    return response.data
+}
+
 // Get terminals list
 export const getTerminals = async () => {
     const response = await api.get('/organizations/terminals/')
@@ -149,6 +156,7 @@ export default {
     getOrganization,
     updateOrganization,
     testWebhook,
+    setWebhook,
     getTerminals,
     loadTerminalsFromIiko,
     getPaymentTypes,

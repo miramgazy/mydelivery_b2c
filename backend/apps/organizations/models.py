@@ -88,6 +88,8 @@ class Organization(models.Model):
     # Telegram Bot fields for multi-bot support
     bot_token = models.CharField('Токен Telegram бота', max_length=255, blank=True, null=True, unique=True)
     bot_username = models.CharField('Юзернейм Telegram бота', max_length=255, blank=True, null=True)
+    tma_name = models.CharField('Shortname Telegram Mini App (TMA)', max_length=255, blank=True, null=True, help_text='Например, "app"')
+
     
     # Интеграции
     yandex_maps_api_key = models.CharField('API-ключ Яндекс.Карт (Геокодер)', max_length=255, blank=True, null=True)

@@ -226,6 +226,34 @@ class TelegramWebhookView(viewsets.ViewSet):
         user.save(update_fields=['phone', 'organization'] if attach_org else ['phone'])
 
         logger.info("Saved phone from Telegram contact for user=%s telegram_id=%s", user.id, telegram_id)
+        
+        # Отправляем подтверждающее сообщение
+        if organization and organization.bot_token:
+            import requests
+            bot_token_req = organization.bot_token
+            send_msg_url = f"https://api.telegram.org/bot{bot_token_req}/sendMessage"
+            
+            reply_text = "✅ Ваш номер успешно подтвержден! Спасибо за регистрацию. Теперь вы можете управлять своими записями."
+            
+            payload = {
+                'chat_id': telegram_id,
+                'text': reply_text
+            }
+            
+            # Если есть tma_name, добавляем кнопку для возврата в TMA
+            if organization.bot_username and hasattr(organization, 'tma_name') and organization.tma_name:
+                tma_url = f"https://t.me/{organization.bot_username.lstrip('@')}/{organization.tma_name}"
+                payload['reply_markup'] = {
+                    'inline_keyboard': [[
+                        {'text': '📱 Вернуться в приложение', 'url': tma_url}
+                    ]]
+                }
+            
+            try:
+                requests.post(send_msg_url, json=payload, timeout=5)
+            except Exception as e:
+                logger.warning(f"Failed to send confirmation message to {telegram_id}: {e}")
+
         return Response({'ok': True})
 
 

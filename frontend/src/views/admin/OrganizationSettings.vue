@@ -179,6 +179,42 @@
           </p>
         </div>
 
+        <!-- TMA Name -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Shortname Mini App (TMA)
+          </label>
+          <input
+            v-model="form.tma_name"
+            type="text"
+            autocomplete="off"
+            autocapitalize="none"
+            autocorrect="off"
+            spellcheck="false"
+            class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg
+                   bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+                   focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="app"
+          />
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Например "app", для ссылки возврата в приложение
+          </p>
+          <div class="mt-4 flex items-center gap-2">
+            <button
+              type="button"
+              @click="handleSetWebhook"
+              :disabled="settingWebhook || !form.bot_token"
+              class="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 text-blue-800 dark:text-blue-200 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <Icon :icon="settingWebhook ? 'mdi:loading' : 'mdi:webhook'" :class="{ 'animate-spin': settingWebhook }" class="w-5 h-5" />
+              {{ settingWebhook ? 'Установка...' : 'Установить Webhook' }}
+            </button>
+            <span v-if="setWebhookResult" class="text-sm" :class="setWebhookSuccess ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
+              {{ setWebhookResult }}
+            </span>
+          </div>
+        </div>
+
         <!-- Yandex Maps API Key -->
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -342,6 +378,38 @@ const testingWebhook = ref(false)
 const testWebhookResult = ref('')
 const testWebhookSuccess = ref(false)
 
+const settingWebhook = ref(false)
+const setWebhookResult = ref('')
+const setWebhookSuccess = ref(false)
+
+async function handleSetWebhook() {
+  if (!form.value.bot_token) {
+    setWebhookSuccess.value = false
+    setWebhookResult.value = 'Сначала введите токен бота'
+    return
+  }
+  
+  const orgId = form.value.id || (organizationStore.organization && organizationStore.organization.id)
+  if (!orgId) {
+    setWebhookSuccess.value = false
+    setWebhookResult.value = 'ID организации не найден. Сохраните настройки.'
+    return
+  }
+
+  settingWebhook.value = true
+  setWebhookResult.value = ''
+  try {
+    await organizationService.setWebhook(orgId)
+    setWebhookSuccess.value = true
+    setWebhookResult.value = 'Вебхук успешно установлен'
+  } catch (err) {
+    setWebhookSuccess.value = false
+    setWebhookResult.value = err.response?.data?.error || 'Ошибка установки вебхука'
+  } finally {
+    settingWebhook.value = false
+  }
+}
+
 function isValidUrl(s) {
   if (!s || typeof s !== 'string') return true
   const t = s.trim()
@@ -416,6 +484,7 @@ async function savePrimaryColor() {
 }
 
 const form = ref({
+  id: '',
   iiko_organization_id: '',
   api_key: '',
   name: '',
@@ -423,6 +492,7 @@ const form = ref({
   address: '',
   bot_token: '',
   bot_username: '',
+  tma_name: '',
   yandex_maps_api_key: '',
   primary_color: '',
   webhook_link: ''
@@ -451,6 +521,7 @@ const loadOrganization = async () => {
     const org = await organizationStore.fetchOrganization()
     if (org) {
       form.value = {
+        id: org.id || '',
         iiko_organization_id: org.iiko_organization_id || '',
         api_key: org.api_key || '',
         name: org.name || '',
@@ -458,6 +529,7 @@ const loadOrganization = async () => {
         address: org.address || '',
         bot_token: org.bot_token || '',
         bot_username: org.bot_username || '',
+        tma_name: org.tma_name || '',
         yandex_maps_api_key: org.yandex_maps_api_key || '',
         primary_color: org.primary_color || '#0284c7',
         webhook_link: org.webhook_link || ''
@@ -479,7 +551,8 @@ const handleSubmit = async () => {
     const payload = {
       ...form.value,
       bot_token: (form.value.bot_token || '').trim(),
-      bot_username: (form.value.bot_username || '').trim().replace(/^@+/, '')
+      bot_username: (form.value.bot_username || '').trim().replace(/^@+/, ''),
+      tma_name: (form.value.tma_name || '').trim()
     }
 
     await organizationStore.updateOrganization(payload)

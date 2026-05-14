@@ -255,3 +255,7 @@ _csrf_extra = config('CSRF_TRUSTED_ORIGINS', default='').split(',')
 CSRF_TRUSTED_ORIGINS = _csrf_origins + [x.strip() for x in _csrf_extra if x.strip()]
 SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=False, cast=bool)
 CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=False, cast=bool)
+
+# Public URL for Webhooks and links
+BACKEND_URL = config('BACKEND_URL', default='https://api.yourdomain.com')
+
