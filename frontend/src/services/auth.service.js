@@ -7,9 +7,11 @@ class AuthService {
      */
     async checkAccess(telegramId) {
         try {
-            console.log('API Request: check_access for', telegramId)
+            console.log('API Request: check_access')
+            const initData = telegramService.getInitData()
+            
             const response = await api.post('/users/check_access/', {
-                telegram_id: telegramId
+                initData: initData
             }, {
                 skipAuth: true
             })

@@ -67,7 +67,8 @@ class TelegramAuthView(viewsets.ViewSet):
             # Получаем или создаем пользователя
             try:
                 user = User.objects.select_related('role', 'organization').get(
-                    telegram_id=telegram_id
+                    telegram_id=telegram_id,
+                    organization=organization
                 )
                 logger.info(f"Found existing user: {user.id}")
                 
@@ -105,7 +106,7 @@ class TelegramAuthView(viewsets.ViewSet):
                 # Создаем нового пользователя с привязкой к организации
                 user = User.objects.create(
                     telegram_id=telegram_id,
-                    username=f"tg_{telegram_id}",
+                    username=f"tg_{telegram_id}_{organization.org_id.hex[:8]}" if organization else f"tg_{telegram_id}",
                     first_name=user_data.get('first_name', ''),
                     last_name=user_data.get('last_name', ''),
                     telegram_username=user_data.get('username', ''),
@@ -213,17 +214,12 @@ class TelegramWebhookView(viewsets.ViewSet):
             digits = '7' + digits
         phone_number = f"+{digits}"
 
-        user = User.objects.filter(telegram_id=int(telegram_id)).first()
+        user = User.objects.filter(telegram_id=int(telegram_id), organization=organization).first()
         if not user:
             return Response({'ok': True})
 
-        # Optionally attach organization if this webhook belongs to org bot
-        attach_org = bool(organization and not user.organization)
-        if attach_org:
-            user.organization = organization
-
         user.phone = phone_number
-        user.save(update_fields=['phone', 'organization'] if attach_org else ['phone'])
+        user.save(update_fields=['phone'])
 
         logger.info("Saved phone from Telegram contact for user=%s telegram_id=%s", user.id, telegram_id)
         
@@ -327,22 +323,25 @@ class UserViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['post'], permission_classes=[permissions.AllowAny])
     def check_access(self, request):
-        """Проверка доступа пользователя по Telegram ID"""
-        telegram_id = request.data.get('telegram_id')
-        logger.info(f"check_access called for telegram_id: {telegram_id}")
+        """Проверка доступа пользователя по Telegram initData"""
+        init_data = request.data.get('initData')
         
-        if not telegram_id:
+        if not init_data:
             return Response(
                 {
                     'has_access': False,
-                    'message': 'Telegram ID не предоставлен',
+                    'message': 'Данные инициализации Telegram не предоставлены',
                     'reason': 'invalid_request'
                 },
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         try:
-            user = User.objects.get(telegram_id=telegram_id)
+            user_data, organization = validate_telegram_init_data(init_data)
+            telegram_id = user_data.get('id')
+            logger.info(f"check_access called for telegram_id: {telegram_id}, organization: {organization.org_name if organization else 'None'}")
+            
+            user = User.objects.get(telegram_id=telegram_id, organization=organization)
             logger.info(f"Found user in check_access: {user.id}, active: {user.is_active}")
             
             if not user.is_active:
@@ -360,13 +359,20 @@ class UserViewSet(viewsets.ModelViewSet):
             })
             
         except User.DoesNotExist:
-            logger.info(f"User not found in check_access for ID: {telegram_id}")
+            logger.info(f"User not found in check_access for ID: {telegram_id if 'telegram_id' in locals() else 'unknown'}")
             return Response({
                 'has_access': False,
                 'message': 'Вы не зарегистрированы в системе. Обратитесь к администратору для получения доступа.',
                 'reason': 'not_found',
-                'telegram_id': telegram_id
+                'telegram_id': telegram_id if 'telegram_id' in locals() else None
             })
+        except Exception as e:
+            logger.error(f"Error in check_access: {e}")
+            return Response({
+                'has_access': False,
+                'message': 'Ошибка валидации данных',
+                'reason': 'invalid_request'
+            }, status=status.HTTP_400_BAD_REQUEST)
     
     @action(detail=False, methods=['get', 'put', 'patch'])
     def me(self, request):

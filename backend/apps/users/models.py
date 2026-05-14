@@ -38,7 +38,7 @@ class User(AbstractUser):
     """Кастомная модель пользователя"""
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
-    telegram_id = models.BigIntegerField('Telegram ID', unique=True, null=True, blank=True)
+    telegram_id = models.BigIntegerField('Telegram ID', null=True, blank=True)
     telegram_username = models.CharField('Telegram Username', max_length=255, blank=True, null=True)
     phone = models.CharField('Телефон', max_length=20, blank=True, null=True)
     
@@ -98,6 +98,9 @@ class User(AbstractUser):
         db_table = 'users'
         verbose_name = 'Пользователь'
         verbose_name_plural = 'Пользователи'
+        constraints = [
+            models.UniqueConstraint(fields=['telegram_id', 'organization'], name='unique_telegram_user_per_org')
+        ]
     
     def __str__(self):
         return self.username or str(self.telegram_id)

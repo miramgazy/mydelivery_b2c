@@ -243,7 +243,8 @@ class TelegramLoginWidgetView(APIView):
 
         try:
             user = User.objects.select_related('role', 'organization').get(
-                telegram_id=telegram_id
+                telegram_id=telegram_id,
+                organization=org
             )
             user.first_name = user_data.get('first_name', user.first_name)
             user.last_name = user_data.get('last_name', user.last_name)
@@ -259,7 +260,7 @@ class TelegramLoginWidgetView(APIView):
                     status=status.HTTP_500_INTERNAL_SERVER_ERROR
                 )
 
-            username = user_data.get('username') or f'tg_{telegram_id}'
+            username = user_data.get('username') or f'tg_{telegram_id}_{org.org_id.hex[:8]}'
             user = User.objects.create(
                 telegram_id=telegram_id,
                 first_name=user_data.get('first_name', ''),

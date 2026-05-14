@@ -150,9 +150,19 @@ class UserCreateSerializer(serializers.ModelSerializer):
         ]
     
     def validate_telegram_id(self, value):
-        """Проверка уникальности Telegram ID"""
-        if User.objects.filter(telegram_id=value).exists():
-            raise serializers.ValidationError('Пользователь с таким Telegram ID уже существует')
+        """Проверка уникальности Telegram ID в рамках организации"""
+        request = self.context.get('request')
+        organization_id = self.initial_data.get('organization')
+        
+        if not organization_id and request and hasattr(request.user, 'organization'):
+            organization_id = getattr(request.user.organization, 'org_id', None) or request.user.organization_id
+            
+        if organization_id:
+            if User.objects.filter(telegram_id=value, organization_id=organization_id).exists():
+                raise serializers.ValidationError('Пользователь с таким Telegram ID уже существует в этой организации')
+        else:
+            if User.objects.filter(telegram_id=value, organization__isnull=True).exists():
+                raise serializers.ValidationError('Пользователь с таким Telegram ID уже существует')
         return value
     
     def validate(self, attrs):
