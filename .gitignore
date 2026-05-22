@@ -94,3 +94,4 @@ TROUBLESHOOTING_*.md
 B2C_DOCKER_SETUP.md
 QUICKSTART_B2C.md
 /*.md
+fix_superuser.py
