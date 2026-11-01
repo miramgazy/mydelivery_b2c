@@ -36,9 +36,40 @@ export const getTerminals = async () => {
     return response.data
 }
 
-// Load terminals from iiko
-export const loadTerminalsFromIiko = async () => {
-    const response = await api.post('/organizations/load-terminals/')
+// Load terminals from iiko (supports optional rmsBaseId)
+export const loadTerminalsFromIiko = async (rmsBaseId = null) => {
+    const payload = rmsBaseId ? { rms_base_id: rmsBaseId } : {}
+    const response = await api.post('/organizations/load-terminals/', payload)
+    return response.data
+}
+
+// Get RMS bases list
+export const getRmsBases = async (params = {}) => {
+    const response = await api.get('/rms-bases/', { params })
+    return response.data.results || response.data
+}
+
+// Create RMS base
+export const createRmsBase = async (data) => {
+    const response = await api.post('/rms-bases/', data)
+    return response.data
+}
+
+// Update RMS base
+export const updateRmsBase = async (id, data) => {
+    const response = await api.patch(`/rms-bases/${id}/`, data)
+    return response.data
+}
+
+// Delete RMS base
+export const deleteRmsBase = async (id) => {
+    const response = await api.delete(`/rms-bases/${id}/`)
+    return response.data
+}
+
+// Sync terminals for a single RMS base
+export const syncRmsTerminals = async (rmsId) => {
+    const response = await api.post(`/rms-bases/${rmsId}/sync-terminals/`)
     return response.data
 }
 
@@ -159,6 +190,11 @@ export default {
     setWebhook,
     getTerminals,
     loadTerminalsFromIiko,
+    getRmsBases,
+    createRmsBase,
+    updateRmsBase,
+    deleteRmsBase,
+    syncRmsTerminals,
     getPaymentTypes,
     loadPaymentTypesFromIiko,
     getExternalMenus,

@@ -218,9 +218,14 @@
                             <h3 class="font-semibold text-gray-900 dark:text-white mb-0.5">
                                 {{ terminalDisplayName(terminal) }}
                             </h3>
-                            <p v-if="terminal.city_name || terminal.city" class="text-sm text-gray-500 dark:text-gray-400">
-                                {{ terminal.city_name || terminal.city }}
-                            </p>
+                            <div class="flex flex-wrap items-center gap-1.5 text-sm text-gray-500 dark:text-gray-400">
+                                <span v-if="terminal.rms_base_name" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-50 dark:bg-primary-900/30 text-primary-700 dark:text-primary-300 border border-primary-200 dark:border-primary-800">
+                                    {{ terminal.rms_base_name }}
+                                </span>
+                                <span v-if="terminal.city_name || terminal.city">
+                                    {{ terminal.city_name || terminal.city }}
+                                </span>
+                            </div>
                         </div>
                         <div v-if="isCurrentTerminal(terminal)" class="flex items-center gap-2 text-primary-600 dark:text-primary-400">
                             <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

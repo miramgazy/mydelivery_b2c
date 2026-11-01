@@ -28,14 +28,25 @@ def sync_discounts_from_iiko(organization: Organization) -> dict:
     Returns:
         dict: {'synced': int, 'deactivated': int, 'error': str|None}
     """
-    if not organization.api_key or not organization.iiko_organization_id:
-        raise ValueError("У организации должны быть настроены api_key и iiko_organization_id")
+    if not organization.api_key:
+        raise ValueError("У организации должен быть настроен api_key")
 
-    org_id = organization.iiko_organization_id
+    org_ids = set()
+    if organization.iiko_chain_id:
+        org_ids.add(str(organization.iiko_chain_id))
+    for rms in organization.rms_bases.filter(is_active=True):
+        if rms.iiko_organization_id:
+            org_ids.add(str(rms.iiko_organization_id))
+    if not org_ids and organization.iiko_organization_id:
+        org_ids.add(str(organization.iiko_organization_id))
+
+    if not org_ids:
+        raise ValueError("У организации должны быть настроены chain_id, RMS базы или iiko_organization_id")
+
     client = IikoClient(organization.api_key)
 
     try:
-        response = client.get_discounts([org_id])
+        response = client.get_discounts(list(org_ids))
     except IikoAPIException as e:
         logger.error(f"Ошибка при запросе скидок из iiko: {e}")
         raise
@@ -43,15 +54,15 @@ def sync_discounts_from_iiko(organization: Organization) -> dict:
     discounts_data = response.get("discounts") or []
     active_external_ids = []
     synced_count = 0
-    org_id_str = str(org_id).strip().lower()
+    org_ids_str_set = {str(x).strip().lower() for x in org_ids}
 
     with transaction.atomic():
         # Собираем данные из ответа и выполняем update_or_create
         for org_block in discounts_data:
             api_org_id = org_block.get("organizationId")
-            # Обрабатываем только блоки для нашей организации
-            if api_org_id and str(api_org_id).strip().lower() != org_id_str:
-                logger.debug(f"Пропуск блока организации {api_org_id} (ожидаем {org_id})")
+            # Обрабатываем только блоки для наших организаций
+            if api_org_id and str(api_org_id).strip().lower() not in org_ids_str_set:
+                logger.debug(f"Пропуск блока организации {api_org_id}")
                 continue
             items = org_block.get("items") or []
 

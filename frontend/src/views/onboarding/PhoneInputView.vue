@@ -365,19 +365,25 @@ async function handleContinue() {
     return
   }
 
-  // Валидация формата
-  const cleanPhone = phone.value.replace(/\D/g, '')
+  // Валидация и нормализация формата (поддержка 8-ки при вставке)
+  let cleanPhone = phone.value.replace(/\D/g, '')
+  if (cleanPhone.startsWith('8') && cleanPhone.length === 11) {
+    cleanPhone = '7' + cleanPhone.slice(1)
+  }
+  
   if (cleanPhone.length !== 11 || !cleanPhone.startsWith('7')) {
     error.value = 'Введите корректный номер телефона (например: +77001234567)'
     return
   }
 
+  const formattedPhone = `+${cleanPhone}`
+  phone.value = formattedPhone
   saving.value = true
   error.value = ''
 
   try {
     // Сохраняем телефон через API
-    await usersService.updateProfile({ phone: phone.value })
+    await usersService.updateProfile({ phone: formattedPhone })
     
     // Обновляем данные пользователя в store
     await authStore.fetchCurrentUser()

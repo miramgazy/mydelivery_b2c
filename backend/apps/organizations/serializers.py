@@ -1,5 +1,19 @@
 from rest_framework import serializers
-from .models import Organization, Terminal, Street, PaymentType, City, Discount
+from .models import Organization, Terminal, Street, PaymentType, City, Discount, RmsBase
+
+
+class RmsBaseSerializer(serializers.ModelSerializer):
+    """Сериализатор для RMS баз (филиалов сети)"""
+    terminals_count = serializers.IntegerField(source='terminals.count', read_only=True)
+
+    class Meta:
+        model = RmsBase
+        fields = [
+            'id', 'organization', 'name', 'iiko_organization_id',
+            'address', 'phone', 'is_active', 'order_index',
+            'terminals_count', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
 
 class TerminalSerializer(serializers.ModelSerializer):
@@ -9,12 +23,15 @@ class TerminalSerializer(serializers.ModelSerializer):
     iiko_terminal_id = serializers.UUIDField(source='terminal_id', read_only=True)
     city_id = serializers.UUIDField(source='city.city_id', read_only=True, allow_null=True)
     city_name = serializers.CharField(source='city.name', read_only=True, allow_null=True)
+    rms_base_id = serializers.UUIDField(source='rms_base.id', read_only=True, allow_null=True)
+    rms_base_name = serializers.CharField(source='rms_base.name', read_only=True, allow_null=True)
     
     class Meta:
         model = Terminal
         fields = [
             'id', 'terminal_id', 'iiko_terminal_id', 'iiko_organization_id', 
             'terminal_group_name', 'name', 'is_active', 'organization',
+            'rms_base', 'rms_base_id', 'rms_base_name',
             'city', 'city_id', 'city_name',
             'stop_list_interval_min', 'delivery_zones_conditions',
             'working_hours', 'is_delivery_calculation_apply',
@@ -27,6 +44,7 @@ class TerminalSerializer(serializers.ModelSerializer):
 class OrganizationSerializer(serializers.ModelSerializer):
     """Сериализатор для организаций"""
     terminals = TerminalSerializer(many=True, read_only=True)
+    rms_bases = RmsBaseSerializer(many=True, read_only=True)
     
     # Добавляем поля для совместимости с фронтендом
     id = serializers.UUIDField(source='org_id', read_only=True)
@@ -38,13 +56,13 @@ class OrganizationSerializer(serializers.ModelSerializer):
         model = Organization
         fields = [
             'id', 'org_id', 'name', 'org_name', 'city',
-            'iiko_organization_id', 'api_key',
+            'iiko_chain_id', 'iiko_organization_id', 'api_key',
             'phone', 'address',
             'bot_token', 'bot_username', 'tma_name',
             'yandex_maps_api_key',
             'primary_color',
             'webhook_link',
-            'terminals', 'is_active', 'created_at', 'updated_at'
+            'rms_bases', 'terminals', 'is_active', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'org_id', 'created_at', 'updated_at']
         extra_kwargs = {

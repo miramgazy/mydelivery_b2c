@@ -1,8 +1,11 @@
 import json
 import logging
 from django.contrib import admin
+from django.urls import path, reverse
+from django.shortcuts import get_object_or_404, redirect, render
+from django.contrib import messages
 from django.utils.safestring import mark_safe
-from .models import Organization, Terminal, PaymentType, Street, City, Discount
+from .models import Organization, RmsBase, Terminal, PaymentType, Street, City, Discount
 
 logger = logging.getLogger(__name__)
 
@@ -86,17 +89,37 @@ class BaseAdmin(admin.ModelAdmin):
                     obj.organization = org
         super().save_model(request, obj, form, change)
 
+class RmsBaseInline(admin.TabularInline):
+    model = RmsBase
+    extra = 1
+    fields = ('name', 'iiko_organization_id', 'address', 'phone', 'is_active', 'order_index', 'terminals_link')
+    readonly_fields = ('terminals_link',)
+
+    def terminals_link(self, obj):
+        if obj and obj.pk:
+            count = obj.terminals.count()
+            changelist_url = reverse('admin:organizations_terminal_changelist') + f'?rms_base__id__exact={obj.pk}'
+            sync_url = reverse('admin:rms_sync_terminals', args=[obj.pk])
+            return mark_safe(
+                f'<a href="{changelist_url}"><strong>{count}</strong> терминалов</a> &nbsp;|&nbsp; '
+                f'<a class="button" href="{sync_url}" style="padding:2px 8px;font-size:11px;">Выгрузить терминалы</a>'
+            )
+        return '—'
+    terminals_link.short_description = 'Терминалы'
+
+
 @admin.register(Organization)
 class OrganizationAdmin(BaseAdmin):
-    list_display = ('org_id', 'org_name', 'iiko_organization_id', 'city', 'get_terminals_count', 'is_active', 'created_at')
+    list_display = ('org_id', 'org_name', 'iiko_chain_id', 'iiko_organization_id', 'city', 'get_rms_bases_count', 'get_terminals_count', 'is_active', 'created_at')
     list_filter = ('is_active', 'city')
     change_form_template = 'admin/organizations/organization/change_form.html'
+    inlines = [RmsBaseInline]
     fieldsets = (
-        (None, {
-            'fields': ('org_id_display', 'org_name', 'api_key', 'iiko_organization_id', 'city', 'phone', 'address')
+        ('Основные настройки сети / проекта', {
+            'fields': ('org_id_display', 'org_name', 'api_key', 'iiko_chain_id', 'iiko_organization_id', 'city', 'phone', 'address')
         }),
         ('Telegram Bot', {
-            'fields': ('bot_token', 'bot_username'),
+            'fields': ('bot_token', 'bot_username', 'tma_name'),
             'classes': ('collapse',)
         }),
         ('iiko API — конструктор запроса', {
@@ -106,8 +129,9 @@ class OrganizationAdmin(BaseAdmin):
                 'дополняется параметрами из блока ниже. Поле items защищено — блюда формируются системой.'
             )
         }),
-        ('Оформление', {
-            'fields': ('primary_color',)
+        ('Интеграции и оформление', {
+            'fields': ('yandex_maps_api_key', 'primary_color', 'webhook_link'),
+            'classes': ('collapse',)
         }),
         (None, {
             'fields': ('is_active', 'created_at', 'updated_at')
@@ -138,11 +162,61 @@ class OrganizationAdmin(BaseAdmin):
             })
         return super().formfield_for_dbfield(db_field, request, **kwargs)
 
+    def get_rms_bases_count(self, obj):
+        return obj.rms_bases.count()
+    get_rms_bases_count.short_description = 'RMS баз'
+
     def get_terminals_count(self, obj):
         return obj.terminals.count()
     get_terminals_count.short_description = 'Терминалов'
-    search_fields = ('org_name', 'org_id', 'iiko_organization_id')
-    actions = ['import_menu_from_iiko']
+    search_fields = ('org_name', 'org_id', 'iiko_chain_id', 'iiko_organization_id')
+    actions = ['import_rms_bases_from_iiko', 'import_menu_from_iiko']
+
+    @admin.action(description='Загрузить список RMS баз из iikoCloud')
+    def import_rms_bases_from_iiko(self, request, queryset):
+        from apps.iiko_integration.client import IikoClient
+        
+        for org in queryset:
+            if not org.api_key:
+                self.message_user(request, f"{org.org_name}: Нет API Key", messages.ERROR)
+                continue
+            try:
+                client = IikoClient(org.api_key)
+                res = client.get_organizations(return_additional_info=True)
+                orgs_list = res.get('organizations', [])
+                if not orgs_list:
+                    self.message_user(request, f"{org.org_name}: iiko вернул пустой список организаций", messages.WARNING)
+                    continue
+                
+                created_count = 0
+                updated_count = 0
+                for item in orgs_list:
+                    item_id = str(item.get('id'))
+                    item_name = item.get('name') or f"Филиал {item_id[:8]}"
+                    # Если этот ID совпадает с chain_id, пропускаем создание отдельной RMS
+                    if org.iiko_chain_id and item_id.lower() == str(org.iiko_chain_id).strip().lower():
+                        continue
+                    
+                    rms, created = RmsBase.objects.update_or_create(
+                        organization=org,
+                        iiko_organization_id=item_id,
+                        defaults={
+                            'name': item_name,
+                            'is_active': not item.get('isDeleted', False),
+                        }
+                    )
+                    if created:
+                        created_count += 1
+                    else:
+                        updated_count += 1
+                
+                self.message_user(
+                    request,
+                    f"Успешно обработаны RMS базы для {org.org_name}: добавлено {created_count}, обновлено {updated_count}",
+                    messages.SUCCESS
+                )
+            except Exception as e:
+                self.message_user(request, f"Ошибка при загрузке RMS баз для {org.org_name}: {str(e)}", messages.ERROR)
 
     @admin.action(description='Загрузить меню из iikoCloud')
     def import_menu_from_iiko(self, request, queryset):
@@ -323,10 +397,68 @@ class OrganizationAdmin(BaseAdmin):
             self.message_user(request, f"Ошибка загрузки внешнего меню: {str(e)}", messages.ERROR)
             return redirect('admin:organizations_organization_change', object_id)
 
+@admin.register(RmsBase)
+class RmsBaseAdmin(BaseAdmin):
+    list_display = ('name', 'organization', 'iiko_organization_id', 'terminals_count', 'is_active', 'order_index', 'created_at')
+    list_filter = ('organization', 'is_active')
+    search_fields = ('name', 'iiko_organization_id', 'address')
+    actions = ['sync_terminals_for_rms']
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('<uuid:rms_id>/sync-terminals/', self.admin_site.admin_view(self.sync_single_rms_view), name='rms_sync_terminals'),
+        ]
+        return custom_urls + urls
+
+    def terminals_count(self, obj):
+        count = obj.terminals.count()
+        changelist_url = reverse('admin:organizations_terminal_changelist') + f'?rms_base__id__exact={obj.pk}'
+        return mark_safe(f'<a href="{changelist_url}"><strong>{count}</strong> терминалов</a>')
+    terminals_count.short_description = 'Терминалы'
+
+    def sync_single_rms_view(self, request, rms_id):
+        from apps.iiko_integration.client import IikoClient
+        from apps.iiko_integration.services import TerminalSyncService
+        rms = get_object_or_404(RmsBase, pk=rms_id)
+        org = rms.organization
+        if not org or not org.api_key:
+            self.message_user(request, "У организации не настроен API Key iiko", messages.ERROR)
+            return redirect('admin:organizations_rmsbase_changelist')
+        try:
+            client = IikoClient(org.api_key)
+            data = client.get_terminal_groups([rms.iiko_organization_id])
+            service = TerminalSyncService()
+            synced = service.sync_terminal_groups(data, organization=org, rms_base=rms)
+            self.message_user(request, f"Успешно выгружено {len(synced)} терминалов для RMS «{rms.name}»", messages.SUCCESS)
+        except Exception as e:
+            self.message_user(request, f"Ошибка выгрузки терминалов для «{rms.name}»: {str(e)}", messages.ERROR)
+        return redirect('admin:organizations_terminal_changelist')
+
+    @admin.action(description='Выгрузить терминалы по отдельности для выбранных RMS баз')
+    def sync_terminals_for_rms(self, request, queryset):
+        from apps.iiko_integration.client import IikoClient
+        from apps.iiko_integration.services import TerminalSyncService
+        total = 0
+        service = TerminalSyncService()
+        for rms in queryset:
+            org = rms.organization
+            if not org or not org.api_key:
+                continue
+            try:
+                client = IikoClient(org.api_key)
+                data = client.get_terminal_groups([rms.iiko_organization_id])
+                synced = service.sync_terminal_groups(data, organization=org, rms_base=rms)
+                total += len(synced)
+            except Exception as e:
+                self.message_user(request, f"Ошибка выгрузки для {rms.name}: {e}", messages.ERROR)
+        self.message_user(request, f"Успешно выгружено {total} терминалов для выбранных RMS баз", messages.SUCCESS)
+
+
 @admin.register(Terminal)
 class TerminalAdmin(BaseAdmin):
-    list_display = ('terminal_group_name', 'organization', 'city', 'iiko_organization_id', 'is_active')
-    list_filter = ('is_active', 'organization', 'city')
+    list_display = ('terminal_group_name', 'organization', 'rms_base', 'city', 'iiko_organization_id', 'is_active')
+    list_filter = ('is_active', 'organization', 'rms_base', 'city')
     search_fields = ('terminal_group_name', 'terminal_id', 'iiko_organization_id')
     change_list_template = "admin/organizations/terminal_changelist.html"
 
@@ -341,37 +473,57 @@ class TerminalAdmin(BaseAdmin):
         return custom_urls + urls
 
     def sync_iiko_view(self, request):
-        from django.shortcuts import render, redirect
-        from django.contrib import messages
         from apps.iiko_integration.client import IikoClient
         from apps.iiko_integration.services import TerminalSyncService
         
         if request.method == 'POST':
             org_id = request.POST.get('organization_id')
+            rms_base_id = request.POST.get('rms_base_id')
             if not org_id:
                 self.message_user(request, "Выберите организацию", messages.WARNING)
                 return redirect('admin:terminal_sync_iiko')
             
             try:
                 org = Organization.objects.get(pk=org_id)
-                if not org.api_key or not org.iiko_organization_id:
-                    self.message_user(request, f"Организация {org.org_name} не имеет API Key или iiko ID", messages.ERROR)
+                if not org.api_key:
+                    self.message_user(request, f"Организация {org.org_name} не имеет API Key", messages.ERROR)
                     return redirect('admin:terminal_sync_iiko')
 
                 client = IikoClient(org.api_key)
-                # No need to authenticate explicitly, get_headers handles it
-                data = client.get_terminal_groups([org.iiko_organization_id])
-                
                 service = TerminalSyncService()
-                synced = service.sync_terminal_groups(data, organization=org)
-                
-                self.message_user(request, f"Успешно синхронизировано {len(synced)} терминалов для {org.org_name}", messages.SUCCESS)
+
+                if rms_base_id and rms_base_id != 'all':
+                    rms_base = get_object_or_404(RmsBase, pk=rms_base_id, organization=org)
+                    data = client.get_terminal_groups([rms_base.iiko_organization_id])
+                    synced = service.sync_terminal_groups(data, organization=org, rms_base=rms_base)
+                    self.message_user(request, f"Успешно выгружено {len(synced)} терминалов для RMS «{rms_base.name}»", messages.SUCCESS)
+                else:
+                    # Выгружаем для всех активных RMS баз чейна по отдельности
+                    active_rms = list(org.rms_bases.filter(is_active=True))
+                    if active_rms:
+                        total_synced = 0
+                        for rms in active_rms:
+                            try:
+                                data = client.get_terminal_groups([rms.iiko_organization_id])
+                                synced = service.sync_terminal_groups(data, organization=org, rms_base=rms)
+                                total_synced += len(synced)
+                            except Exception as e:
+                                self.message_user(request, f"Ошибка выгрузки для RMS «{rms.name}»: {e}", messages.WARNING)
+                        self.message_user(request, f"Успешно выгружено {total_synced} терминалов для {len(active_rms)} RMS баз чейна {org.org_name}", messages.SUCCESS)
+                    elif org.iiko_organization_id:
+                        data = client.get_terminal_groups([org.iiko_organization_id])
+                        synced = service.sync_terminal_groups(data, organization=org)
+                        self.message_user(request, f"Успешно выгружено {len(synced)} терминалов для {org.org_name}", messages.SUCCESS)
+                    else:
+                        self.message_user(request, f"У организации {org.org_name} не настроены RMS базы и отсутствует iiko_organization_id", messages.ERROR)
+                        return redirect('admin:terminal_sync_iiko')
+
                 return redirect('admin:organizations_terminal_changelist')
             except Exception as e:
                 self.message_user(request, f"Ошибка при синхронизации: {str(e)}", messages.ERROR)
                 return redirect('admin:terminal_sync_iiko')
 
-        organizations = Organization.objects.filter(is_active=True)
+        organizations = Organization.objects.filter(is_active=True).prefetch_related('rms_bases')
         if not request.user.is_superuser:
             org = getattr(request.user, 'organization', None)
             if org:

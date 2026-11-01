@@ -65,7 +65,7 @@
                     :key="terminal.terminal_id" 
                     :value="terminal.terminal_id"
                 >
-                    {{ terminal.name || terminal.terminal_group_name }}
+                    {{ terminal.rms_base_name ? `[${terminal.rms_base_name}] ` : '' }}{{ terminal.name || terminal.terminal_group_name }}
                 </option>
             </select>
         </div>

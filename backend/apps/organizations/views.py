@@ -9,6 +9,7 @@ logger = logging.getLogger(__name__)
 
 from .models import (
     Organization,
+    RmsBase,
     Terminal,
     Street,
     PaymentType,
@@ -18,7 +19,7 @@ from .models import (
     MailingAudienceType,
 )
 from .serializers import (
-    OrganizationSerializer, TerminalSerializer,
+    OrganizationSerializer, RmsBaseSerializer, TerminalSerializer,
     StreetSerializer, PaymentTypeSerializer,
     CitySerializer, ExternalMenuSerializer, DiscountSerializer
 )
@@ -208,7 +209,7 @@ class OrganizationViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=['post'], url_path='load-terminals')
     def load_terminals(self, request):
-        """Загрузить терминалы из iiko"""
+        """Загрузить терминалы из iiko (по отдельной RMS базе или по всем RMS чейна)"""
         user = request.user
         
         if hasattr(user, 'organization') and user.organization:
@@ -222,24 +223,57 @@ class OrganizationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        if not organization.api_key or not organization.iiko_organization_id:
+        if not organization.api_key:
             return Response(
-                {'error': 'Не настроены iiko_organization_id или api_key'},
+                {'error': 'Не настроен api_key организации'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        rms_base_id = request.data.get('rms_base_id')
+        service = MenuSyncService()
+        client = IikoClient(organization.api_key)
+
         try:
-            client = IikoClient(organization.api_key)
-            terminal_groups_data = client.get_terminal_groups([organization.iiko_organization_id])
+            if rms_base_id:
+                rms_base = get_object_or_404(RmsBase, pk=rms_base_id, organization=organization)
+                data = client.get_terminal_groups([rms_base.iiko_organization_id])
+                synced = service.sync_terminal_groups(data, organization, rms_base=rms_base)
+                return Response({
+                    'message': f'Терминалы успешно загружены для RMS "{rms_base.name}" ({len(synced)} шт.)',
+                    'count': len(synced),
+                    'success': True
+                })
             
-            # Синхронизируем терминалы
-            service = MenuSyncService()
-            service.sync_terminal_groups(terminal_groups_data, organization)
-            
-            return Response({
-                'message': 'Терминалы успешно загружены из iiko',
-                'success': True
-            })
+            # Если rms_base_id не указан, проверяем наличие активных RmsBase у чейна
+            rms_bases = list(organization.rms_bases.filter(is_active=True))
+            if rms_bases:
+                total_synced = 0
+                for rms in rms_bases:
+                    try:
+                        data = client.get_terminal_groups([rms.iiko_organization_id])
+                        synced = service.sync_terminal_groups(data, organization, rms_base=rms)
+                        total_synced += len(synced)
+                    except Exception as e:
+                        logger.error(f'Ошибка выгрузки терминалов для RMS {rms.name}: {e}')
+                return Response({
+                    'message': f'Терминалы успешно загружены для {len(rms_bases)} RMS баз (всего {total_synced} шт.)',
+                    'count': total_synced,
+                    'success': True
+                })
+            elif organization.iiko_organization_id:
+                # Fallback для одиночной RMS
+                data = client.get_terminal_groups([organization.iiko_organization_id])
+                synced = service.sync_terminal_groups(data, organization)
+                return Response({
+                    'message': f'Терминалы успешно загружены ({len(synced)} шт.)',
+                    'count': len(synced),
+                    'success': True
+                })
+            else:
+                return Response(
+                    {'error': 'Не указаны RMS базы и не настроен iiko_organization_id'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
         except IikoAPIException as e:
             return Response(
                 {'error': f'Ошибка при загрузке терминалов из iiko: {str(e)}'},
@@ -515,6 +549,60 @@ class OrganizationViewSet(viewsets.ModelViewSet):
             return Response(
                 {'error': f'Неожиданная ошибка: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+
+class RmsBaseViewSet(viewsets.ModelViewSet):
+    """ViewSet для управления RMS базами сети (iikoChain)"""
+    queryset = RmsBase.objects.all()
+    serializer_class = RmsBaseSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ['name', 'iiko_organization_id', 'address']
+    ordering_fields = ['order_index', 'name', 'created_at']
+    ordering = ['order_index', 'name']
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if not user.is_superuser:
+            org = getattr(user, 'organization', None)
+            if org:
+                qs = qs.filter(organization=org)
+            else:
+                qs = qs.none()
+        org_id = self.request.query_params.get('organization')
+        if org_id:
+            qs = qs.filter(organization_id=org_id)
+        return qs
+
+    @action(detail=True, methods=['post'], url_path='sync-terminals')
+    def sync_terminals(self, request, pk=None):
+        """Выгрузить терминалы по отдельности для данной RMS базы"""
+        rms_base = self.get_object()
+        org = rms_base.organization
+        if not org or not org.api_key:
+            return Response(
+                {'error': 'У организации не настроен API Key iiko'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            client = IikoClient(org.api_key)
+            data = client.get_terminal_groups([rms_base.iiko_organization_id])
+            service = MenuSyncService()
+            synced = service.sync_terminal_groups(data, org, rms_base=rms_base)
+            return Response({
+                'success': True,
+                'message': f'Успешно выгружено {len(synced)} терминалов для RMS "{rms_base.name}"',
+                'terminals_count': len(synced)
+            })
+        except Exception as e:
+            logger.error(f'Ошибка синхронизации терминалов RMS {rms_base.name}: {e}', exc_info=True)
+            return Response(
+                {'error': f'Ошибка синхронизации: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
             )
 
 

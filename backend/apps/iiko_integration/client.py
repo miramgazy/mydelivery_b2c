@@ -70,10 +70,14 @@ class IikoClient:
                 error_msg += f" Response: {e.response.text}"
             raise IikoAPIException(error_msg)
 
-    def get_organizations(self) -> Dict[str, Any]:
+    def get_organizations(self, return_additional_info: bool = False, include_disabled: bool = False) -> Dict[str, Any]:
         """Fetch list of organizations available for this API key."""
         url = f"{self.BASE_URL}/organizations"
-        return self._post(url, {})
+        payload = {
+            "returnAdditionalInfo": return_additional_info,
+            "includeDisabled": include_disabled
+        }
+        return self._post(url, payload)
 
     def get_menu(self, organization_id: str) -> Dict[str, Any]:
         """Fetch nomenclature (internal menu) for the organization."""

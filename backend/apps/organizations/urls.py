@@ -1,7 +1,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    OrganizationViewSet, TerminalViewSet,
+    OrganizationViewSet, RmsBaseViewSet, TerminalViewSet,
     StreetViewSet, PaymentTypeViewSet, CityViewSet, DiscountViewSet,
     MailingTaskViewSet,
 )
@@ -10,6 +10,7 @@ router = DefaultRouter()
 # Эндпоинты рассылок живут под /api/organizations/mailings/
 router.register(r'organizations/mailings', MailingTaskViewSet, basename='mailings')
 router.register(r'organizations', OrganizationViewSet)
+router.register(r'rms-bases', RmsBaseViewSet, basename='rms-bases')
 router.register(r'terminals', TerminalViewSet)
 router.register(r'streets', StreetViewSet)
 router.register(r'payment-types', PaymentTypeViewSet)

@@ -526,7 +526,13 @@ class OrderService:
         
         try:
             client = IikoClient(order.organization.api_key)
-            org_id = str(order.organization.iiko_organization_id or order.organization.org_id)
+            terminal = order.terminal
+            org_id = str(
+                (terminal.iiko_organization_id if terminal and terminal.iiko_organization_id else None)
+                or (terminal.rms_base.iiko_organization_id if terminal and getattr(terminal, 'rms_base', None) else None)
+                or order.organization.iiko_organization_id
+                or order.organization.org_id
+            )
             
             status_response = client.get_creation_status(org_id, str(order.correlation_id))
             
@@ -579,7 +585,13 @@ class OrderService:
             
         try:
             client = IikoClient(order.organization.api_key)
-            org_id = str(order.organization.iiko_organization_id or order.organization.org_id)
+            terminal = order.terminal
+            org_id = str(
+                (terminal.iiko_organization_id if terminal and terminal.iiko_organization_id else None)
+                or (terminal.rms_base.iiko_organization_id if terminal and getattr(terminal, 'rms_base', None) else None)
+                or order.organization.iiko_organization_id
+                or order.organization.org_id
+            )
             
             status_data = client.get_order_status(org_id, str(order.iiko_order_id))
             
@@ -847,8 +859,15 @@ class OrderService:
         if order.comment:
             order_payload['comment'] = order.comment
 
+        target_org_id = str(
+            terminal.iiko_organization_id
+            or (terminal.rms_base.iiko_organization_id if getattr(terminal, 'rms_base', None) else None)
+            or order.organization.iiko_organization_id
+            or order.organization.org_id
+        )
+
         order_data = {
-            'organizationId': str(order.organization.iiko_organization_id or order.organization.org_id),
+            'organizationId': target_org_id,
             'terminalGroupId': str(terminal.terminal_id),
             'order': order_payload
         }

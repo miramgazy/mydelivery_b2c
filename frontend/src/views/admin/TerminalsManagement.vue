@@ -3,21 +3,38 @@
     <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm">
       <!-- Header -->
       <div class="p-6 border-b border-gray-200 dark:border-gray-700">
-        <div class="flex items-center justify-between">
-          <h2 class="text-xl font-bold text-gray-900 dark:text-white">Терминалы</h2>
-          <button
-            @click="handleLoadFromIiko"
-            :disabled="loading"
-            class="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700
-                   text-white font-medium rounded-lg transition-colors disabled:opacity-50"
-          >
-            <Icon
-              :icon="loading ? 'mdi:loading' : 'mdi:download'"
-              :class="{ 'animate-spin': loading }"
-              class="w-5 h-5"
-            />
-            Загрузить из IIKO
-          </button>
+        <div class="flex items-center justify-between flex-wrap gap-4">
+          <div>
+            <h2 class="text-xl font-bold text-gray-900 dark:text-white">Терминалы</h2>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Группы терминалов для чейна и филиалов
+            </p>
+          </div>
+          <div class="flex items-center gap-3">
+            <select
+              v-if="rmsBases.length > 0"
+              v-model="selectedRmsForLoad"
+              class="px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            >
+              <option value="all">Все RMS базы чейна</option>
+              <option v-for="rms in rmsBases" :key="rms.id" :value="rms.id">
+                RMS: {{ rms.name }}
+              </option>
+            </select>
+            <button
+              @click="handleLoadFromIiko"
+              :disabled="loading"
+              class="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700
+                     text-white font-medium rounded-lg transition-colors disabled:opacity-50 text-sm"
+            >
+              <Icon
+                :icon="loading ? 'mdi:loading' : 'mdi:download'"
+                :class="{ 'animate-spin': loading }"
+                class="w-4 h-4"
+              />
+              Выгрузить из IIKO
+            </button>
+          </div>
         </div>
       </div>
 
@@ -67,6 +84,9 @@
                 Название
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                RMS филиал
+              </th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 ID в iiko
               </th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -102,6 +122,14 @@
                     {{ terminal.name }}
                   </span>
                 </div>
+              </td>
+              <td class="px-6 py-4 whitespace-nowrap">
+                <span v-if="terminal.rms_base_name" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                  {{ terminal.rms_base_name }}
+                </span>
+                <span v-else class="text-xs text-gray-400">
+                  {{ terminal.iiko_organization_id || '—' }}
+                </span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 <span class="text-sm text-gray-500 dark:text-gray-400 font-mono">
@@ -288,9 +316,14 @@ const togglingDeliveryCalculation = ref(null)
 
 const loading = computed(() => organizationStore.loading)
 const terminals = computed(() => organizationStore.terminals || [])
+const rmsBases = computed(() => organizationStore.rmsBases || [])
+const selectedRmsForLoad = ref('all')
 
 onMounted(async () => {
-  await loadTerminals()
+  await Promise.all([
+    loadTerminals(),
+    organizationStore.fetchRmsBases().catch(() => {})
+  ])
 })
 
 const loadTerminals = async () => {
@@ -307,7 +340,8 @@ const handleLoadFromIiko = async () => {
   successMessage.value = ''
 
   try {
-    const result = await organizationStore.loadTerminalsFromIiko()
+    const rmsId = selectedRmsForLoad.value !== 'all' ? selectedRmsForLoad.value : null
+    const result = await organizationStore.loadTerminalsFromIiko(rmsId)
     successMessage.value = result.message || 'Терминалы успешно загружены из IIKO'
 
     setTimeout(() => {

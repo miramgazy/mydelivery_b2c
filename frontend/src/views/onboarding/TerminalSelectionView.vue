@@ -40,9 +40,14 @@
             <h3 class="font-semibold text-gray-900 mb-1">
               {{ terminal.name || terminal.terminal_group_name }}
             </h3>
-            <p v-if="terminal.city" class="text-sm text-gray-500">
-              {{ terminal.city }}
-            </p>
+            <div class="flex flex-wrap items-center gap-1.5 text-sm text-gray-500">
+              <span v-if="terminal.rms_base_name" class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-primary-50 text-primary-700 border border-primary-200">
+                {{ terminal.rms_base_name }}
+              </span>
+              <span v-if="terminal.city_name || terminal.city">
+                {{ terminal.city_name || terminal.city }}
+              </span>
+            </div>
           </div>
           <svg v-if="!saving" class="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />

@@ -5,6 +5,7 @@ import organizationService from '@/services/organization.service'
 export const useOrganizationStore = defineStore('organization', () => {
     // State
     const organization = ref(null)
+    const rmsBases = ref([])
     const terminals = ref([])
     const paymentTypes = ref([])
     const externalMenus = ref([])
@@ -95,19 +96,59 @@ export const useOrganizationStore = defineStore('organization', () => {
     }
 
     /**
-     * Load terminals from iiko
+     * Fetch RMS bases list
      */
-    async function loadTerminalsFromIiko() {
+    async function fetchRmsBases(params = {}) {
         loading.value = true
         error.value = null
 
         try {
-            const result = await organizationService.loadTerminalsFromIiko()
+            const data = await organizationService.getRmsBases(params)
+            rmsBases.value = data
+            return data
+        } catch (err) {
+            console.error('Fetch RMS bases error:', err)
+            error.value = err.response?.data?.detail || 'Не удалось загрузить RMS базы'
+            throw err
+        } finally {
+            loading.value = false
+        }
+    }
+
+    /**
+     * Load terminals from iiko (supports optional rmsBaseId)
+     */
+    async function loadTerminalsFromIiko(rmsBaseId = null) {
+        loading.value = true
+        error.value = null
+
+        try {
+            const result = await organizationService.loadTerminalsFromIiko(rmsBaseId)
             await fetchTerminals() // Reload terminals list
             return result
         } catch (err) {
             console.error('Load terminals from iiko error:', err)
             error.value = err.response?.data?.detail || 'Не удалось загрузить терминалы из iiko'
+            throw err
+        } finally {
+            loading.value = false
+        }
+    }
+
+    /**
+     * Sync terminals for a single RMS base
+     */
+    async function syncRmsTerminals(rmsId) {
+        loading.value = true
+        error.value = null
+
+        try {
+            const result = await organizationService.syncRmsTerminals(rmsId)
+            await fetchTerminals()
+            return result
+        } catch (err) {
+            console.error('Sync RMS terminals error:', err)
+            error.value = err.response?.data?.detail || 'Не удалось синхронизировать терминалы RMS'
             throw err
         } finally {
             loading.value = false
@@ -297,6 +338,7 @@ export const useOrganizationStore = defineStore('organization', () => {
     return {
         // State
         organization,
+        rmsBases,
         terminals,
         paymentTypes,
         externalMenus,
@@ -311,8 +353,10 @@ export const useOrganizationStore = defineStore('organization', () => {
         // Actions
         fetchOrganization,
         updateOrganization,
+        fetchRmsBases,
         fetchTerminals,
         loadTerminalsFromIiko,
+        syncRmsTerminals,
         fetchPaymentTypes,
         loadPaymentTypesFromIiko,
         fetchExternalMenus,

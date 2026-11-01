@@ -738,29 +738,52 @@ class MenuSyncService:
 
         self._deactivate_modifiers_not_in_seen(product, seen_in_product)
 
-    def sync_terminal_groups(self, terminal_groups_data: Dict[str, Any], organization: Organization = None):
+    def sync_terminal_groups(
+        self,
+        terminal_groups_data: Dict[str, Any],
+        organization: Organization = None,
+        rms_base: Any = None
+    ):
         """
         Syncs terminal groups data from iiko to local database.
+        Supports both single RMS and multi-RMS chain structure.
         """
-        from apps.organizations.models import Terminal
+        from apps.organizations.models import Terminal, RmsBase
         
         terminal_groups = terminal_groups_data.get('terminalGroups', [])
         synced_terminals = []
 
         with transaction.atomic():
             for org_data in terminal_groups:
-                # org_data usually has 'organizationId' and 'items'
+                # org_data has 'organizationId' and 'items'
                 items = org_data.get('items', [])
+                org_id_from_data = org_data.get('organizationId')
+                
+                # Determine associated RMS base
+                target_rms = rms_base
+                if not target_rms and organization and org_id_from_data:
+                    target_rms = RmsBase.objects.filter(
+                        organization=organization,
+                        iiko_organization_id=str(org_id_from_data)
+                    ).first()
+
                 for item in items:
                     terminal_id = item.get('id')
                     name = item.get('name')
+                    
+                    rms_org_id = (
+                        target_rms.iiko_organization_id
+                        if target_rms
+                        else (org_id_from_data or (organization.iiko_organization_id if organization else None))
+                    )
                     
                     terminal, created = Terminal.objects.update_or_create(
                         terminal_id=terminal_id,
                         defaults={
                             'terminal_group_name': name,
                             'organization': organization,
-                            'iiko_organization_id': organization.iiko_organization_id if organization else None,
+                            'rms_base': target_rms,
+                            'iiko_organization_id': str(rms_org_id) if rms_org_id else None,
                             'is_active': True
                         }
                     )
@@ -936,10 +959,20 @@ class StopListSyncService:
         if not active_only:
             return []
         organization = active_only[0].organization
-        organization_id = organization.iiko_organization_id
-        if not organization_id:
-            raise ValueError("У организации должен быть настроен iiko_organization_id")
-        api_response = self.client.get_stop_lists([organization_id])
+        
+        # Collect all distinct RMS organization IDs
+        org_ids = set()
+        for t in active_only:
+            rms_id = t.iiko_organization_id or (t.rms_base.iiko_organization_id if getattr(t, 'rms_base', None) else None)
+            if rms_id:
+                org_ids.add(str(rms_id))
+        if not org_ids and organization and organization.iiko_organization_id:
+            org_ids.add(str(organization.iiko_organization_id))
+            
+        if not org_ids:
+            raise ValueError("У терминалов или организации должен быть настроен iiko_organization_id")
+            
+        api_response = self.client.get_stop_lists(list(org_ids))
         results = []
         for terminal in active_only:
             try:
@@ -972,17 +1005,25 @@ class StopListSyncService:
             raise ValueError("У организации должен быть настроен API ключ iiko")
         
         organization = terminal.organization
-        organization_id = organization.iiko_organization_id
+        organization_id = (
+            terminal.iiko_organization_id
+            or (terminal.rms_base.iiko_organization_id if getattr(terminal, 'rms_base', None) else None)
+            or organization.iiko_organization_id
+        )
         
         if not organization_id:
-            raise ValueError("У организации должен быть настроен iiko_organization_id")
+            raise ValueError("У терминала или организации должен быть настроен iiko_organization_id")
         
         # Один запрос к API
         try:
-            api_response = self.client.get_stop_lists([organization_id])
+            api_response = self.client.get_stop_lists([str(organization_id)])
         except IikoAPIException as e:
             logger.error(f"Ошибка при запросе стоп-листа из iiko для терминала {terminal.terminal_id}: {e}")
             raise
         
         return self.apply_stop_list_response(terminal, api_response)
+
+
+# Alias for compatibility
+TerminalSyncService = MenuSyncService
 

@@ -83,6 +83,11 @@ onMounted(async () => {
               tmaInitComplete.value = true
               return
             }
+            if (user?.is_bot_subscribed == null) {
+              router.push('/onboarding/consent')
+              tmaInitComplete.value = true
+              return
+            }
             if (!user?.addresses || user.addresses.length === 0) {
               router.push('/onboarding/address')
               tmaInitComplete.value = true

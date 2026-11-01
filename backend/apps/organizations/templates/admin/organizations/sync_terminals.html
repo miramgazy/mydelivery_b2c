@@ -13,34 +13,75 @@
 {% block content %}
 <div id="content-main">
     <h1>Запрос списка терминалов из iiko Cloud</h1>
-    <p>Выберите организацию, для которой необходимо загрузить список терминалов.</p>
+    <p>Выберите сеть (организацию) и конкретную RMS базу (или все базы чейна) для раздельной выгрузки терминалов.</p>
 
     <form method="post"
-        style="max-width: 600px; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+        style="max-width: 650px; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
         {% csrf_token %}
         <fieldset class="module aligned" style="border: none; padding: 0;">
             <div class="form-row" style="border: none; padding: 10px 0;">
-                <label for="id_organization" style="font-weight: bold; width: 120px;">Организация:</label>
-                <div style="margin-left: 130px;">
+                <label for="id_organization" style="font-weight: bold; width: 150px; display: inline-block;">Сеть / Организация:</label>
+                <div style="margin-left: 160px;">
                     <select name="organization_id" id="id_organization" required
-                        style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                        style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;"
+                        onchange="updateRmsOptions()">
                         <option value="">---------</option>
                         {% for org in organizations %}
                         <option value="{{ org.org_id }}">{{ org.org_name }}</option>
                         {% endfor %}
                     </select>
-                    <p class="help" style="margin-top: 5px; color: #666; font-size: 0.9em;">Будут загружены все
-                        терминалы, привязанные к данной организации в iiko Cloud.</p>
+                </div>
+            </div>
+
+            <div class="form-row" id="row_rms" style="border: none; padding: 10px 0;">
+                <label for="id_rms_base" style="font-weight: bold; width: 150px; display: inline-block;">RMS база (ресторан):</label>
+                <div style="margin-left: 160px;">
+                    <select name="rms_base_id" id="id_rms_base"
+                        style="width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;">
+                        <option value="all">Все RMS базы чейна (по отдельности)</option>
+                        {% for org in organizations %}
+                            {% for rms in org.rms_bases.all %}
+                                <option class="rms-option org-{{ org.org_id }}" value="{{ rms.id }}" data-org="{{ org.org_id }}">
+                                    {{ rms.name }} ({{ rms.iiko_organization_id }})
+                                </option>
+                            {% endfor %}
+                        {% endfor %}
+                    </select>
+                    <p class="help" style="margin-top: 5px; color: #666; font-size: 0.9em;">
+                        Терминалы будут выгружены из iiko Cloud по отдельности для выбранной RMS базы и привязаны к ней.
+                    </p>
                 </div>
             </div>
         </fieldset>
 
         <div class="submit-row" style="background: none; border: none; padding: 20px 0 0 0; text-align: left;">
-            <input type="submit" value="Запрос списка терминала" class="default"
+            <input type="submit" value="Выгрузить терминалы" class="default"
                 style="padding: 10px 20px; cursor: pointer;">
             <a href="{% url 'admin:organizations_terminal_changelist' %}" class="button closelink"
                 style="padding: 10px 20px; margin-left: 10px;">Отмена</a>
         </div>
     </form>
 </div>
+
+<script>
+function updateRmsOptions() {
+    const orgSelect = document.getElementById('id_organization');
+    const rmsSelect = document.getElementById('id_rms_base');
+    const selectedOrg = orgSelect.value;
+    const options = rmsSelect.querySelectorAll('.rms-option');
+    
+    let visibleCount = 0;
+    options.forEach(opt => {
+        if (!selectedOrg || opt.getAttribute('data-org') === selectedOrg) {
+            opt.style.display = '';
+            visibleCount++;
+        } else {
+            opt.style.display = 'none';
+        }
+    });
+
+    rmsSelect.value = 'all';
+}
+document.addEventListener('DOMContentLoaded', updateRmsOptions);
+</script>
 {% endblock %}

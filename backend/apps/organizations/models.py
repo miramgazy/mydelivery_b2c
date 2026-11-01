@@ -15,6 +15,14 @@ class Terminal(models.Model):
         null=True,
         blank=True
     )
+    rms_base = models.ForeignKey(
+        'RmsBase',
+        on_delete=models.SET_NULL,
+        related_name='terminals',
+        verbose_name='RMS база',
+        null=True,
+        blank=True
+    )
     iiko_organization_id = models.CharField('ID организации в iiko', max_length=255, blank=True, null=True)
     
     city = models.ForeignKey(
@@ -76,11 +84,12 @@ class Terminal(models.Model):
 
 
 class Organization(models.Model):
-    """Организация (ресторан)"""
+    """Организация (сеть / ресторан)"""
     org_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     org_name = models.CharField('Название', max_length=255)
     api_key = models.CharField('API Key iiko', max_length=255, blank=True, null=True)
-    iiko_organization_id = models.CharField('ID организации в iiko', max_length=255, blank=True, null=True)
+    iiko_chain_id = models.CharField('ID Chain в iiko', max_length=255, blank=True, null=True, help_text='ID сети (чейна) в iiko Cloud')
+    iiko_organization_id = models.CharField('ID организации в iiko', max_length=255, blank=True, null=True, help_text='Fallback ID или одиночный ID организации в iiko')
     city = models.CharField('Город', max_length=100, blank=True, null=True)
     phone = models.CharField('Телефон', max_length=50, blank=True, null=True)
     address = models.CharField('Адрес', max_length=500, blank=True, null=True)
@@ -135,6 +144,39 @@ class Organization(models.Model):
     
     def __str__(self):
         return self.org_name
+
+
+class RmsBase(models.Model):
+    """RMS база (филиал / ресторан в рамках чейна)"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name='rms_bases',
+        verbose_name='Сеть (Организация)'
+    )
+    name = models.CharField('Название филиала / RMS', max_length=255)
+    iiko_organization_id = models.CharField(
+        'ID RMS базы в iiko',
+        max_length=255,
+        help_text='UUID организации в iiko Cloud'
+    )
+    address = models.CharField('Адрес', max_length=500, blank=True, null=True)
+    phone = models.CharField('Телефон', max_length=50, blank=True, null=True)
+    is_active = models.BooleanField('Активна', default=True)
+    order_index = models.PositiveIntegerField('Порядок сортировки', default=0)
+    created_at = models.DateTimeField('Создана', auto_now_add=True)
+    updated_at = models.DateTimeField('Обновлена', auto_now=True)
+
+    class Meta:
+        db_table = 'rms_bases'
+        verbose_name = 'RMS база'
+        verbose_name_plural = 'RMS базы'
+        ordering = ['order_index', 'name']
+        unique_together = [['organization', 'iiko_organization_id']]
+
+    def __str__(self):
+        return f"{self.name} ({self.organization.org_name})"
 
 
 class City(models.Model):

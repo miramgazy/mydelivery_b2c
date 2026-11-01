@@ -34,22 +34,39 @@
 
       <!-- Form -->
       <form v-if="!loading" @submit.prevent="handleSubmit" class="space-y-6">
+        <!-- Chain ID -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            ID сети (Chain ID) в IIKO
+          </label>
+          <input
+            v-model="form.iiko_chain_id"
+            type="text"
+            class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg
+                   bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-sm
+                   focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="Введите ID чейна (например: c3b91a78-...)"
+          />
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Идентификатор сети (чейна) в iiko Cloud. Все клиенты остаются в рамках чейна.
+          </p>
+        </div>
+
         <!-- Organization ID -->
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            ID организации в IIKO
+            ID организации в IIKO (Основной / Fallback)
           </label>
           <input
             v-model="form.iiko_organization_id"
             type="text"
             class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg
-                   bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+                   bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-sm
                    focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             placeholder="Введите ID организации"
-            required
           />
           <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-            UUID вашей организации в системе iiko
+            UUID организации по умолчанию или для одиночной RMS
           </p>
         </div>
 
@@ -79,6 +96,83 @@
           <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
             API ключ для доступа к iiko Cloud
           </p>
+        </div>
+
+        <!-- RMS Bases List -->
+        <div class="p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800/40 space-y-4">
+          <div class="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <h3 class="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <Icon icon="mdi:store" class="w-5 h-5 text-blue-600" />
+                RMS базы филиалов сети (iikoChain)
+              </h3>
+              <p class="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                Каждая база RMS представляет отдельный ресторан сети для раздельной выгрузки терминалов
+              </p>
+            </div>
+            <button
+              type="button"
+              @click="openAddRmsModal"
+              class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 text-white hover:bg-blue-700 rounded-lg font-medium transition-colors"
+            >
+              <Icon icon="mdi:plus" class="w-4 h-4" />
+              Добавить RMS базу
+            </button>
+          </div>
+
+          <!-- RMS Table -->
+          <div v-if="rmsBases.length > 0" class="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden bg-white dark:bg-gray-800">
+            <table class="w-full text-sm text-left">
+              <thead class="bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 text-xs">
+                <tr>
+                  <th class="px-4 py-2 font-medium">Филиал</th>
+                  <th class="px-4 py-2 font-medium">ID RMS в iiko</th>
+                  <th class="px-4 py-2 font-medium">Терминалы</th>
+                  <th class="px-4 py-2 font-medium text-right">Действия</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-200 dark:divide-gray-700 text-xs">
+                <tr v-for="rms in rmsBases" :key="rms.id" class="hover:bg-gray-50 dark:hover:bg-gray-700/50">
+                  <td class="px-4 py-2.5 font-medium text-gray-900 dark:text-white">
+                    {{ rms.name }}
+                  </td>
+                  <td class="px-4 py-2.5 font-mono text-gray-500 dark:text-gray-400">
+                    {{ rms.iiko_organization_id }}
+                  </td>
+                  <td class="px-4 py-2.5">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                      {{ rms.terminals_count || 0 }} шт.
+                    </span>
+                  </td>
+                  <td class="px-4 py-2.5 text-right">
+                    <div class="inline-flex items-center gap-1">
+                      <button
+                        type="button"
+                        @click="handleSyncSingleRms(rms)"
+                        :disabled="syncingRmsId === rms.id"
+                        title="Выгрузить терминалы для этой RMS базы"
+                        class="px-2 py-1 text-xs bg-blue-50 text-blue-700 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 rounded font-medium inline-flex items-center gap-1 disabled:opacity-50"
+                      >
+                        <Icon :icon="syncingRmsId === rms.id ? 'mdi:loading' : 'mdi:download'" :class="{ 'animate-spin': syncingRmsId === rms.id }" class="w-3.5 h-3.5" />
+                        Выгрузить
+                      </button>
+                      <button
+                        type="button"
+                        @click="handleDeleteRms(rms)"
+                        title="Удалить RMS базу"
+                        class="p-1 text-red-500 hover:text-red-700 rounded transition-colors"
+                      >
+                        <Icon icon="mdi:trash-can-outline" class="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-else class="text-center py-4 text-xs text-gray-500">
+            Базы RMS еще не добавлены. Добавьте филиалы сети для раздельной выгрузки терминалов.
+          </div>
         </div>
 
         <!-- Organization Name -->
@@ -363,6 +457,72 @@
         </div>
       </form>
     </div>
+
+    <!-- Modal: Add RMS Base -->
+    <div
+      v-if="showAddRmsModal"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+    >
+      <div class="bg-white dark:bg-gray-800 rounded-xl max-w-md w-full p-6 shadow-xl space-y-4">
+        <div class="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 pb-3">
+          <h3 class="text-lg font-bold text-gray-900 dark:text-white">
+            Добавить RMS базу филиала
+          </h3>
+          <button
+            type="button"
+            @click="closeAddRmsModal"
+            class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+          >
+            <Icon icon="mdi:close" class="w-5 h-5" />
+          </button>
+        </div>
+
+        <form @submit.prevent="handleCreateRms" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Название филиала / ресторана
+            </label>
+            <input
+              v-model="rmsForm.name"
+              type="text"
+              required
+              placeholder="Например: Достык, Мега, Доставка Центр"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+            />
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              ID RMS базы в iiko (UUID)
+            </label>
+            <input
+              v-model="rmsForm.iiko_organization_id"
+              type="text"
+              required
+              placeholder="UUID организации в iiko Cloud"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-xs"
+            />
+          </div>
+
+          <div class="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              @click="closeAddRmsModal"
+              class="px-4 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+            >
+              Отмена
+            </button>
+            <button
+              type="submit"
+              :disabled="addingRms"
+              class="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {{ addingRms ? 'Сохранение...' : 'Добавить' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -485,6 +645,7 @@ async function savePrimaryColor() {
 
 const form = ref({
   id: '',
+  iiko_chain_id: '',
   iiko_organization_id: '',
   api_key: '',
   name: '',
@@ -497,6 +658,67 @@ const form = ref({
   primary_color: '',
   webhook_link: ''
 })
+
+const rmsBases = computed(() => organizationStore.rmsBases || [])
+const showAddRmsModal = ref(false)
+const rmsForm = ref({ name: '', iiko_organization_id: '' })
+const addingRms = ref(false)
+const syncingRmsId = ref(null)
+
+const openAddRmsModal = () => {
+  rmsForm.value = { name: '', iiko_organization_id: '' }
+  showAddRmsModal.value = true
+}
+
+const closeAddRmsModal = () => {
+  showAddRmsModal.value = false
+}
+
+const handleCreateRms = async () => {
+  if (!rmsForm.value.name || !rmsForm.value.iiko_organization_id) return
+  addingRms.value = true
+  try {
+    await organizationService.createRmsBase({
+      organization: form.value.id,
+      name: rmsForm.value.name.trim(),
+      iiko_organization_id: rmsForm.value.iiko_organization_id.trim()
+    })
+    await organizationStore.fetchRmsBases()
+    closeAddRmsModal()
+    successMessage.value = 'RMS база успешно добавлена'
+    setTimeout(() => { successMessage.value = '' }, 3000)
+  } catch (err) {
+    error.value = err.response?.data?.error || 'Ошибка при создании RMS базы'
+  } finally {
+    addingRms.value = false
+  }
+}
+
+const handleDeleteRms = async (rms) => {
+  if (!confirm(`Удалить RMS базу "${rms.name}"?`)) return
+  try {
+    await organizationService.deleteRmsBase(rms.id)
+    await organizationStore.fetchRmsBases()
+    successMessage.value = 'RMS база удалена'
+    setTimeout(() => { successMessage.value = '' }, 3000)
+  } catch (err) {
+    error.value = err.response?.data?.error || 'Ошибка при удалении RMS базы'
+  }
+}
+
+const handleSyncSingleRms = async (rms) => {
+  syncingRmsId.value = rms.id
+  try {
+    const res = await organizationStore.syncRmsTerminals(rms.id)
+    successMessage.value = res.message || `Терминалы для ${rms.name} успешно выгружены`
+    await organizationStore.fetchRmsBases()
+    setTimeout(() => { successMessage.value = '' }, 3000)
+  } catch (err) {
+    error.value = err.response?.data?.error || 'Ошибка синхронизации терминалов'
+  } finally {
+    syncingRmsId.value = null
+  }
+}
 
 const showApiKey = ref(false)
 const showBotToken = ref(false)
@@ -519,9 +741,11 @@ const loadOrganization = async () => {
 
   try {
     const org = await organizationStore.fetchOrganization()
+    await organizationStore.fetchRmsBases()
     if (org) {
       form.value = {
         id: org.id || '',
+        iiko_chain_id: org.iiko_chain_id || '',
         iiko_organization_id: org.iiko_organization_id || '',
         api_key: org.api_key || '',
         name: org.name || '',
