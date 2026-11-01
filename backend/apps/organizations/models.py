@@ -88,6 +88,8 @@ class Organization(models.Model):
     org_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     org_name = models.CharField('Название', max_length=255)
     api_key = models.CharField('API Key iiko', max_length=255, blank=True, null=True)
+    iiko_app_id = models.CharField('iiko App ID (v2)', max_length=255, blank=True, null=True, help_text='App ID из кабинета разработчика iiko')
+    iiko_client_secret = models.CharField('iiko Client Secret (v2)', max_length=255, blank=True, null=True, help_text='Client Secret из кабинета разработчика iiko')
     iiko_chain_id = models.CharField('ID Chain в iiko', max_length=255, blank=True, null=True, help_text='ID сети (чейна) в iiko Cloud')
     iiko_organization_id = models.CharField('ID организации в iiko', max_length=255, blank=True, null=True, help_text='Fallback ID или одиночный ID организации в iiko')
     city = models.CharField('Город', max_length=100, blank=True, null=True)

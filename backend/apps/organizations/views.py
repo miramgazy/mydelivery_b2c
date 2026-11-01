@@ -190,6 +190,23 @@ class OrganizationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
+    @action(detail=True, methods=['get'], url_path='webhook-info')
+    def get_webhook_info(self, request, pk=None):
+        """Проверить статус вебхука в Telegram."""
+        import requests
+        organization = self.get_object()
+        if not organization.bot_token:
+            return Response(
+                {'error': 'В настройках организации не указан токен Telegram-бота (bot_token)'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        try:
+            r = requests.get(f"https://api.telegram.org/bot{organization.bot_token}/getWebhookInfo", timeout=10)
+            data = r.json()
+            return Response(data)
+        except requests.RequestException as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
     @action(detail=False, methods=['get'], url_path='terminals')
     def get_terminals(self, request):
         """Получить терминалы организации"""

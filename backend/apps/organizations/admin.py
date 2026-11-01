@@ -116,7 +116,7 @@ class OrganizationAdmin(BaseAdmin):
     inlines = [RmsBaseInline]
     fieldsets = (
         ('Основные настройки сети / проекта', {
-            'fields': ('org_id_display', 'org_name', 'api_key', 'iiko_chain_id', 'iiko_organization_id', 'city', 'phone', 'address')
+            'fields': ('org_id_display', 'org_name', 'api_key', 'iiko_app_id', 'iiko_client_secret', 'iiko_chain_id', 'iiko_organization_id', 'city', 'phone', 'address')
         }),
         ('Telegram Bot', {
             'fields': ('bot_token', 'bot_username', 'tma_name'),
@@ -170,7 +170,55 @@ class OrganizationAdmin(BaseAdmin):
         return obj.terminals.count()
     get_terminals_count.short_description = 'Терминалов'
     search_fields = ('org_name', 'org_id', 'iiko_chain_id', 'iiko_organization_id')
-    actions = ['import_rms_bases_from_iiko', 'import_menu_from_iiko']
+    actions = ['import_rms_bases_from_iiko', 'import_menu_from_iiko', 'set_telegram_webhook', 'check_telegram_webhook']
+
+    @admin.action(description='Установить Telegram Webhook (BACKEND_URL)')
+    def set_telegram_webhook(self, request, queryset):
+        import requests
+        from django.conf import settings
+        backend_url = getattr(settings, 'BACKEND_URL', '').rstrip('/')
+        if not backend_url:
+            self.message_user(request, "В настройках сервера не задан BACKEND_URL", messages.ERROR)
+            return
+
+        for org in queryset:
+            if not org.bot_token:
+                self.message_user(request, f"{org.org_name}: Не указан bot_token", messages.WARNING)
+                continue
+            webhook_url = f"{backend_url}/api/telegram/webhook/{org.bot_token}/"
+            api_url = f"https://api.telegram.org/bot{org.bot_token}/setWebhook"
+            try:
+                res = requests.post(api_url, data={'url': webhook_url}, timeout=10).json()
+                if res.get('ok'):
+                    self.message_user(request, f"{org.org_name}: Webhook успешно установлен на {webhook_url}", messages.SUCCESS)
+                else:
+                    self.message_user(request, f"{org.org_name}: Ошибка Telegram: {res.get('description')}", messages.ERROR)
+            except Exception as e:
+                self.message_user(request, f"{org.org_name}: Ошибка сети: {e}", messages.ERROR)
+
+    @admin.action(description='Проверить статус Telegram Webhook')
+    def check_telegram_webhook(self, request, queryset):
+        import requests
+        for org in queryset:
+            if not org.bot_token:
+                self.message_user(request, f"{org.org_name}: Не указан bot_token", messages.WARNING)
+                continue
+            api_url = f"https://api.telegram.org/bot{org.bot_token}/getWebhookInfo"
+            try:
+                res = requests.get(api_url, timeout=10).json()
+                if res.get('ok'):
+                    result = res.get('result', {})
+                    url = result.get('url') or '(не установлен)'
+                    pending = result.get('pending_update_count', 0)
+                    last_err = result.get('last_error_message')
+                    msg = f"{org.org_name}: URL={url}, в очереди={pending}"
+                    if last_err:
+                        msg += f", Последняя ошибка Telegram: {last_err}"
+                    self.message_user(request, msg, messages.INFO)
+                else:
+                    self.message_user(request, f"{org.org_name}: Ошибка: {res.get('description')}", messages.ERROR)
+            except Exception as e:
+                self.message_user(request, f"{org.org_name}: Ошибка сети: {e}", messages.ERROR)
 
     @admin.action(description='Загрузить список RMS баз из iikoCloud')
     def import_rms_bases_from_iiko(self, request, queryset):

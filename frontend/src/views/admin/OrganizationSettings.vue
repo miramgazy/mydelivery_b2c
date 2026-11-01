@@ -98,6 +98,51 @@
           </p>
         </div>
 
+        <!-- iiko App ID (v2) -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            iiko App ID (API v2)
+          </label>
+          <input
+            v-model="form.iiko_app_id"
+            type="text"
+            class="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg
+                   bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-sm
+                   focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            placeholder="Введите App ID из кабинета разработчика iiko"
+          />
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Идентификатор приложения из кабинета разработчика iiko (для API v2)
+          </p>
+        </div>
+
+        <!-- iiko Client Secret (v2) -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            iiko Client Secret (API v2)
+          </label>
+          <div class="relative">
+            <input
+              v-model="form.iiko_client_secret"
+              :type="showClientSecret ? 'text' : 'password'"
+              class="w-full px-4 py-2.5 pr-12 border border-gray-300 dark:border-gray-600 rounded-lg
+                     bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-sm
+                     focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              placeholder="Введите Client Secret"
+            />
+            <button
+              type="button"
+              @click="showClientSecret = !showClientSecret"
+              class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+            >
+              <Icon :icon="showClientSecret ? 'mdi:eye-off' : 'mdi:eye'" class="w-5 h-5" />
+            </button>
+          </div>
+          <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            Секретный ключ приложения из кабинета разработчика iiko
+          </p>
+        </div>
+
         <!-- RMS Bases List -->
         <div class="p-5 border border-gray-200 dark:border-gray-700 rounded-xl bg-gray-50 dark:bg-gray-800/40 space-y-4">
           <div class="flex items-center justify-between flex-wrap gap-2">
@@ -293,19 +338,42 @@
           <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
             Например "app", для ссылки возврата в приложение
           </p>
-          <div class="mt-4 flex items-center gap-2">
+          <div class="mt-4 flex flex-wrap items-center gap-2">
             <button
               type="button"
               @click="handleSetWebhook"
               :disabled="settingWebhook || !form.bot_token"
-              class="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 text-blue-800 dark:text-blue-200 rounded-lg transition-colors disabled:opacity-50"
+              class="inline-flex items-center gap-2 px-4 py-2 bg-blue-100 dark:bg-blue-900/30 hover:bg-blue-200 dark:hover:bg-blue-900/50 text-blue-800 dark:text-blue-200 rounded-lg transition-colors disabled:opacity-50 text-sm font-medium"
             >
               <Icon :icon="settingWebhook ? 'mdi:loading' : 'mdi:webhook'" :class="{ 'animate-spin': settingWebhook }" class="w-5 h-5" />
               {{ settingWebhook ? 'Установка...' : 'Установить Webhook' }}
             </button>
-            <span v-if="setWebhookResult" class="text-sm" :class="setWebhookSuccess ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
+            <button
+              type="button"
+              @click="handleCheckWebhook"
+              :disabled="checkingWebhook || !form.bot_token"
+              class="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-800 dark:text-gray-200 rounded-lg transition-colors disabled:opacity-50 text-sm font-medium"
+            >
+              <Icon :icon="checkingWebhook ? 'mdi:loading' : 'mdi:information-outline'" :class="{ 'animate-spin': checkingWebhook }" class="w-5 h-5" />
+              {{ checkingWebhook ? 'Проверка...' : 'Проверить статус Webhook' }}
+            </button>
+            <span v-if="setWebhookResult" class="text-sm font-medium" :class="setWebhookSuccess ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'">
               {{ setWebhookResult }}
             </span>
+          </div>
+
+          <!-- Webhook Diagnostic Info Box -->
+          <div v-if="webhookInfo" class="mt-3 p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-xs space-y-1">
+            <div class="font-semibold text-gray-700 dark:text-gray-300">Статус вебхука в Telegram:</div>
+            <div class="text-gray-600 dark:text-gray-400 break-all">
+              <span class="font-medium">URL:</span> {{ webhookInfo.url || '(не установлен)' }}
+            </div>
+            <div class="text-gray-600 dark:text-gray-400">
+              <span class="font-medium">Сообщений в очереди Telegram:</span> {{ webhookInfo.pending_update_count ?? 0 }}
+            </div>
+            <div v-if="webhookInfo.last_error_message" class="text-red-600 dark:text-red-400 font-medium">
+              <span>Последняя ошибка от Telegram:</span> {{ webhookInfo.last_error_message }}
+            </div>
           </div>
         </div>
 
@@ -541,6 +609,8 @@ const testWebhookSuccess = ref(false)
 const settingWebhook = ref(false)
 const setWebhookResult = ref('')
 const setWebhookSuccess = ref(false)
+const checkingWebhook = ref(false)
+const webhookInfo = ref(null)
 
 async function handleSetWebhook() {
   if (!form.value.bot_token) {
@@ -562,11 +632,46 @@ async function handleSetWebhook() {
     await organizationService.setWebhook(orgId)
     setWebhookSuccess.value = true
     setWebhookResult.value = 'Вебхук успешно установлен'
+    await handleCheckWebhook()
   } catch (err) {
     setWebhookSuccess.value = false
     setWebhookResult.value = err.response?.data?.error || 'Ошибка установки вебхука'
   } finally {
     settingWebhook.value = false
+  }
+}
+
+async function handleCheckWebhook() {
+  if (!form.value.bot_token) {
+    setWebhookSuccess.value = false
+    setWebhookResult.value = 'Сначала введите токен бота'
+    return
+  }
+
+  const orgId = form.value.id || (organizationStore.organization && organizationStore.organization.id)
+  if (!orgId) {
+    setWebhookSuccess.value = false
+    setWebhookResult.value = 'ID организации не найден. Сохраните настройки.'
+    return
+  }
+
+  checkingWebhook.value = true
+  setWebhookResult.value = ''
+  try {
+    const res = await organizationService.getWebhookInfo(orgId)
+    if (res.ok) {
+      webhookInfo.value = res.result
+      setWebhookSuccess.value = true
+      setWebhookResult.value = res.result?.url ? 'Вебхук активен' : 'Вебхук не установлен в Telegram'
+    } else {
+      setWebhookSuccess.value = false
+      setWebhookResult.value = res.description || 'Ошибка проверки вебхука'
+    }
+  } catch (err) {
+    setWebhookSuccess.value = false
+    setWebhookResult.value = err.response?.data?.error || 'Ошибка проверки вебхука'
+  } finally {
+    checkingWebhook.value = false
   }
 }
 
@@ -648,6 +753,8 @@ const form = ref({
   iiko_chain_id: '',
   iiko_organization_id: '',
   api_key: '',
+  iiko_app_id: '',
+  iiko_client_secret: '',
   name: '',
   phone: '',
   address: '',
@@ -721,6 +828,7 @@ const handleSyncSingleRms = async (rms) => {
 }
 
 const showApiKey = ref(false)
+const showClientSecret = ref(false)
 const showBotToken = ref(false)
 const showYandexKey = ref(false)
 const showColorPicker = ref(false)
@@ -748,6 +856,8 @@ const loadOrganization = async () => {
         iiko_chain_id: org.iiko_chain_id || '',
         iiko_organization_id: org.iiko_organization_id || '',
         api_key: org.api_key || '',
+        iiko_app_id: org.iiko_app_id || '',
+        iiko_client_secret: org.iiko_client_secret || '',
         name: org.name || '',
         phone: org.phone || '',
         address: org.address || '',

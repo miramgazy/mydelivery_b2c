@@ -195,10 +195,9 @@ class TelegramWebhookView(viewsets.ViewSet):
             return Response({'ok': True})
 
         phone_number = contact.get('phone_number')
-        telegram_id = (
-            (contact.get('user_id')) or
-            (message.get('from') or {}).get('id')
-        )
+        sender_id = (message.get('from') or {}).get('id')
+        contact_user_id = contact.get('user_id')
+        telegram_id = sender_id or contact_user_id
 
         if not phone_number or not telegram_id:
             # Not a contact update; acknowledge to prevent Telegram retries
@@ -207,21 +206,43 @@ class TelegramWebhookView(viewsets.ViewSet):
         # Normalize phone to "+<digits>"
         phone_number = re.sub(r'[^\d+]', '', str(phone_number))
         digits = re.sub(r'\D', '', phone_number)
-        if digits.startswith('8'):
+        if digits.startswith('8') and len(digits) == 11:
             digits = '7' + digits[1:]
-        if not digits.startswith('7'):
-            # In our app we store KZ/RU format +7...
+        elif len(digits) == 10 and not digits.startswith('7'):
+            digits = '7' + digits
+        elif not digits.startswith('7') and len(digits) < 11:
             digits = '7' + digits
         phone_number = f"+{digits}"
 
         user = User.objects.filter(telegram_id=int(telegram_id), organization=organization).first()
         if not user:
+            # Fallback: поиск по telegram_id, если пользователь был создан без организации или в процессе перехода
+            user = User.objects.filter(telegram_id=int(telegram_id)).first()
+            if user and not user.organization and organization:
+                user.organization = organization
+                user.save(update_fields=['organization'])
+
+        if not user:
+            logger.warning(
+                "Telegram contact received for telegram_id=%s (org=%s), but user not found in DB",
+                telegram_id, organization.org_name
+            )
             return Response({'ok': True})
 
         user.phone = phone_number
         user.save(update_fields=['phone'])
 
-        logger.info("Saved phone from Telegram contact for user=%s telegram_id=%s", user.id, telegram_id)
+        # Синхронизируем также в BillingPhone для чекаута
+        try:
+            BillingPhone.objects.get_or_create(
+                user=user,
+                phone_number=phone_number,
+                defaults={'is_default': True}
+            )
+        except Exception as bp_err:
+            logger.debug("Could not auto-create BillingPhone: %s", bp_err)
+
+        logger.info("Saved phone %s from Telegram contact for user=%s telegram_id=%s", phone_number, user.id, telegram_id)
         
         # Отправляем подтверждающее сообщение
         if organization and organization.bot_token:
@@ -229,7 +250,7 @@ class TelegramWebhookView(viewsets.ViewSet):
             bot_token_req = organization.bot_token
             send_msg_url = f"https://api.telegram.org/bot{bot_token_req}/sendMessage"
             
-            reply_text = "✅ Ваш номер успешно подтвержден! Спасибо за регистрацию. Теперь вы можете управлять своими записями."
+            reply_text = "✅ Ваш номер успешно подтвержден! Теперь вы можете продолжить заказ в приложении."
             
             payload = {
                 'chat_id': telegram_id,
@@ -241,7 +262,7 @@ class TelegramWebhookView(viewsets.ViewSet):
                 tma_url = f"https://t.me/{organization.bot_username.lstrip('@')}/{organization.tma_name}"
                 payload['reply_markup'] = {
                     'inline_keyboard': [[
-                        {'text': '📱 Вернуться в приложение', 'url': tma_url}
+                        {'text': '📱 Открыть приложение', 'url': tma_url}
                     ]]
                 }
             

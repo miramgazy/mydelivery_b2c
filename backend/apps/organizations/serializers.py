@@ -57,6 +57,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'org_id', 'name', 'org_name', 'city',
             'iiko_chain_id', 'iiko_organization_id', 'api_key',
+            'iiko_app_id', 'iiko_client_secret',
             'phone', 'address',
             'bot_token', 'bot_username', 'tma_name',
             'yandex_maps_api_key',
@@ -67,6 +68,8 @@ class OrganizationSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'org_id', 'created_at', 'updated_at']
         extra_kwargs = {
             'api_key': {'write_only': False},  # Позволяем читать для отображения
+            'iiko_app_id': {'write_only': False},
+            'iiko_client_secret': {'write_only': False},
             'bot_token': {'write_only': False},  # Позволяем читать для отображения
             'yandex_maps_api_key': {'write_only': False},
         }

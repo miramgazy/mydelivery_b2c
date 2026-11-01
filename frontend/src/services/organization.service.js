@@ -30,6 +30,12 @@ export const setWebhook = async (orgId) => {
     return response.data
 }
 
+// Получить информацию о вебхуке из Telegram
+export const getWebhookInfo = async (orgId) => {
+    const response = await api.get(`/organizations/${orgId}/webhook-info/`)
+    return response.data
+}
+
 // Get terminals list
 export const getTerminals = async () => {
     const response = await api.get('/organizations/terminals/')
@@ -188,6 +194,7 @@ export default {
     updateOrganization,
     testWebhook,
     setWebhook,
+    getWebhookInfo,
     getTerminals,
     loadTerminalsFromIiko,
     getRmsBases,

@@ -9,18 +9,79 @@ class IikoAPIException(Exception):
     pass
 
 class IikoClient:
+    HOST = "https://api-ru.iiko.services"
     BASE_URL = "https://api-ru.iiko.services/api/1"
     BASE_URL_V2 = "https://api-ru.iiko.services/api/2"
+
+    EP_AUTH_V2 = "https://api-ru.iiko.services/api/v2/access_token"
+    EP_AUTH_V1 = "https://api-ru.iiko.services/api/1/access_token"
+
     # Таймауты для всех запросов (connect, read). Предотвращают зависание воркеров при сбоях iiko.
     REQUEST_TIMEOUT = (10, 45)  # (connect, read) в секундах
 
-    def __init__(self, api_key: str):
-        self.api_key = api_key
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        app_id: Optional[str] = None,
+        client_secret: Optional[str] = None
+    ):
+        self.api_key = (api_key or '').strip() or None
+        self.app_id = (app_id or '').strip() or None
+        self.client_secret = (client_secret or '').strip() or None
         self.token = None
 
+    @classmethod
+    def from_organization(cls, organization) -> 'IikoClient':
+        """Фабрика для создания клиента из объекта Organization."""
+        return cls(
+            api_key=getattr(organization, 'api_key', None),
+            app_id=getattr(organization, 'iiko_app_id', None),
+            client_secret=getattr(organization, 'iiko_client_secret', None),
+        )
+
     def authenticate(self):
-        """Authenticate and get access token."""
-        url = f"{self.BASE_URL}/access_token"
+        """
+        Authenticate and get access token.
+        Приоритет:
+        1. Если заданы app_id и client_secret -> POST /api/v2/access_token {"appId": ..., "clientSecret": ...}
+        2. Если задан api_key -> POST /api/v2/access_token {"apiLogin": ...} с fallback на /api/1/access_token
+        """
+        if self.app_id and self.client_secret:
+            try:
+                response = requests.post(
+                    self.EP_AUTH_V2,
+                    json={"appId": self.app_id, "clientSecret": self.client_secret},
+                    timeout=self.REQUEST_TIMEOUT
+                )
+                response.raise_for_status()
+                data = response.json()
+                self.token = data.get("token") or data.get("accessToken")
+                if self.token:
+                    return
+            except requests.RequestException as e:
+                logger.warning(f"Failed to authenticate with iiko v2 (appId/clientSecret): {e}")
+                if not self.api_key:
+                    raise IikoAPIException(f"v2 Authentication failed: {e}")
+                logger.info("Falling back to api_key authentication...")
+
+        if not self.api_key:
+            raise IikoAPIException("Neither (app_id + client_secret) nor api_key is configured for iiko")
+
+        # Пробуем v2 access_token с apiLogin
+        try:
+            response = requests.post(
+                self.EP_AUTH_V2, json={"apiLogin": self.api_key}, timeout=self.REQUEST_TIMEOUT
+            )
+            if response.status_code == 200:
+                data = response.json()
+                self.token = data.get("token") or data.get("accessToken")
+                if self.token:
+                    return
+        except requests.RequestException:
+            pass
+
+        # Fallback на классический v1 access_token
+        url = self.EP_AUTH_V1
         try:
             response = requests.post(
                 url, json={"apiLogin": self.api_key}, timeout=self.REQUEST_TIMEOUT
