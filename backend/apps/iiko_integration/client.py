@@ -21,31 +21,57 @@ class IikoClient:
 
     def __init__(
         self,
-        api_key: Optional[str] = None,
+        api_key: Optional[Any] = None,
         app_id: Optional[str] = None,
-        client_secret: Optional[str] = None
+        client_secret: Optional[str] = None,
+        api_version: str = '2'
     ):
-        self.api_key = (api_key or '').strip() or None
-        self.app_id = (app_id or '').strip() or None
-        self.client_secret = (client_secret or '').strip() or None
+        # Поддержка передачи объекта Organization напрямую первым аргументом
+        if api_key is not None and (hasattr(api_key, 'org_id') or hasattr(api_key, 'api_key')):
+            org = api_key
+            self.api_key = (getattr(org, 'api_key', None) or '').strip() or None
+            self.app_id = (getattr(org, 'iiko_app_id', None) or '').strip() or None
+            self.client_secret = (getattr(org, 'iiko_client_secret', None) or '').strip() or None
+            self.api_version = str(getattr(org, 'iiko_api_version', '2') or '2')
+        else:
+            self.api_key = (str(api_key).strip() if api_key else None)
+            self.app_id = (app_id or '').strip() or None
+            self.client_secret = (client_secret or '').strip() or None
+            self.api_version = str(api_version or '2')
         self.token = None
 
     @classmethod
     def from_organization(cls, organization) -> 'IikoClient':
         """Фабрика для создания клиента из объекта Organization."""
-        return cls(
-            api_key=getattr(organization, 'api_key', None),
-            app_id=getattr(organization, 'iiko_app_id', None),
-            client_secret=getattr(organization, 'iiko_client_secret', None),
-        )
+        return cls(organization)
 
     def authenticate(self):
         """
         Authenticate and get access token.
-        Приоритет:
-        1. Если заданы app_id и client_secret -> POST /api/v2/access_token {"appId": ..., "clientSecret": ...}
-        2. Если задан api_key -> POST /api/v2/access_token {"apiLogin": ...} с fallback на /api/1/access_token
+        Логика зависит от выбранной версии (api_version):
+        - Версия 1: Только классический /api/1/access_token с apiLogin
+        - Версия 2: При наличии appId + clientSecret -> /api/v2/access_token, иначе apiLogin через v2/v1
         """
+        # Если выбрана версия 1
+        if self.api_version == '1':
+            if not self.api_key:
+                raise IikoAPIException("api_key is required for iiko API v1")
+            url = self.EP_AUTH_V1
+            try:
+                response = requests.post(
+                    url, json={"apiLogin": self.api_key}, timeout=self.REQUEST_TIMEOUT
+                )
+                response.raise_for_status()
+                data = response.json()
+                self.token = data.get("token")
+                if not self.token:
+                    raise IikoAPIException("No token received from iiko API v1")
+                return
+            except requests.RequestException as e:
+                logger.error(f"Failed to authenticate with iiko v1: {e}")
+                raise IikoAPIException(f"v1 Authentication failed: {e}")
+
+        # Версия 2 (по умолчанию)
         if self.app_id and self.client_secret:
             try:
                 response = requests.post(

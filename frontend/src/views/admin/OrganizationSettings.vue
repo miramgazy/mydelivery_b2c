@@ -34,6 +34,68 @@
 
       <!-- Form -->
       <form v-if="!loading" @submit.prevent="handleSubmit" class="space-y-6">
+        <!-- iiko API Version Selector -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+            <Icon icon="mdi:api" class="w-5 h-5 text-blue-600" />
+            Версия iiko Cloud API
+          </label>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label
+              :class="[
+                'flex items-start p-3.5 border rounded-xl cursor-pointer transition-all',
+                form.iiko_api_version === '2'
+                  ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-900/20 ring-2 ring-blue-500/20'
+                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 bg-white dark:bg-gray-800'
+              ]"
+            >
+              <input
+                type="radio"
+                name="iiko_api_version"
+                value="2"
+                v-model="form.iiko_api_version"
+                class="mt-1 text-blue-600 focus:ring-blue-500"
+              />
+              <div class="ml-3">
+                <span class="block text-sm font-semibold text-gray-900 dark:text-white">
+                  API v2 (/api/2, /api/v2)
+                  <span class="ml-1 text-xs px-2 py-0.5 bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300 rounded font-normal">
+                    Рекомендуется
+                  </span>
+                </span>
+                <span class="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Актуальная версия iiko Cloud. Поддержка appId + clientSecret, внешних web-меню и ценовых категорий.
+                </span>
+              </div>
+            </label>
+
+            <label
+              :class="[
+                'flex items-start p-3.5 border rounded-xl cursor-pointer transition-all',
+                form.iiko_api_version === '1'
+                  ? 'border-blue-500 bg-blue-50/60 dark:bg-blue-900/20 ring-2 ring-blue-500/20'
+                  : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600 bg-white dark:bg-gray-800'
+              ]"
+            >
+              <input
+                type="radio"
+                name="iiko_api_version"
+                value="1"
+                v-model="form.iiko_api_version"
+                class="mt-1 text-blue-600 focus:ring-blue-500"
+              />
+              <div class="ml-3">
+                <span class="block text-sm font-semibold text-gray-900 dark:text-white">
+                  API v1 (/api/1)
+                </span>
+                <span class="block text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Классическая версия iikoTransport. Авторизация только по apiLogin, классическая номенклатура RMS.
+                </span>
+              </div>
+            </label>
+          </div>
+        </div>
+
         <!-- Chain ID -->
         <div>
           <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
@@ -750,6 +812,7 @@ async function savePrimaryColor() {
 
 const form = ref({
   id: '',
+  iiko_api_version: '2',
   iiko_chain_id: '',
   iiko_organization_id: '',
   api_key: '',
@@ -853,6 +916,7 @@ const loadOrganization = async () => {
     if (org) {
       form.value = {
         id: org.id || '',
+        iiko_api_version: org.iiko_api_version || '2',
         iiko_chain_id: org.iiko_chain_id || '',
         iiko_organization_id: org.iiko_organization_id || '',
         api_key: org.api_key || '',

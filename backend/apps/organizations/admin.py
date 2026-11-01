@@ -110,13 +110,13 @@ class RmsBaseInline(admin.TabularInline):
 
 @admin.register(Organization)
 class OrganizationAdmin(BaseAdmin):
-    list_display = ('org_id', 'org_name', 'iiko_chain_id', 'iiko_organization_id', 'city', 'get_rms_bases_count', 'get_terminals_count', 'is_active', 'created_at')
-    list_filter = ('is_active', 'city')
+    list_display = ('org_id', 'org_name', 'iiko_api_version', 'iiko_chain_id', 'iiko_organization_id', 'city', 'get_rms_bases_count', 'get_terminals_count', 'is_active', 'created_at')
+    list_filter = ('is_active', 'iiko_api_version', 'city')
     change_form_template = 'admin/organizations/organization/change_form.html'
     inlines = [RmsBaseInline]
     fieldsets = (
         ('Основные настройки сети / проекта', {
-            'fields': ('org_id_display', 'org_name', 'api_key', 'iiko_app_id', 'iiko_client_secret', 'iiko_chain_id', 'iiko_organization_id', 'city', 'phone', 'address')
+            'fields': ('org_id_display', 'org_name', 'iiko_api_version', 'api_key', 'iiko_app_id', 'iiko_client_secret', 'iiko_chain_id', 'iiko_organization_id', 'city', 'phone', 'address')
         }),
         ('Telegram Bot', {
             'fields': ('bot_token', 'bot_username', 'tma_name'),

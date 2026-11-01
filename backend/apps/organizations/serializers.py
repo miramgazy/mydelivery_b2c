@@ -56,6 +56,7 @@ class OrganizationSerializer(serializers.ModelSerializer):
         model = Organization
         fields = [
             'id', 'org_id', 'name', 'org_name', 'city',
+            'iiko_api_version',
             'iiko_chain_id', 'iiko_organization_id', 'api_key',
             'iiko_app_id', 'iiko_client_secret',
             'phone', 'address',
