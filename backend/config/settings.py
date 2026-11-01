@@ -247,6 +247,7 @@ SECURE_SSL_REDIRECT = False
 
 # Доверенные домены для CSRF (обязательно для работы за прокси)
 _csrf_origins = [
+    'https://b2c-delivery.mevent.kz',
     'https://b2b-delivery.mevent.kz',
     'http://localhost:3005',
     'http://127.0.0.1:3005',
@@ -257,5 +258,5 @@ SESSION_COOKIE_SECURE = config('SESSION_COOKIE_SECURE', default=False, cast=bool
 CSRF_COOKIE_SECURE = config('CSRF_COOKIE_SECURE', default=False, cast=bool)
 
 # Public URL for Webhooks and links
-BACKEND_URL = config('BACKEND_URL', default='https://api.yourdomain.com')
+BACKEND_URL = config('BACKEND_URL', default='https://b2c-delivery.mevent.kz')
 

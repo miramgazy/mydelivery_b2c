@@ -158,7 +158,9 @@ class OrganizationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
             
-        backend_url = getattr(settings, 'BACKEND_URL', '').rstrip('/')
+        # URL бэкенда: из запроса (если передан явно) или из settings.BACKEND_URL
+        custom_backend_url = (request.data.get('backend_url') or '').strip().rstrip('/')
+        backend_url = custom_backend_url or getattr(settings, 'BACKEND_URL', '').rstrip('/')
         if not backend_url:
             return Response(
                 {'error': 'В настройках сервера не задан BACKEND_URL'},
