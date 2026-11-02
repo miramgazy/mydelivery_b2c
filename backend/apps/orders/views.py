@@ -311,6 +311,9 @@ class OrderViewSet(viewsets.ModelViewSet):
         
         from django.db.models import Avg
         
+        cancelled_statuses = [Order.STATUS_CANCELLED, 'Cancelled', 'Closed', 'cancelled', 'closed']
+        error_statuses = [Order.STATUS_ERROR, 'Error', 'error']
+        
         stats = queryset.aggregate(
             total_orders=Count('order_id'),
             total_amount=Sum('total_amount'),
@@ -318,7 +321,8 @@ class OrderViewSet(viewsets.ModelViewSet):
             pending_count=Count('order_id', filter=Q(status=Order.STATUS_PENDING)),
             confirmed_count=Count('order_id', filter=Q(status=Order.STATUS_CONFIRMED)),
             completed_count=Count('order_id', filter=Q(status=Order.STATUS_COMPLETED)),
-            cancelled_count=Count('order_id', filter=Q(status=Order.STATUS_CANCELLED)),
+            cancelled_count=Count('order_id', filter=Q(status__in=cancelled_statuses)),
+            error_count=Count('order_id', filter=Q(status__in=error_statuses)),
         )
         
         return Response(stats)
@@ -354,21 +358,24 @@ class OrderViewSet(viewsets.ModelViewSet):
             created_at__date__lte=dt_to
         )
 
-        # Исключаем временные заказы с номером, содержащим TMP (например, ##TMP-4713)
-        valid_qs = qs.exclude(order_number__icontains='TMP')
+        cancelled_statuses = [Order.STATUS_CANCELLED, 'Cancelled', 'Closed', 'cancelled', 'closed']
+        error_statuses = [Order.STATUS_ERROR, 'Error', 'error']
 
-        # Для всех метрик на дашборде учитываем только валидные заказы
-        # и только неотменённые, как описано в требовании
-        cancelled_count = valid_qs.filter(status=Order.STATUS_CANCELLED).count()
-        not_cancelled = valid_qs.exclude(status=Order.STATUS_CANCELLED)
-        total_orders = not_cancelled.count()
+        # Общее число заказов, созданных за период (включая временные и ошибочные)
+        total_orders = qs.count()
+        cancelled_count = qs.filter(status__in=cancelled_statuses).count()
+        error_count = qs.filter(status__in=error_statuses).count()
 
-        total_sum = not_cancelled.aggregate(
+        # Успешные / активные заказы — без отмененных и ошибочных
+        successful_qs = qs.exclude(status__in=cancelled_statuses + error_statuses)
+        successful_count = successful_qs.count()
+
+        total_sum = successful_qs.aggregate(
             s=Sum(F('total_amount') + F('delivery_cost'))
         )['s']
         total_sum = float(total_sum) if total_sum is not None else 0
 
-        by_terminal_qs = not_cancelled.values(
+        by_terminal_qs = successful_qs.values(
             'terminal__terminal_group_name', 'terminal_id'
         ).annotate(
             count=Count('order_id'),
@@ -383,7 +390,7 @@ class OrderViewSet(viewsets.ModelViewSet):
             for r in by_terminal_qs
         ]
 
-        by_payment_qs = not_cancelled.values('payment_type__payment_name').annotate(
+        by_payment_qs = successful_qs.values('payment_type__payment_name').annotate(
             count=Count('order_id'),
             sum=Sum(F('total_amount') + F('delivery_cost'))
         )
@@ -396,21 +403,21 @@ class OrderViewSet(viewsets.ModelViewSet):
             for r in by_payment_qs
         ]
 
-        paid_delivery = not_cancelled.filter(delivery_cost__gt=0).aggregate(
+        paid_delivery = successful_qs.filter(delivery_cost__gt=0).aggregate(
             count=Count('order_id'),
             sum=Sum('delivery_cost')
         )
         paid_delivery_count = paid_delivery['count'] or 0
         paid_delivery_sum = float(paid_delivery['sum'] or 0)
-        free_delivery_count = not_cancelled.filter(
+        free_delivery_count = successful_qs.filter(
             Q(delivery_cost=0) | Q(delivery_cost__isnull=True)
         ).count()
 
         # Тип заказа: доставка / самовывоз
         # Эвристика: если есть адрес или координаты — считаем доставкой, иначе самовывоз.
         delivery_filter = Q(delivery_address__isnull=False) | Q(latitude__isnull=False) | Q(longitude__isnull=False)
-        delivery_qs = not_cancelled.filter(delivery_filter)
-        pickup_qs = not_cancelled.exclude(delivery_filter)
+        delivery_qs = successful_qs.filter(delivery_filter)
+        pickup_qs = successful_qs.exclude(delivery_filter)
 
         delivery_agg = delivery_qs.aggregate(
             count=Count('order_id'),
@@ -428,7 +435,9 @@ class OrderViewSet(viewsets.ModelViewSet):
 
         return Response({
             'total_orders': total_orders,
+            'successful_orders': successful_count,
             'cancelled_orders': cancelled_count,
+            'error_orders': error_count,
             'total_sum': total_sum,
             'by_terminal': by_terminal,
             'sum_by_terminal': sum_by_terminal,

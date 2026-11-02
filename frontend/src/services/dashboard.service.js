@@ -11,7 +11,9 @@ export async function fetchOrdersReportFromApi(dateFrom, dateTo) {
   })
   return {
     totalOrders: data.total_orders ?? 0,
+    successfulOrders: data.successful_orders ?? 0,
     cancelledOrders: data.cancelled_orders ?? 0,
+    errorOrders: data.error_orders ?? 0,
     totalSum: data.total_sum ?? 0,
     byTerminal: Array.isArray(data.by_terminal)
       ? data.by_terminal.map((x) => ({ name: x.name ?? '—', count: x.count ?? 0 }))
@@ -58,18 +60,21 @@ export async function fetchOrdersForReport(dateFrom, dateTo) {
 }
 
 /**
- * Агрегация отчёта по заказам: количество, отменённые, по терминалам, суммы, по типам оплаты, платная/бесплатная доставка.
+ * Агрегация отчёта по заказам: количество, отменённые, ошибки, по терминалам, суммы, по типам оплаты, платная/бесплатная доставка.
  */
 export function aggregateOrdersReport(orders) {
-  const cancelledStatuses = ['cancelled', 'Cancelled']
+  const cancelledStatuses = ['cancelled', 'Cancelled', 'Closed', 'closed']
+  const errorStatuses = ['error', 'Error']
   const isCancelled = (o) => cancelledStatuses.includes(o.status)
-  const isTmp = (o) => {
-    if (!o || !o.order_number) return false
-    const num = String(o.order_number).toUpperCase()
-    return num.includes('TMP')
-  }
-  const validOrders = orders.filter((o) => !isTmp(o))
-  const notCancelled = validOrders.filter((o) => !isCancelled(o))
+  const isError = (o) => errorStatuses.includes(o.status)
+
+  const totalOrders = orders.length
+  const cancelledOrders = orders.filter(isCancelled).length
+  const errorOrders = orders.filter(isError).length
+
+  // Успешные / активные заказы — без отмененных и ошибочных
+  const successfulOrdersList = orders.filter((o) => !isCancelled(o) && !isError(o))
+  const successfulOrders = successfulOrdersList.length
 
   const byTerminal = {}
   const sumByTerminal = {}
@@ -88,7 +93,7 @@ export function aggregateOrdersReport(orders) {
     return !!(o.delivery_address_full || o.delivery_address || o.latitude || o.longitude)
   }
 
-  for (const o of notCancelled) {
+  for (const o of successfulOrdersList) {
     const terminalName = o.terminal_name || '—'
     byTerminal[terminalName] = (byTerminal[terminalName] || 0) + 1
     const total = Number(o.total_price ?? o.total_amount ?? 0) + Number(o.delivery_cost ?? 0)
@@ -116,15 +121,16 @@ export function aggregateOrdersReport(orders) {
     }
   }
 
-  const totalSum = notCancelled.reduce(
+  const totalSum = successfulOrdersList.reduce(
     (acc, o) => acc + Number(o.total_price ?? o.total_amount ?? 0) + Number(o.delivery_cost ?? 0),
     0
   )
-  const cancelledCount = validOrders.filter(isCancelled).length
 
   return {
-    totalOrders: notCancelled.length,
-    cancelledOrders: cancelledCount,
+    totalOrders,
+    successfulOrders,
+    cancelledOrders,
+    errorOrders,
     byTerminal: Object.entries(byTerminal).map(([name, count]) => ({ name, count })),
     sumByTerminal: Object.entries(sumByTerminal).map(([name, sum]) => ({ name, sum })),
     totalSum,

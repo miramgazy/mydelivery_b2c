@@ -57,8 +57,8 @@
     </div>
 
     <template v-if="report">
-      <!-- Карточки: количество заказов, отменённые, сумма -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <!-- Карточки: количество заказов, успешные, отменённые, ошибки, сумма -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border border-gray-200 dark:border-gray-700">
           <div class="flex items-center gap-3">
             <div class="w-12 h-12 rounded-xl bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
@@ -67,6 +67,17 @@
             <div>
               <p class="text-sm text-gray-500 dark:text-gray-400">Всего заказов</p>
               <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ report.totalOrders }}</p>
+            </div>
+          </div>
+        </div>
+        <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border border-gray-200 dark:border-gray-700">
+          <div class="flex items-center gap-3">
+            <div class="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+              <Icon icon="mdi:check-circle-outline" class="w-6 h-6 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div>
+              <p class="text-sm text-gray-500 dark:text-gray-400">Успешных / Активных</p>
+              <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ report.successfulOrders ?? (report.totalOrders - report.cancelledOrders - (report.errorOrders || 0)) }}</p>
             </div>
           </div>
         </div>
@@ -83,23 +94,23 @@
         </div>
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border border-gray-200 dark:border-gray-700">
           <div class="flex items-center gap-3">
-            <div class="w-12 h-12 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
-              <Icon icon="mdi:currency-usd" class="w-6 h-6 text-green-600 dark:text-green-400" />
+            <div class="w-12 h-12 rounded-xl bg-rose-100 dark:bg-rose-900/30 flex items-center justify-center">
+              <Icon icon="mdi:alert-circle-outline" class="w-6 h-6 text-rose-600 dark:text-rose-400" />
             </div>
             <div>
-              <p class="text-sm text-gray-500 dark:text-gray-400">Сумма (без отмен)</p>
-              <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ formatPrice(report.totalSum) }} ₸</p>
+              <p class="text-sm text-gray-500 dark:text-gray-400">Ошибки</p>
+              <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ report.errorOrders ?? 0 }}</p>
             </div>
           </div>
         </div>
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 border border-gray-200 dark:border-gray-700">
           <div class="flex items-center gap-3">
-            <div class="w-12 h-12 rounded-xl bg-amber-100 dark:bg-amber-900/30 flex items-center justify-center">
-              <Icon icon="mdi:chart-line" class="w-6 h-6 text-amber-600 dark:text-amber-400" />
+            <div class="w-12 h-12 rounded-xl bg-green-100 dark:bg-green-900/30 flex items-center justify-center">
+              <Icon icon="mdi:currency-usd" class="w-6 h-6 text-green-600 dark:text-green-400" />
             </div>
             <div>
-              <p class="text-sm text-gray-500 dark:text-gray-400">Активных заказов</p>
-              <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ report.totalOrders - report.cancelledOrders }}</p>
+              <p class="text-sm text-gray-500 dark:text-gray-400">Выручка (успешные)</p>
+              <p class="text-2xl font-bold text-gray-900 dark:text-white">{{ formatPrice(report.totalSum) }} ₸</p>
             </div>
           </div>
         </div>
@@ -128,7 +139,7 @@
           </div>
         </div>
         <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6 border border-gray-200 dark:border-gray-700">
-          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Сумма по терминалам (без отмен)</h3>
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-4">Сумма по терминалам (успешные)</h3>
           <div class="space-y-3">
             <div
               v-for="item in report.sumByTerminal"
