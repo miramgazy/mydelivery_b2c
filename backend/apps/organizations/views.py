@@ -242,15 +242,15 @@ class OrganizationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        if not organization.api_key:
+        if not organization.api_key and not (organization.iiko_app_id and organization.iiko_client_secret):
             return Response(
-                {'error': 'Не настроен api_key организации'},
+                {'error': 'Не настроены параметры доступа к iiko (api_key или appId + clientSecret)'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         rms_base_id = request.data.get('rms_base_id')
         service = MenuSyncService()
-        client = IikoClient(organization.api_key)
+        client = IikoClient.from_organization(organization)
 
         try:
             if rms_base_id:
@@ -337,14 +337,14 @@ class OrganizationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        if not organization.api_key or not organization.iiko_organization_id:
+        if not (organization.api_key or (organization.iiko_app_id and organization.iiko_client_secret)) or not organization.iiko_organization_id:
             return Response(
-                {'error': 'Не настроены iiko_organization_id или api_key'},
+                {'error': 'Не настроены iiko_organization_id или ключи доступа к iiko'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         try:
-            client = IikoClient(organization.api_key)
+            client = IikoClient.from_organization(organization)
             payment_types_data = client.get_payment_types([organization.iiko_organization_id])
             
             # Синхронизируем типы оплат
@@ -382,14 +382,14 @@ class OrganizationViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        if not organization.api_key or not organization.iiko_organization_id:
+        if not (organization.api_key or (organization.iiko_app_id and organization.iiko_client_secret)) or not organization.iiko_organization_id:
             return Response(
-                {'error': 'Не настроены iiko_organization_id или api_key'},
+                {'error': 'Не настроены iiko_organization_id или ключи доступа к iiko'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         try:
-            client = IikoClient(organization.api_key)
+            client = IikoClient.from_organization(organization)
             # Получаем список внешних меню
             response = client.get_external_menus([organization.iiko_organization_id])
             
@@ -431,11 +431,11 @@ class OrganizationViewSet(viewsets.ModelViewSet):
         else:
             organization = Organization.objects.filter(is_active=True).first()
             
-        if not organization or not organization.api_key:
-             return Response({'error': 'Organization not configured'}, status=400)
+        if not organization or not (organization.api_key or (organization.iiko_app_id and organization.iiko_client_secret)):
+             return Response({'error': 'Organization credentials not configured'}, status=400)
              
         try:
-            client = IikoClient(organization.api_key)
+            client = IikoClient.from_organization(organization)
             menu_data = client.get_menu(organization.iiko_organization_id)
             all_groups = menu_data.get('groups', [])
             
@@ -479,7 +479,7 @@ class OrganizationViewSet(viewsets.ModelViewSet):
             return Response({'error': 'Org not found'}, status=400)
             
         try:
-            client = IikoClient(organization.api_key)
+            client = IikoClient.from_organization(organization)
             menu_data = client.get_menu(organization.iiko_organization_id)
             
             service = MenuSyncService()
@@ -525,7 +525,7 @@ class OrganizationViewSet(viewsets.ModelViewSet):
             )
 
         try:
-            client = IikoClient(organization.api_key)
+            client = IikoClient.from_organization(organization)
             org_id = organization.iiko_organization_id
 
             if external_menu_id:
@@ -601,14 +601,14 @@ class RmsBaseViewSet(viewsets.ModelViewSet):
         """Выгрузить терминалы по отдельности для данной RMS базы"""
         rms_base = self.get_object()
         org = rms_base.organization
-        if not org or not org.api_key:
+        if not org or not (org.api_key or (org.iiko_app_id and org.iiko_client_secret)):
             return Response(
-                {'error': 'У организации не настроен API Key iiko'},
+                {'error': 'У организации не настроены ключи доступа к iiko'},
                 status=status.HTTP_400_BAD_REQUEST
             )
 
         try:
-            client = IikoClient(org.api_key)
+            client = IikoClient.from_organization(org)
             data = client.get_terminal_groups([rms_base.iiko_organization_id])
             service = MenuSyncService()
             synced = service.sync_terminal_groups(data, org, rms_base=rms_base)

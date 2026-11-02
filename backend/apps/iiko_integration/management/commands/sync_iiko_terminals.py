@@ -25,7 +25,7 @@ class Command(BaseCommand):
             self.stdout.write(f'Syncing data for {org.org_name}...')
             
             try:
-                client = IikoClient(org.api_key)
+                client = IikoClient.from_organization(org)
                 
                 active_rms = list(org.rms_bases.filter(is_active=True))
                 if active_rms:

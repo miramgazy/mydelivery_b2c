@@ -43,7 +43,7 @@ def sync_discounts_from_iiko(organization: Organization) -> dict:
     if not org_ids:
         raise ValueError("У организации должны быть настроены chain_id, RMS базы или iiko_organization_id")
 
-    client = IikoClient(organization.api_key)
+    client = IikoClient.from_organization(organization)
 
     try:
         response = client.get_discounts(list(org_ids))

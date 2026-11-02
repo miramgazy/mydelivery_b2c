@@ -35,9 +35,24 @@ class IikoClient:
             self.api_version = str(getattr(org, 'iiko_api_version', '2') or '2')
         else:
             self.api_key = (str(api_key).strip() if api_key else None)
-            self.app_id = (app_id or '').strip() or None
-            self.client_secret = (client_secret or '').strip() or None
+            self.app_id = (str(app_id).strip() if app_id else None)
+            self.client_secret = (str(client_secret).strip() if client_secret else None)
             self.api_version = str(api_version or '2')
+
+            # Автоподтягивание настроек из Organization, если был передан только api_key (строка)
+            if self.api_key and (not self.app_id or not self.client_secret):
+                try:
+                    from apps.organizations.models import Organization
+                    org = Organization.objects.filter(api_key=self.api_key, is_active=True).first()
+                    if org:
+                        if not self.app_id and org.iiko_app_id:
+                            self.app_id = org.iiko_app_id.strip()
+                        if not self.client_secret and org.iiko_client_secret:
+                            self.client_secret = org.iiko_client_secret.strip()
+                        if org.iiko_api_version:
+                            self.api_version = str(org.iiko_api_version)
+                except Exception as e:
+                    logger.debug("Auto-lookup organization by api_key failed: %s", e)
         self.token = None
 
     @classmethod
@@ -45,81 +60,87 @@ class IikoClient:
         """Фабрика для создания клиента из объекта Organization."""
         return cls(organization)
 
+    @staticmethod
+    def _extract_error_description(response) -> str:
+        if response is None:
+            return ""
+        try:
+            data = response.json()
+            return data.get("errorDescription") or data.get("message") or data.get("error") or response.text
+        except Exception:
+            return getattr(response, 'text', '') or ""
+
     def authenticate(self):
         """
         Authenticate and get access token.
-        Логика зависит от выбранной версии (api_version):
-        - Версия 1: Только классический /api/1/access_token с apiLogin
-        - Версия 2: При наличии appId + clientSecret -> /api/v2/access_token, иначе apiLogin через v2/v1
+        1. Если заданы app_id и client_secret -> POST /api/v2/access_token {"appId": ..., "clientSecret": ...}
+        2. Иначе -> POST /api/1/access_token {"apiLogin": ...}
         """
-        # Если выбрана версия 1
-        if self.api_version == '1':
-            if not self.api_key:
-                raise IikoAPIException("api_key is required for iiko API v1")
-            url = self.EP_AUTH_V1
-            try:
-                response = requests.post(
-                    url, json={"apiLogin": self.api_key}, timeout=self.REQUEST_TIMEOUT
-                )
-                response.raise_for_status()
-                data = response.json()
-                self.token = data.get("token")
-                if not self.token:
-                    raise IikoAPIException("No token received from iiko API v1")
-                return
-            except requests.RequestException as e:
-                logger.error(f"Failed to authenticate with iiko v1: {e}")
-                raise IikoAPIException(f"v1 Authentication failed: {e}")
-
-        # Версия 2 (по умолчанию)
+        # Авторизация v2 через appId + clientSecret
         if self.app_id and self.client_secret:
             try:
+                v2_payload = {
+                    "appId": self.app_id,
+                    "clientSecret": self.client_secret,
+                }
+                if self.api_key:
+                    v2_payload["apiKey"] = self.api_key
+                    v2_payload["apiLogin"] = self.api_key
+
                 response = requests.post(
                     self.EP_AUTH_V2,
-                    json={"appId": self.app_id, "clientSecret": self.client_secret},
+                    json=v2_payload,
                     timeout=self.REQUEST_TIMEOUT
                 )
-                response.raise_for_status()
-                data = response.json()
-                self.token = data.get("token") or data.get("accessToken")
-                if self.token:
-                    return
+                if response.status_code == 200:
+                    data = response.json()
+                    self.token = data.get("token") or data.get("accessToken")
+                    if self.token:
+                        return
+                    raise IikoAPIException("No token received from iiko API v2")
+
+                err_desc = self._extract_error_description(response)
+                raise IikoAPIException(f"iiko API v2 Auth error ({response.status_code}): {err_desc}")
             except requests.RequestException as e:
-                logger.warning(f"Failed to authenticate with iiko v2 (appId/clientSecret): {e}")
-                if not self.api_key:
-                    raise IikoAPIException(f"v2 Authentication failed: {e}")
-                logger.info("Falling back to api_key authentication...")
+                err_desc = self._extract_error_description(getattr(e, 'response', None))
+                msg = f"Failed to authenticate with iiko v2: {e} {err_desc}".strip()
+                logger.error(msg)
+                raise IikoAPIException(msg)
 
         if not self.api_key:
-            raise IikoAPIException("Neither (app_id + client_secret) nor api_key is configured for iiko")
-
-        # Пробуем v2 access_token с apiLogin
-        try:
-            response = requests.post(
-                self.EP_AUTH_V2, json={"apiLogin": self.api_key}, timeout=self.REQUEST_TIMEOUT
+            raise IikoAPIException(
+                "Не настроены параметры доступа к iiko Cloud (не указаны ни appId + clientSecret, ни api_key)"
             )
-            if response.status_code == 200:
-                data = response.json()
-                self.token = data.get("token") or data.get("accessToken")
-                if self.token:
-                    return
-        except requests.RequestException:
-            pass
 
-        # Fallback на классический v1 access_token
+        # Классическая авторизация v1 через /api/1/access_token
         url = self.EP_AUTH_V1
         try:
             response = requests.post(
                 url, json={"apiLogin": self.api_key}, timeout=self.REQUEST_TIMEOUT
             )
-            response.raise_for_status()
-            data = response.json()
-            self.token = data.get("token")
-            if not self.token:
-                raise IikoAPIException("No token received from iiko")
+            if response.status_code == 200:
+                data = response.json()
+                self.token = data.get("token")
+                if not self.token:
+                    raise IikoAPIException("No token received from iiko API v1")
+                return
+
+            err_desc = self._extract_error_description(response)
+            if "does not support /api/1/access_token" in err_desc or response.status_code == 403:
+                raise IikoAPIException(
+                    "Данный API-ключ iiko требует авторизации через API v2. "
+                    "Пожалуйста, укажите в настройках организации 'iiko App ID' и 'iiko Client Secret' из кабинета разработчика iiko."
+                )
+            raise IikoAPIException(f"Authentication failed ({response.status_code}): {err_desc}")
         except requests.RequestException as e:
-            logger.error(f"Failed to authenticate with iiko: {e}")
-            raise IikoAPIException(f"Authentication failed: {e}")
+            err_desc = self._extract_error_description(getattr(e, 'response', None))
+            if "does not support /api/1/access_token" in err_desc:
+                raise IikoAPIException(
+                    "Данный API-ключ iiko требует авторизации через API v2. "
+                    "Пожалуйста, укажите в настройках организации 'iiko App ID' и 'iiko Client Secret' из кабинета разработчика iiko."
+                )
+            logger.error(f"Failed to authenticate with iiko: {e} | {err_desc}")
+            raise IikoAPIException(f"Authentication failed: {e} {err_desc}".strip())
 
     def get_headers(self) -> Dict[str, str]:
         if not self.token:

@@ -429,7 +429,7 @@ class OrderService:
                 )
 
                 # Отправка
-                client = IikoClient(order.organization.api_key)
+                client = IikoClient.from_organization(order.organization)
                 response = client.create_delivery_order(iiko_data)
 
                 order_info = response.get('orderInfo', {})
@@ -482,7 +482,7 @@ class OrderService:
             raise ValueError('У заказа отсутствует сохранённый запрос в iiko (query_to_iiko)')
 
         payload = order.query_to_iiko
-        client = IikoClient(order.organization.api_key)
+        client = IikoClient.from_organization(order.organization)
 
         try:
             response = client.create_delivery_order(payload)
@@ -525,7 +525,7 @@ class OrderService:
             raise ValueError('correlation_id отсутствует для этого заказа')
         
         try:
-            client = IikoClient(order.organization.api_key)
+            client = IikoClient.from_organization(order.organization)
             terminal = order.terminal
             org_id = str(
                 (terminal.iiko_organization_id if terminal and terminal.iiko_organization_id else None)
@@ -584,7 +584,7 @@ class OrderService:
             raise ValueError('iiko_order_id отсутствует')
             
         try:
-            client = IikoClient(order.organization.api_key)
+            client = IikoClient.from_organization(order.organization)
             terminal = order.terminal
             org_id = str(
                 (terminal.iiko_organization_id if terminal and terminal.iiko_organization_id else None)

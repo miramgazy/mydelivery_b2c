@@ -225,11 +225,11 @@ class OrganizationAdmin(BaseAdmin):
         from apps.iiko_integration.client import IikoClient
         
         for org in queryset:
-            if not org.api_key:
-                self.message_user(request, f"{org.org_name}: Нет API Key", messages.ERROR)
+            if not org.api_key and not (org.iiko_app_id and org.iiko_client_secret):
+                self.message_user(request, f"{org.org_name}: Нет ключей доступа к iiko", messages.ERROR)
                 continue
             try:
-                client = IikoClient(org.api_key)
+                client = IikoClient.from_organization(org)
                 res = client.get_organizations(return_additional_info=True)
                 orgs_list = res.get('organizations', [])
                 if not orgs_list:
@@ -281,7 +281,7 @@ class OrganizationAdmin(BaseAdmin):
                 continue
             
             try:
-                client = IikoClient(org.api_key)
+                client = IikoClient.from_organization(org)
                 client.authenticate()
                 menu_data = client.get_menu(org.iiko_organization_id)
                 
@@ -320,7 +320,7 @@ class OrganizationAdmin(BaseAdmin):
 
         try:
             # 1. Fetch entire menu from iiko
-            client = IikoClient(org.api_key)
+            client = IikoClient.from_organization(org)
             client.authenticate()
             menu_data = client.get_menu(org.iiko_organization_id)
             all_groups = menu_data.get('groups', [])
@@ -382,7 +382,7 @@ class OrganizationAdmin(BaseAdmin):
             return redirect('admin:organizations_organization_change', object_id)
 
         try:
-            client = IikoClient(org.api_key)
+            client = IikoClient.from_organization(org)
             client.authenticate()
             
             # Debug organizations
@@ -474,7 +474,7 @@ class RmsBaseAdmin(BaseAdmin):
             self.message_user(request, "У организации не настроен API Key iiko", messages.ERROR)
             return redirect('admin:organizations_rmsbase_changelist')
         try:
-            client = IikoClient(org.api_key)
+            client = IikoClient.from_organization(org)
             data = client.get_terminal_groups([rms.iiko_organization_id])
             service = TerminalSyncService()
             synced = service.sync_terminal_groups(data, organization=org, rms_base=rms)
@@ -494,7 +494,7 @@ class RmsBaseAdmin(BaseAdmin):
             if not org or not org.api_key:
                 continue
             try:
-                client = IikoClient(org.api_key)
+                client = IikoClient.from_organization(org)
                 data = client.get_terminal_groups([rms.iiko_organization_id])
                 synced = service.sync_terminal_groups(data, organization=org, rms_base=rms)
                 total += len(synced)
@@ -537,7 +537,7 @@ class TerminalAdmin(BaseAdmin):
                     self.message_user(request, f"Организация {org.org_name} не имеет API Key", messages.ERROR)
                     return redirect('admin:terminal_sync_iiko')
 
-                client = IikoClient(org.api_key)
+                client = IikoClient.from_organization(org)
                 service = TerminalSyncService()
 
                 if rms_base_id and rms_base_id != 'all':
@@ -632,7 +632,7 @@ class PaymentTypeAdmin(BaseAdmin):
                     self.message_user(request, f"Организация {org.org_name} не имеет API Key или iiko ID", messages.ERROR)
                     return redirect('admin:paymenttype_sync_iiko')
 
-                client = IikoClient(org.api_key)
+                client = IikoClient.from_organization(org)
                 client.authenticate()
                 data = client.get_payment_types([org.iiko_organization_id])
                 
