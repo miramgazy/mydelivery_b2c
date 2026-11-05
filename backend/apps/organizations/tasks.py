@@ -1,4 +1,5 @@
 import logging
+import time
 from datetime import timedelta
 from typing import Optional
 
@@ -20,26 +21,43 @@ from apps.users.models import User
 logger = logging.getLogger(__name__)
 
 TELEGRAM_API_BASE = "https://api.telegram.org/bot{token}/{method}"
-RATE_LIMIT_PER_BATCH = 30  # максимально 30 сообщений за один запуск задачи
+RATE_LIMIT_PER_BATCH = 10  # 10 сообщений за один запуск задачи
+DELAY_BETWEEN_MESSAGES = 0.2  # 200 мс пауза между сообщениями внутри пачки
+COUNTDOWN_BETWEEN_BATCHES = 3  # 3 секунды пауза перед следующей пачкой
 
 
 class TelegramForbiddenError(Exception):
     """Пользователь заблокировал бота (403 Forbidden)."""
 
 
-def _send_telegram_message(bot_token: str, chat_id: int, text: str) -> bool:
+class TelegramRateLimitError(Exception):
+    """Telegram ответил 429 Too Many Requests."""
+
+    def __init__(self, retry_after: int = 5):
+        super().__init__(f"Too Many Requests, retry after {retry_after}s")
+        self.retry_after = retry_after
+
+
+def _send_telegram_message(
+    bot_token: str,
+    chat_id: int,
+    text: str,
+    session: Optional[requests.Session] = None,
+) -> bool:
     """
-    Отправка сообщения в Telegram.
+    Отправка сообщения в Telegram с поддержкой requests.Session (HTTP Keep-Alive).
     Возвращает True при успехе, False при технической ошибке.
     Бросает TelegramForbiddenError при 403 (отписка).
+    Бросает TelegramRateLimitError при 429 (лимит скорости).
     """
     if not bot_token:
         logger.error("Попытка отправки сообщения без bot_token")
         return False
 
     url = TELEGRAM_API_BASE.format(token=bot_token, method="sendMessage")
+    client = session or requests
     try:
-        resp = requests.post(
+        resp = client.post(
             url,
             json={
                 "chat_id": chat_id,
@@ -53,6 +71,15 @@ def _send_telegram_message(bot_token: str, chat_id: int, text: str) -> bool:
 
     if resp.status_code == 403:
         raise TelegramForbiddenError("User blocked the bot")
+
+    if resp.status_code == 429:
+        try:
+            data = resp.json()
+            retry_after = int(data.get("parameters", {}).get("retry_after", 5))
+        except Exception:
+            retry_after = 5
+        logger.warning("Telegram API 429 Too Many Requests: retry_after=%s", retry_after)
+        raise TelegramRateLimitError(retry_after=retry_after)
 
     if resp.status_code != 200:
         logger.warning("Ошибка Telegram API: status=%s body=%s", resp.status_code, resp.text)
@@ -141,10 +168,11 @@ def run_mailings_scheduler(self):
 def process_mailing_task(self, mailing_id: int):
     """
     Основная задача отправки рассылки.
-    Работает батчами по RATE_LIMIT_PER_BATCH пользователей и при необходимости
-    планирует продолжение.
+    Работает мягкими батчами по RATE_LIMIT_PER_BATCH пользователей с паузами
+    и выносит сетевые вызовы из транзакции БД во избежание блокировок и зависания сервера.
     """
     try:
+        # ШАГ 1: Быстрая транзакция БД — получить задачу и пачку пользователей (5-10 мс)
         with transaction.atomic():
             mailing = (
                 MailingTask.objects.select_for_update()
@@ -191,30 +219,47 @@ def process_mailing_task(self, mailing_id: int):
                 logger.info("process_mailing_task: mailing %s завершена", mailing_id)
                 return
 
-            # Отправляем сообщения пачкой
-            for user in batch:
-                # Выбираем текст по языку, по умолчанию KZ
+            bot_token = org.bot_token
+            msg_ru = mailing.message_ru
+            msg_kz = mailing.message_kz
+
+        # ШАГ 2: Отправка сообщений ВНЕ транзакции БД (база полностью свободна)
+        # Используем Session для переиспользования SSL/TCP (снижение нагрузки на CPU)
+        sent_ru_delta = 0
+        sent_kz_delta = 0
+        failed_delta = 0
+        unsubscribed_user_ids = []
+        last_processed_id = None
+        rate_limit_retry_after = None
+
+        with requests.Session() as session:
+            for idx, user in enumerate(batch):
+                if idx > 0 and DELAY_BETWEEN_MESSAGES > 0:
+                    time.sleep(DELAY_BETWEEN_MESSAGES)
+
                 lang = (user.language_code or "kz").lower()
                 if lang == "ru":
-                    text = mailing.message_ru or mailing.message_kz or ""
+                    text = msg_ru or msg_kz or ""
                 else:
-                    text = mailing.message_kz or mailing.message_ru or ""
+                    text = msg_kz or msg_ru or ""
                 text = text.replace("{{user_name}}", user.full_name or user.username or "")
 
                 try:
-                    ok = _send_telegram_message(org.bot_token, user.chat_id, text)
+                    ok = _send_telegram_message(bot_token, user.chat_id, text, session=session)
                     if ok:
                         if lang == "ru":
-                            mailing.sent_ru += 1
+                            sent_ru_delta += 1
                         else:
-                            mailing.sent_kz += 1
+                            sent_kz_delta += 1
                     else:
-                        mailing.failed_count += 1
+                        failed_delta += 1
                 except TelegramForbiddenError:
-                    # Пользователь заблокировал бота
-                    user.is_bot_subscribed = False
-                    user.save(update_fields=["is_bot_subscribed"])
-                    mailing.unsubscribed_count += 1
+                    unsubscribed_user_ids.append(user.id)
+                except TelegramRateLimitError as rle:
+                    rate_limit_retry_after = rle.retry_after
+                    failed_delta += 1
+                    last_processed_id = user.id
+                    break
                 except Exception as exc:
                     logger.error(
                         "Ошибка при отправке сообщения (mailing_id=%s, user_id=%s): %s",
@@ -223,9 +268,27 @@ def process_mailing_task(self, mailing_id: int):
                         exc,
                         exc_info=True,
                     )
-                    mailing.failed_count += 1
+                    failed_delta += 1
 
-                mailing.last_processed_user_id = user.id
+                last_processed_id = user.id
+
+        # ШАГ 3: Быстрая транзакция БД — обновить статистику и проверить наличие остатка (5-10 мс)
+        with transaction.atomic():
+            if unsubscribed_user_ids:
+                User.objects.filter(id__in=unsubscribed_user_ids).update(is_bot_subscribed=False)
+
+            mailing = (
+                MailingTask.objects.select_for_update()
+                .select_related("organization")
+                .get(id=mailing_id)
+            )
+
+            mailing.sent_ru += sent_ru_delta
+            mailing.sent_kz += sent_kz_delta
+            mailing.failed_count += failed_delta
+            mailing.unsubscribed_count += len(unsubscribed_user_ids)
+            if last_processed_id:
+                mailing.last_processed_user_id = last_processed_id
 
             mailing.save(
                 update_fields=[
@@ -238,22 +301,25 @@ def process_mailing_task(self, mailing_id: int):
                 ]
             )
 
-        # Проверяем, остались ли ещё пользователи; если да — планируем продолжение
-        with transaction.atomic():
-            mailing = (
-                MailingTask.objects.select_for_update()
-                .select_related("organization")
-                .get(id=mailing_id)
-            )
             if mailing.status != MailingStatus.IN_PROGRESS:
                 return
-            remaining_exists = _get_mailing_recipients_qs(mailing).filter(
+
+            remaining_exists = get_mailing_recipients_queryset(
+                mailing.organization,
+                mailing.audience_type or MailingAudienceType.ALL,
+            ).filter(
                 id__gt=mailing.last_processed_user_id
             ).exists()
 
-        if remaining_exists:
-            # Планируем следующее продолжение почти сразу, чтобы не ждать минуту
-            process_mailing_task.apply_async(args=[mailing_id], countdown=1)
+            if not remaining_exists:
+                mailing.status = MailingStatus.DONE
+                mailing.save(update_fields=["status"])
+                logger.info("process_mailing_task: mailing %s завершена", mailing_id)
+                return
+
+        # ШАГ 4: Планируем следующую пачку с кулдауном
+        countdown = rate_limit_retry_after if rate_limit_retry_after else COUNTDOWN_BETWEEN_BATCHES
+        process_mailing_task.apply_async(args=[mailing_id], countdown=countdown)
 
     except Exception as exc:
         logger.error("process_mailing_task: критическая ошибка: %s", exc, exc_info=True)
